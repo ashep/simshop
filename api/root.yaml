@@ -1,0 +1,127 @@
+openapi: "3.1.0"
+
+info:
+  title: SimShop API
+  version: "0.1.0"
+
+paths:
+  /shops:
+    post:
+      operationId: createShop
+      security:
+        - ApiKeyAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopCreateRequest'
+      responses:
+        "201":
+          description: Shop created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopCreateResponse'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
+#  /products:
+#    post:
+#      operationId: createProduct
+#      security:
+#        - ApiKeyAuth: []
+#      requestBody:
+#        required: true
+#        content:
+#          application/json:
+#            schema:
+#              $ref: '#/components/schemas/ProductCreateRequest'
+#      responses:
+#        "201":
+#          description: Product created
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/ProductCreateResponse'
+#        "400":
+#          description: Bad request
+#          content:
+#            application/json:
+#              schema:
+#                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+#        "403":
+#          description: Forbidden
+#          content:
+#            application/json:
+#              schema:
+#                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    ShopCreateRequest:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          minLength: 3
+          maxLength: 16
+
+    ShopCreateResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+
+    ProductCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 5
+
+    ProductCreateResponse:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
