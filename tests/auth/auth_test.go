@@ -1,3 +1,5 @@
+//go:build functest
+
 package auth_test
 
 import (
@@ -26,7 +28,7 @@ func TestGetUserByApiKey(main *testing.T) {
 		t.Parallel()
 		svc := auth.NewService(db)
 
-		res, err := svc.GetByAPIKey(t.Context(), user1.APIKey)
+		res, err := svc.GetUserByAPIKey(t.Context(), user1.APIKey)
 		require.NoError(t, err)
 		assert.NotEmpty(t, res.ID)
 		assert.Equal(t, user1.ID, res.ID)
@@ -37,7 +39,7 @@ func TestGetUserByApiKey(main *testing.T) {
 		t.Parallel()
 		svc := auth.NewService(db)
 
-		_, err := svc.GetByAPIKey(t.Context(), "NonExistentAPIKey")
+		_, err := svc.GetUserByAPIKey(t.Context(), "NonExistentAPIKey")
 		assert.ErrorIs(t, err, auth.ErrUserNotFound)
 	})
 }

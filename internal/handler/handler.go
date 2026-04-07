@@ -47,7 +47,9 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 
 	if tErr, ok := errors.AsType[*BadRequestError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"error": %q}`, tErr.Error())))
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
 		return
 	}
 

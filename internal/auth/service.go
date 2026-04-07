@@ -23,7 +23,7 @@ func NewService(db *pgxpool.Pool) *Service {
 	}
 }
 
-func (s *Service) GetByAPIKey(ctx context.Context, key string) (*User, error) {
+func (s *Service) GetUserByAPIKey(ctx context.Context, key string) (*User, error) {
 	var u User
 
 	err := s.db.QueryRow(ctx, "SELECT id, api_key FROM users WHERE api_key = $1", key).Scan(&u.ID, &u.APIKey)

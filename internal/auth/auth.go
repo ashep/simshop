@@ -8,7 +8,7 @@ import (
 type userCtxKey struct{}
 
 type authSvc interface {
-	GetByAPIKey(context.Context, string) (*User, error)
+	GetUserByAPIKey(context.Context, string) (*User, error)
 }
 
 // Middleware returns an HTTP middleware that enforces API key authentication
@@ -23,7 +23,7 @@ func Middleware(svc authSvc) func(http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 
-			u, err := svc.GetByAPIKey(r.Context(), key)
+			u, err := svc.GetUserByAPIKey(r.Context(), key)
 			if err != nil {
 				w.WriteHeader(http.StatusForbidden)
 				return

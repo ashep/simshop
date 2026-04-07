@@ -33,7 +33,7 @@ func TestMiddleware(main *testing.T) {
 	main.Run("UserNotFound", func(t *testing.T) {
 		sm := &authSvcMock{}
 		defer sm.AssertExpectations(t)
-		sm.On("GetByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, auth.ErrUserNotFound)
+		sm.On("GetUserByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, auth.ErrUserNotFound)
 
 		h := auth.Middleware(sm)(nextHandler())
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -46,7 +46,7 @@ func TestMiddleware(main *testing.T) {
 	main.Run("ServiceError", func(t *testing.T) {
 		sm := &authSvcMock{}
 		defer sm.AssertExpectations(t)
-		sm.On("GetByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, errors.New("db error"))
+		sm.On("GetUserByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, errors.New("db error"))
 
 		h := auth.Middleware(sm)(nextHandler())
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -59,7 +59,7 @@ func TestMiddleware(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		sm := &authSvcMock{}
 		defer sm.AssertExpectations(t)
-		sm.On("GetByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, nil)
+		sm.On("GetUserByAPIKey", mock.Anything, mock.Anything).Return(&auth.User{}, nil)
 
 		h := auth.Middleware(sm)(nextHandler())
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -73,7 +73,7 @@ func TestMiddleware(main *testing.T) {
 		user := &auth.User{ID: "u1", APIKey: "aKey"}
 		sm := &authSvcMock{}
 		defer sm.AssertExpectations(t)
-		sm.On("GetByAPIKey", mock.Anything, "aKey").Return(user, nil)
+		sm.On("GetUserByAPIKey", mock.Anything, "aKey").Return(user, nil)
 
 		var ctxUser *auth.User
 		next := func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +100,7 @@ type authSvcMock struct {
 	mock.Mock
 }
 
-func (m *authSvcMock) GetByAPIKey(ctx context.Context, apiKey string) (*auth.User, error) {
+func (m *authSvcMock) GetUserByAPIKey(ctx context.Context, apiKey string) (*auth.User, error) {
 	args := m.Called(ctx, apiKey)
 	return args.Get(0).(*auth.User), args.Error(1)
 }
