@@ -34,6 +34,10 @@ func Middleware(svc authSvc) func(http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func ContextWithUser(ctx context.Context, u *User) context.Context {
+	return context.WithValue(ctx, userCtxKey{}, u)
+}
+
 func GetUserFromContext(ctx context.Context) *User {
 	v := ctx.Value(userCtxKey{})
 	u, ok := v.(*User)

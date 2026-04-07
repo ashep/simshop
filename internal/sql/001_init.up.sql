@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS currencies
 
 INSERT INTO currencies
 VALUES ('EUR', '€'),
+       ('USD', '$'),
        ('UAH', '₴');
 
 CREATE TABLE IF NOT EXISTS countries
@@ -33,28 +34,48 @@ CREATE TABLE IF NOT EXISTS users
     api_key TEXT NOT NULL CHECK ( length(api_key) >= 64 )
 );
 
-INSERT INTO users
-VALUES (uuidv7(), md5(random()::text) || md5(random()::text));
+CREATE TABLE IF NOT EXISTS user_permissions
+(
+    user_id uuid NOT NULL REFERENCES users (id),
+    scope   TEXT NOT NULL,
+    PRIMARY KEY (user_id, scope)
+);
 
-CREATE TABLE IF NOT EXISTS telegram_users
+WITH inserted_user AS (
+    INSERT INTO users VALUES (uuidv7(), md5(random()::text) || md5(random()::text)) RETURNING id)
+INSERT
+INTO user_permissions
+SELECT id, 'admin'
+FROM inserted_user;
+
+
+CREATE TABLE IF NOT EXISTS ext_users
 (
     user_id    uuid                        NOT NULL REFERENCES users (id),
-    tg_id      INT                         NOT NULL CHECK ( tg_id > 0 ),
-    tg_login   TEXT                        NOT NULL CHECK ( length(tg_login) > 3 ),
+    ext_id     TEXt                        NOT NULL CHECK ( length(ext_id) > 0 ),
+    ext_login  TEXT                        NOT NULL CHECK ( length(ext_login) > 3 ),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITHOUT TIME ZONE,
 
-    PRIMARY KEY (user_id, tg_id)
+    PRIMARY KEY (user_id, ext_id)
 );
 
 CREATE TABLE IF NOT EXISTS shops
 (
-    id         TEXT                        NOT NULL PRIMARY KEY,
+    id         TEXT                        NOT NULL CHECK ( length(id) >= 3 ) PRIMARY KEY,
     owner_id   uuid REFERENCES users (id),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITHOUT TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS shop_names
+(
+    shop_id TEXT NOT NULL REFERENCES shops (id),
+    lang_id TEXT NOT NULL REFERENCES languages (id),
+    name    TEXT NOT NULL CHECK ( length(name) >= 3 ),
+    PRIMARY KEY (shop_id, lang_id)
 );
 
 CREATE TABLE IF NOT EXISTS products

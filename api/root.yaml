@@ -19,10 +19,6 @@ paths:
       responses:
         "201":
           description: Shop created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShopCreateResponse'
         "400":
           description: Bad request
           content:
@@ -80,19 +76,20 @@ components:
       type: object
       required:
         - id
+        - names
       properties:
         id:
           type: string
           minLength: 3
           maxLength: 16
-
-    ShopCreateResponse:
-      type: object
-      required:
-        - id
-      properties:
-        id:
-          type: string
+        names:
+          type: object
+          required:
+            - en
+          additionalProperties:
+            type: string
+            minLength: 3
+            maxLength: 100
 
     ProductCreateRequest:
       type: object

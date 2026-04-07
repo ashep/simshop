@@ -11,10 +11,32 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type BadRequestError struct{}
+type BadRequestError struct {
+	Reason string
+}
 
 func (e *BadRequestError) Error() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
 	return "bad request"
+}
+
+type PermissionDeniedError struct{}
+
+func (e *PermissionDeniedError) Error() string {
+	return "permission denied"
+}
+
+type ConflictError struct {
+	Reason string
+}
+
+func (e *ConflictError) Error() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
+	return "conflict"
 }
 
 type Handler struct {
@@ -47,6 +69,22 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 
 	if tErr, ok := errors.AsType[*BadRequestError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusBadRequest)
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
+		return
+	}
+
+	if tErr, ok := errors.AsType[*ConflictError](err); tErr != nil && ok {
+		w.WriteHeader(http.StatusConflict)
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
+		return
+	}
+
+	if tErr, ok := errors.AsType[*PermissionDeniedError](err); tErr != nil && ok {
+		w.WriteHeader(http.StatusForbidden)
 		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
 			h.l.Warn().Err(wErr).Msg("error response write failed")
 		}
