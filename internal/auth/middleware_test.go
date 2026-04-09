@@ -96,6 +96,65 @@ func TestGetUserFromContext(main *testing.T) {
 	})
 }
 
+func TestOptionalMiddleware(main *testing.T) {
+	main.Run("NoHeader", func(t *testing.T) {
+		sm := &authSvcMock{}
+		defer sm.AssertExpectations(t)
+
+		var ctxUser *auth.User
+		next := func(w http.ResponseWriter, r *http.Request) {
+			ctxUser = auth.GetUserFromContext(r.Context())
+			w.WriteHeader(http.StatusOK)
+		}
+
+		h := auth.OptionalMiddleware(sm)(next)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Nil(t, ctxUser)
+	})
+
+	main.Run("ValidKey", func(t *testing.T) {
+		user := &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+		sm := &authSvcMock{}
+		defer sm.AssertExpectations(t)
+		sm.On("GetUserByAPIKey", mock.Anything, "valid-key").Return(user, nil)
+
+		var ctxUser *auth.User
+		next := func(w http.ResponseWriter, r *http.Request) {
+			ctxUser = auth.GetUserFromContext(r.Context())
+			w.WriteHeader(http.StatusOK)
+		}
+
+		h := auth.OptionalMiddleware(sm)(next)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-API-Key", "valid-key")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, user, ctxUser)
+	})
+
+	main.Run("InvalidKey", func(t *testing.T) {
+		sm := &authSvcMock{}
+		defer sm.AssertExpectations(t)
+		sm.On("GetUserByAPIKey", mock.Anything, "bad-key").Return(&auth.User{}, auth.ErrUserNotFound)
+
+		h := auth.OptionalMiddleware(sm)(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("handler must not be reached on invalid key")
+		})
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("X-API-Key", "bad-key")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+}
+
 type authSvcMock struct {
 	mock.Mock
 }
