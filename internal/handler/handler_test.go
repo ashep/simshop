@@ -47,6 +47,23 @@ func TestWriteError(main *testing.T) {
 		}
 	})
 
+	main.Run("NotFound", func(t *testing.T) {
+		h := newTestHandler()
+		w := httptest.NewRecorder()
+
+		h.writeError(w, &NotFoundError{Reason: "shop not found"})
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %q", ct)
+		}
+		if body := w.Body.String(); body != `{"error": "shop not found"}` {
+			t.Errorf("unexpected body: %s", body)
+		}
+	})
+
 	main.Run("PermissionDenied", func(t *testing.T) {
 		h := newTestHandler()
 		w := httptest.NewRecorder()

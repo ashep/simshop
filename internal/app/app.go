@@ -57,6 +57,7 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	srv := httpserver.New()
 	srv.HandleFunc("POST /shops", ctypeMw(authMw(openapiMw(hdl.CreateShop))))
+	srv.HandleFunc("PATCH /shops/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateShop))))
 	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.ProductCreate))))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")

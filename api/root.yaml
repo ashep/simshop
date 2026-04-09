@@ -32,6 +32,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /shops/{id}:
+    patch:
+      operationId: updateShop
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopUpdateRequest'
+      responses:
+        "200":
+          description: Shop updated
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 #  /products:
 #    post:
@@ -86,6 +124,16 @@ components:
           type: object
           required:
             - en
+          additionalProperties:
+            type: string
+            minLength: 3
+            maxLength: 100
+
+    ShopUpdateRequest:
+      type: object
+      properties:
+        names:
+          type: object
           additionalProperties:
             type: string
             minLength: 3

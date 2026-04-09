@@ -39,6 +39,17 @@ func (e *ConflictError) Error() string {
 	return "conflict"
 }
 
+type NotFoundError struct {
+	Reason string
+}
+
+func (e *NotFoundError) Error() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
+	return "not found"
+}
+
 type Handler struct {
 	shop shopService
 	prod productSservice
@@ -77,6 +88,14 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 
 	if tErr, ok := errors.AsType[*ConflictError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusConflict)
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
+		return
+	}
+
+	if tErr, ok := errors.AsType[*NotFoundError](err); tErr != nil && ok {
+		w.WriteHeader(http.StatusNotFound)
 		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
 			h.l.Warn().Err(wErr).Msg("error response write failed")
 		}
