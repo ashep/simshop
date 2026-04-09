@@ -6,6 +6,23 @@ info:
 
 paths:
   /shops:
+    get:
+      operationId: listShops
+      security:
+        - ApiKeyAuth: [ ]
+      responses:
+        "200":
+          description: List request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopListResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       operationId: createShop
       security:
@@ -110,7 +127,7 @@ components:
       name: X-API-Key
 
   schemas:
-    ShopCreateRequest:
+    Shop:
       type: object
       required:
         - id
@@ -128,6 +145,14 @@ components:
             type: string
             minLength: 3
             maxLength: 100
+
+    ShopListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Shop"
+
+    ShopCreateRequest:
+      $ref: "#/components/schemas/Shop"
 
     ShopUpdateRequest:
       type: object

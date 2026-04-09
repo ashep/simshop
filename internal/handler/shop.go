@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -12,6 +13,32 @@ import (
 type shopService interface {
 	Create(ctx context.Context, req shop.CreateRequest) (*shop.Shop, error)
 	Update(ctx context.Context, id string, req shop.UpdateRequest) error
+	List(ctx context.Context) ([]shop.Shop, error)
+}
+
+func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		h.writeError(w, errors.New("failed to list shops: no user in request context"))
+		return
+	}
+
+	if !user.IsAdmin() {
+		h.writeError(w, &PermissionDeniedError{})
+		return
+	}
+
+	shops, err := h.shop.List(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(shops); err != nil {
+		h.l.Warn().Err(err).Msg("list shops response write failed")
+	}
 }
 
 func (h *Handler) CreateShop(w http.ResponseWriter, r *http.Request) {

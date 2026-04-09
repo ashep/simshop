@@ -11,6 +11,7 @@ import (
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/shop"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -29,6 +30,96 @@ func (m *shopServiceMock) Create(ctx context.Context, req shop.CreateRequest) (*
 func (m *shopServiceMock) Update(ctx context.Context, id string, req shop.UpdateRequest) error {
 	args := m.Called(ctx, id, req)
 	return args.Error(0)
+}
+
+func (m *shopServiceMock) List(ctx context.Context) ([]shop.Shop, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]shop.Shop), args.Error(1)
+}
+
+func TestListShops(main *testing.T) {
+	main.Run("NoUserInContext", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops", nil)
+		w := httptest.NewRecorder()
+
+		h.ListShops(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("UserNotAdmin", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops", nil)
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.ListShops(w, r)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("ServiceError", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything).Return(nil, errors.New("db error"))
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops", nil)
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.ListShops(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("Success", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything).Return([]shop.Shop{
+			{ID: "shop1", Names: map[string]string{"en": "Shop One"}},
+			{ID: "shop2", Names: map[string]string{"en": "Shop Two", "uk": "Магазин Два"}},
+		}, nil)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops", nil)
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.ListShops(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t,
+			`[{"id":"shop1","names":{"en":"Shop One"}},{"id":"shop2","names":{"en":"Shop Two","uk":"Магазин Два"}}]`,
+			w.Body.String(),
+		)
+	})
+
+	main.Run("SuccessEmpty", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything).Return([]shop.Shop{}, nil)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops", nil)
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.ListShops(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `[]`, w.Body.String())
+	})
 }
 
 func TestCreateShop(main *testing.T) {

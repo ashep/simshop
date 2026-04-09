@@ -56,6 +56,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New()
+	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
 	srv.HandleFunc("POST /shops", ctypeMw(authMw(openapiMw(hdl.CreateShop))))
 	srv.HandleFunc("PATCH /shops/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateShop))))
 	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.ProductCreate))))
