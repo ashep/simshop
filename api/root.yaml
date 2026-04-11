@@ -109,36 +109,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-#  /products:
-#    post:
-#      operationId: createProduct
-#      security:
-#        - ApiKeyAuth: []
-#      requestBody:
-#        required: true
-#        content:
-#          application/json:
-#            schema:
-#              $ref: '#/components/schemas/ProductCreateRequest'
-#      responses:
-#        "201":
-#          description: Product created
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/ProductCreateResponse'
-#        "400":
-#          description: Bad request
-#          content:
-#            application/json:
-#              schema:
-#                $ref: './errors.yaml#/components/schemas/ErrorResponse'
-#        "403":
-#          description: Forbidden
-#          content:
-#            application/json:
-#              schema:
-#                $ref: './errors.yaml#/components/schemas/ErrorResponse'
+  /products:
+    post:
+      operationId: createProduct
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateProductResponse'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -216,29 +222,59 @@ components:
             minLength: 3
             maxLength: 100
 
+    ProductPrice:
+      type: object
+      required:
+        - country_id
+        - value
+      properties:
+        country_id:
+          type: string
+        value:
+          type: integer
+          minimum: 0
+
+    ProductContentItem:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+
     CreateProductRequest:
       type: object
       required:
-        - name
+        - shop_id
+        - prices
+        - content
       properties:
-        id:
+        shop_id:
           type: string
-          format: uuid
-        name:
-          type: string
-          minLength: 5
+          minLength: 3
+        prices:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ProductPrice'
+        content:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ProductContentItem'
 
     CreateProductResponse:
       type: object
       required:
         - id
-        - name
       properties:
         id:
           type: string
           format: uuid
-        name:
-          type: string
 
     ErrorResponse:
       type: object
