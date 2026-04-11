@@ -44,6 +44,25 @@ func TestCreate(main *testing.T) {
 		assert.Equal(t, map[string]string{"en": "My Shop"}, dbShop.Names)
 	})
 
+	main.Run("WithDescriptions", func(t *testing.T) {
+		t.Parallel()
+
+		svc := shop.NewService(db, zerolog.Nop())
+		got, err := svc.Create(t.Context(), shop.CreateRequest{
+			ID:           "descshop",
+			Names:        map[string]string{"en": "Desc Shop"},
+			Descriptions: map[string]string{"en": "A shop with a description"},
+			OwnerID:      admin.ID,
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, "A shop with a description", got.Descriptions["en"])
+
+		dbShop := sd.GetShop(t, "descshop")
+		assert.Equal(t, "A shop with a description", dbShop.Descriptions["en"])
+	})
+
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 

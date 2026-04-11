@@ -46,6 +46,19 @@ func TestCreateShop(main *testing.T) {
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	})
 
+	main.Run("WithDescriptions", func(t *testing.T) {
+		t.Parallel()
+
+		body := `{"id":"descshopapi","names":{"en":"Desc Shop"},"descriptions":{"en":"A shop description"},"owner_id":"` + admin.ID + `"}`
+		resp := doRequest(t, body)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		got := sd.GetShop(t, "descshopapi")
+		assert.Equal(t, "A shop description", got.Descriptions["en"])
+	})
+
 	main.Run("DuplicateID", func(t *testing.T) {
 		t.Parallel()
 

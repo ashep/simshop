@@ -4,7 +4,7 @@ DROP TABLE IF EXISTS properties;
 DROP TABLE IF EXISTS product_content;
 DROP TABLE IF EXISTS product_prices;
 DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS shop_names;
+DROP TABLE IF EXISTS shop_metadata;
 DROP TABLE IF EXISTS shops;
 DROP TABLE IF EXISTS ext_users;
 DROP TABLE IF EXISTS user_permissions;

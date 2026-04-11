@@ -16,8 +16,6 @@ import (
 )
 
 func TestCreateProduct(main *testing.T) {
-	main.Parallel()
-
 	app := testapp.New(main)
 	app.Start()
 
@@ -28,7 +26,7 @@ func TestCreateProduct(main *testing.T) {
 	sh := sd.CreateShop(main, "prodshop", shopOwner.ID, map[string]string{
 		"en": "Product Shop",
 		"uk": "Магазин продуктів",
-	})
+	}, nil)
 
 	doRequest := func(t *testing.T, body string, apiKey string) *http.Response {
 		t.Helper()

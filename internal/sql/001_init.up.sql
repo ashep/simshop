@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS languages
 );
 
 INSERT INTO languages
-VALUES ('EN', 'English'),
-       ('UK', 'Українська');
+VALUES ('en', 'English'),
+       ('uk', 'Українська');
 
 CREATE TABLE IF NOT EXISTS currencies
 (
@@ -71,11 +71,12 @@ CREATE TABLE IF NOT EXISTS shops
     deleted_at TIMESTAMP WITHOUT TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS shop_names
+CREATE TABLE IF NOT EXISTS shop_metadata
 (
-    shop_id TEXT NOT NULL REFERENCES shops (id),
-    lang_id TEXT NOT NULL REFERENCES languages (id),
-    name    TEXT NOT NULL CHECK ( length(name) >= 3 ),
+    shop_id     TEXT NOT NULL REFERENCES shops (id),
+    lang_id     TEXT NOT NULL REFERENCES languages (id),
+    name        TEXT NOT NULL CHECK ( length(name) >= 3 ),
+    description TEXT,
     PRIMARY KEY (shop_id, lang_id)
 );
 

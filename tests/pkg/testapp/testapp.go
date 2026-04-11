@@ -28,6 +28,10 @@ func New(t *testing.T) *App {
 	}
 
 	addr := lis.Addr().String()
+	if err = lis.Close(); err != nil {
+		panic(fmt.Sprintf("close listener: %s", err))
+	}
+
 	pg := testpostgres.New(t)
 	cfg := app.Config{
 		Debug: false,

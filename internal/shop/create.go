@@ -9,9 +9,10 @@ import (
 )
 
 type CreateRequest struct {
-	ID      string            `json:"id"`
-	Names   map[string]string `json:"names"`
-	OwnerID string            `json:"owner_id"`
+	ID           string            `json:"id"`
+	Names        map[string]string `json:"names"`
+	Descriptions map[string]string `json:"descriptions"`
+	OwnerID      string            `json:"owner_id"`
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) {
@@ -36,15 +37,19 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 	}
 
 	for lang, name := range req.Names {
+		var desc *string
+		if d, ok := req.Descriptions[lang]; ok {
+			desc = &d
+		}
 		if _, err = tx.Exec(ctx,
-			"INSERT INTO shop_names (shop_id, lang_id, name) VALUES ($1, $2, $3)",
-			req.ID, lang, name,
+			"INSERT INTO shop_metadata (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
+			req.ID, lang, name, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 				return nil, ErrInvalidLanguage
 			}
-			return nil, fmt.Errorf("insert shop name: %w", err)
+			return nil, fmt.Errorf("insert shop metadata: %w", err)
 		}
 	}
 
@@ -52,5 +57,5 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return &Shop{ID: req.ID, Names: req.Names}, nil
+	return &Shop{ID: req.ID, Names: req.Names, Descriptions: req.Descriptions}, nil
 }

@@ -172,6 +172,10 @@ components:
             type: string
             minLength: 3
             maxLength: 100
+        descriptions:
+          type: object
+          additionalProperties:
+            type: string
         owner_id:
           type: string
           nullable: true
@@ -209,6 +213,10 @@ components:
             type: string
             minLength: 3
             maxLength: 100
+        descriptions:
+          type: object
+          additionalProperties:
+            type: string
         owner_id:
           type: string
 
@@ -221,6 +229,10 @@ components:
             type: string
             minLength: 3
             maxLength: 100
+        descriptions:
+          type: object
+          additionalProperties:
+            type: string
 
     ProductContentItem:
       type: object

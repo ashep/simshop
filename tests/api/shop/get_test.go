@@ -59,7 +59,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop1", admin.ID, map[string]string{"en": "Get Shop", "uk": "Отримати Магазин"})
+		sd.CreateShop(t, "getshop1", admin.ID, map[string]string{"en": "Get Shop", "uk": "Отримати Магазин"}, nil)
 
 		resp := doRequest(t, "getshop1")
 		defer resp.Body.Close()
@@ -75,12 +75,39 @@ func TestGetShop(main *testing.T) {
 		assert.Equal(t, "getshop1", sh.ID)
 		assert.Equal(t, "Get Shop", sh.Names["en"])
 		assert.Equal(t, "Отримати Магазин", sh.Names["uk"])
+
+		// descriptions omitted when not set
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(body, &raw))
+		assert.NotContains(t, raw, "descriptions")
+	})
+
+	main.Run("WithDescriptions", func(t *testing.T) {
+		t.Parallel()
+
+		sd.CreateShop(t, "getshop4", admin.ID,
+			map[string]string{"en": "Desc Shop"},
+			map[string]string{"en": "Shop description"},
+		)
+
+		resp := doRequest(t, "getshop4")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		var sh shop.Shop
+		require.NoError(t, json.Unmarshal(body, &sh))
+
+		assert.Equal(t, "Shop description", sh.Descriptions["en"])
 	})
 
 	main.Run("AdminGetsExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop2", admin.ID, map[string]string{"en": "Admin Shop"})
+		sd.CreateShop(t, "getshop2", admin.ID, map[string]string{"en": "Admin Shop"}, nil)
 
 		resp := doAdminRequest(t, "getshop2")
 		defer resp.Body.Close()
@@ -108,7 +135,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("PublicGetsMissingExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop3", admin.ID, map[string]string{"en": "Public Shop"})
+		sd.CreateShop(t, "getshop3", admin.ID, map[string]string{"en": "Public Shop"}, nil)
 
 		resp := doRequest(t, "getshop3")
 		defer resp.Body.Close()

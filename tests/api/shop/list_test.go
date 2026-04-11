@@ -38,8 +38,8 @@ func TestListShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "listshop1", admin.ID, map[string]string{"en": "List Shop One"})
-		sd.CreateShop(t, "listshop2", admin.ID, map[string]string{"en": "List Shop Two", "uk": "Перелік Два"})
+		sd.CreateShop(t, "listshop1", admin.ID, map[string]string{"en": "List Shop One"}, nil)
+		sd.CreateShop(t, "listshop2", admin.ID, map[string]string{"en": "List Shop Two", "uk": "Перелік Два"}, nil)
 
 		resp := doRequest(t)
 		defer resp.Body.Close()
@@ -63,6 +63,35 @@ func TestListShop(main *testing.T) {
 		if s, ok := byID["listshop2"]; assert.True(t, ok, "listshop2 not in response") {
 			assert.Equal(t, "List Shop Two", s.Names["en"])
 			assert.Equal(t, "Перелік Два", s.Names["uk"])
+		}
+	})
+
+	main.Run("WithDescriptions", func(t *testing.T) {
+		t.Parallel()
+
+		sd.CreateShop(t, "listshop3", admin.ID,
+			map[string]string{"en": "Described Shop"},
+			map[string]string{"en": "A listed shop with a description"},
+		)
+
+		resp := doRequest(t)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		var shops []shop.Shop
+		require.NoError(t, json.Unmarshal(body, &shops))
+
+		byID := make(map[string]shop.Shop, len(shops))
+		for _, s := range shops {
+			byID[s.ID] = s
+		}
+
+		if s, ok := byID["listshop3"]; assert.True(t, ok, "listshop3 not in response") {
+			assert.Equal(t, "A listed shop with a description", s.Descriptions["en"])
 		}
 	})
 }

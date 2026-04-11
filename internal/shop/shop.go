@@ -11,8 +11,9 @@ var ErrShopNotFound = errors.New("shop not found")
 var ErrInvalidOwner = errors.New("invalid owner")
 
 type Shop struct {
-	ID    string            `json:"id"`
-	Names map[string]string `json:"names"`
+	ID           string            `json:"id"`
+	Names        map[string]string `json:"names"`
+	Descriptions map[string]string `json:"descriptions,omitempty"`
 }
 
 type AdminShop struct {
