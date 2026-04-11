@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/shop"
@@ -30,6 +31,14 @@ func (m *shopServiceMock) Create(ctx context.Context, req shop.CreateRequest) (*
 func (m *shopServiceMock) Update(ctx context.Context, id string, req shop.UpdateRequest) error {
 	args := m.Called(ctx, id, req)
 	return args.Error(0)
+}
+
+func (m *shopServiceMock) Get(ctx context.Context, id string) (*shop.AdminShop, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*shop.AdminShop), args.Error(1)
 }
 
 func (m *shopServiceMock) List(ctx context.Context) ([]shop.Shop, error) {
@@ -241,6 +250,124 @@ func TestCreateShop(main *testing.T) {
 		if w.Code != http.StatusCreated {
 			t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 		}
+	})
+}
+
+func TestGetShop(main *testing.T) {
+	main.Run("ShopNotFound", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(nil, shop.ErrShopNotFound)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops/myshop", nil)
+		r.SetPathValue("id", "myshop")
+		w := httptest.NewRecorder()
+
+		h.GetShop(w, r)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error": "shop not found"}`, w.Body.String())
+	})
+
+	main.Run("ServiceError", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(nil, errors.New("db error"))
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops/myshop", nil)
+		r.SetPathValue("id", "myshop")
+		w := httptest.NewRecorder()
+
+		h.GetShop(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("AdminUserGetsFullFields", func(t *testing.T) {
+		ownerID := "owner-uuid-1"
+		createdAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+		updatedAt := time.Date(2024, 6, 20, 12, 30, 0, 0, time.UTC)
+
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(
+			&shop.AdminShop{
+				Shop:      shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
+				OwnerID:   &ownerID,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			},
+			nil,
+		)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops/myshop", nil)
+		r.SetPathValue("id", "myshop")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.GetShop(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{
+			"id": "myshop",
+			"names": {"en": "My Shop"},
+			"owner_id": "owner-uuid-1",
+			"created_at": "2024-01-15T10:00:00Z",
+			"updated_at": "2024-06-20T12:30:00Z"
+		}`, w.Body.String())
+	})
+
+	main.Run("NonAdminUserGetsBasicFields", func(t *testing.T) {
+		ownerID := "owner-uuid-2"
+
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(
+			&shop.AdminShop{
+				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
+				OwnerID: &ownerID,
+			},
+			nil,
+		)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops/myshop", nil)
+		r.SetPathValue("id", "myshop")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.GetShop(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"id":"myshop","names":{"en":"My Shop"}}`, w.Body.String())
+	})
+
+	main.Run("UnauthenticatedGetsBasicFields", func(t *testing.T) {
+		ownerID := "owner-uuid-3"
+
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(
+			&shop.AdminShop{
+				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
+				OwnerID: &ownerID,
+			},
+			nil,
+		)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/shops/myshop", nil)
+		r.SetPathValue("id", "myshop")
+		// no user in context
+		w := httptest.NewRecorder()
+
+		h.GetShop(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"id":"myshop","names":{"en":"My Shop"}}`, w.Body.String())
 	})
 }
 

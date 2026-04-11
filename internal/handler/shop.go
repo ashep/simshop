@@ -11,9 +11,37 @@ import (
 )
 
 type shopService interface {
+	Get(ctx context.Context, id string) (*shop.AdminShop, error)
 	Create(ctx context.Context, req shop.CreateRequest) (*shop.Shop, error)
 	Update(ctx context.Context, id string, req shop.UpdateRequest) error
 	List(ctx context.Context) ([]shop.Shop, error)
+}
+
+func (h *Handler) GetShop(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	sh, err := h.shop.Get(r.Context(), id)
+	if errors.Is(err, shop.ErrShopNotFound) {
+		h.writeError(w, &NotFoundError{Reason: "shop not found"})
+		return
+	} else if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	user := auth.GetUserFromContext(r.Context())
+	var body any
+	if user != nil && user.IsAdmin() {
+		body = sh
+	} else {
+		body = sh.Shop
+	}
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		h.l.Warn().Err(err).Msg("get shop response write failed")
+	}
 }
 
 func (h *Handler) ListShops(w http.ResponseWriter, r *http.Request) {

@@ -52,13 +52,17 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	hdl := handler.NewHandler(shopSvc, prodSvc, openAPI.Responder(), l)
 	authMw := auth.Middleware(authSvc)
+	optionalAuthMw := auth.OptionalMiddleware(authSvc)
 	ctypeMw := contenttype.Middleware()
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New()
+
 	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
+	srv.HandleFunc("GET /shops/{id}", optionalAuthMw(openapiMw(hdl.GetShop)))
 	srv.HandleFunc("POST /shops", ctypeMw(authMw(openapiMw(hdl.CreateShop))))
 	srv.HandleFunc("PATCH /shops/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateShop))))
+
 	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.ProductCreate))))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")

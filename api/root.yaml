@@ -16,7 +16,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ShopListResponse'
+                $ref: '#/components/schemas/ListShopsResponse'
         "403":
           description: Forbidden
           content:
@@ -32,7 +32,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ShopCreateRequest'
+              $ref: '#/components/schemas/CreateShopRequest'
       responses:
         "201":
           description: Shop created
@@ -50,6 +50,27 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /shops/{id}:
+    get:
+      operationId: getShop
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Get request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetShopResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     patch:
       operationId: updateShop
       security:
@@ -65,7 +86,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ShopUpdateRequest'
+              $ref: '#/components/schemas/UpdateShopRequest'
       responses:
         "200":
           description: Shop updated
@@ -145,16 +166,28 @@ components:
             type: string
             minLength: 3
             maxLength: 100
+        owner_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    ShopListResponse:
+    ListShopsResponse:
       type: array
       items:
         $ref: "#/components/schemas/Shop"
 
-    ShopCreateRequest:
+    GetShopResponse:
       $ref: "#/components/schemas/Shop"
 
-    ShopUpdateRequest:
+    CreateShopRequest:
+      $ref: "#/components/schemas/Shop"
+
+    UpdateShopRequest:
       type: object
       properties:
         names:
@@ -164,7 +197,7 @@ components:
             minLength: 3
             maxLength: 100
 
-    ProductCreateRequest:
+    CreateProductRequest:
       type: object
       required:
         - name
@@ -176,7 +209,7 @@ components:
           type: string
           minLength: 5
 
-    ProductCreateResponse:
+    CreateProductResponse:
       type: object
       required:
         - id

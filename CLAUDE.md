@@ -6,6 +6,12 @@ After completing any task, reflect on what was learned. If a decision, pattern, 
 to recur, add it to this file under the appropriate section. Do not record things already derivable from reading the
 code.
 
+**This is mandatory, not optional.** Do not wait for the user to ask. Update this file as the final step of every task,
+before responding with a summary.
+
+Never run `git commit` or `git push` unless the user explicitly asks. When dispatching subagents, include an explicit
+"do not commit" instruction at the top of every subagent prompt.
+
 ## Project overview
 
 `simshop` is a Go HTTP API service (`github.com/ashep/simshop`). It uses:
@@ -29,6 +35,8 @@ Do not run `docker compose` directly — the `task` commands manage containers a
 ## Architecture
 
 Request processing middleware chain (innermost to outermost): `content-type → auth → openapi validation → handler`.
+
+Endpoints that are public but return extra fields for authenticated admins use `optionalAuthMw` (from `auth.OptionalMiddleware`). This middleware sets the user in context if a valid API key is present, but does not reject unauthenticated requests. Example: `GET /shops/{id}` uses `optionalAuthMw(openapiMw(hdl.GetShop))`.
 
 Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g., `"POST /shops"`).
 
@@ -55,6 +63,13 @@ understand the requirements.
 Any create or update operation that accepts language-keyed data (e.g., a `names map[string]string` field) must handle
 the case where the caller supplies an unknown language code. In the service layer, a PostgreSQL FK violation on
 `lang_id` (error code `23503`) must be caught and returned as `ErrInvalidLanguage`. The handler must map `ErrInvalidLanguage` to `&BadRequestError{Reason: "invalid language code"}`.
+
+### Admin vs public response shaping
+
+When an endpoint is publicly accessible but returns additional fields for admin callers, use `auth.GetUserFromContext`
+to check for admin status in the handler, then encode either the admin struct (e.g., `*shop.AdminShop`) or just the
+public embedded struct (e.g., `sh.Shop`). Declare the local variable as `any` so both types satisfy it without a cast.
+The service always returns the full admin struct; the handler decides what to serialise.
 
 ## Tests
 
@@ -95,8 +110,22 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 - Create the seeder at the top of the parent test function, before any `main.Run(...)` calls.
 - All auxiliary DB queries (reads and writes) belong in the seeder, not inline in the test body.
 
+### OpenAPI spec
+
+The OpenAPI validator (`kin-openapi`) operates in OpenAPI 3.0 compatibility mode. Do **not** use OpenAPI 3.1 array type syntax (`type: ["string", "null"]`) — it will cause `unsupported 'type' value "null"` at startup. Use the 3.0 style instead: `type: string` + `nullable: true`.
+
 ### API functional tests (`tests/api/`)
 
 - All API subtests within a `TestFoo` share one `testapp` instance started in the parent function. Starting a separate
   instance per subtest panics on port conflict when subtests run in parallel.
+- At most one top-level `TestFoo` function per package may call `main.Parallel()` if each starts its own `testapp`.
+  When multiple parallel top-level tests each start a `testapp`, they all resume concurrently and conflict on port 9000.
+  New API test functions that start their own app must NOT call `main.Parallel()` unless the existing parallel test
+  functions are refactored to share a single app.
+- Resolve shared test fixtures (e.g., `sd.GetAdminUser`) once at the parent `TestFoo` level on `main`, not inside
+  sub-test closures. This matches all sibling test files and avoids redundant DB calls per subtest.
+- For timestamp fields that must be non-null (e.g., `created_at`, `updated_at`), use both `assert.Contains` (key
+  present) and `assert.NotNil` (value non-null). Use `assert.Contains` alone only for nullable fields like `owner_id`.
+- When testing response body shape, assert the `names` map value directly (e.g., `names["en"]`) rather than only
+  checking the field exists, so the test catches serialization regressions.
 
