@@ -52,12 +52,12 @@ func (e *NotFoundError) Error() string {
 
 type Handler struct {
 	shop shopService
-	prod productSservice
+	prod productService
 	resp *openapi.Responder
 	l    zerolog.Logger
 }
 
-func NewHandler(shop shopService, prod productSservice, resp *openapi.Responder, l zerolog.Logger) *Handler {
+func NewHandler(shop shopService, prod productService, resp *openapi.Responder, l zerolog.Logger) *Handler {
 	return &Handler{
 		shop: shop,
 		prod: prod,
