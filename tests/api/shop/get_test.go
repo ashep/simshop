@@ -16,6 +16,8 @@ import (
 )
 
 func TestGetShop(main *testing.T) {
+	main.Parallel()
+
 	app := testapp.New(main)
 	app.Start()
 
@@ -24,7 +26,7 @@ func TestGetShop(main *testing.T) {
 
 	doRequest := func(t *testing.T, id string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:9000/shops/"+id, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/shops/"+id), nil)
 		require.NoError(t, err)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
@@ -33,7 +35,7 @@ func TestGetShop(main *testing.T) {
 
 	doAdminRequest := func(t *testing.T, id string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:9000/shops/"+id, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/shops/"+id), nil)
 		require.NoError(t, err)
 		req.Header.Set("X-API-Key", admin.APIKey)
 		resp, err := http.DefaultClient.Do(req)

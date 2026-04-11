@@ -16,6 +16,8 @@ import (
 )
 
 func TestListShop(main *testing.T) {
+	main.Parallel()
+
 	app := testapp.New(main)
 	app.Start()
 
@@ -24,7 +26,7 @@ func TestListShop(main *testing.T) {
 
 	doRequest := func(t *testing.T) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:9000/shops", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/shops"), nil)
 		require.NoError(t, err)
 		req.Header.Set("X-API-Key", admin.APIKey)
 

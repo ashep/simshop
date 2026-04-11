@@ -15,6 +15,8 @@ import (
 )
 
 func TestUpdateShop(main *testing.T) {
+	main.Parallel()
+
 	app := testapp.New(main)
 	app.Start()
 
@@ -24,7 +26,7 @@ func TestUpdateShop(main *testing.T) {
 	doRequest := func(t *testing.T, id string, body string) *http.Response {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch,
-			"http://localhost:9000/shops/"+id,
+			app.URL("/shops/"+id),
 			bytes.NewBufferString(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")

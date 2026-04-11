@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS languages
 );
 
 INSERT INTO languages
-VALUES ('en', 'English'),
-       ('uk', 'Українська');
+VALUES ('EN', 'English'),
+       ('UK', 'Українська');
 
 CREATE TABLE IF NOT EXISTS currencies
 (
@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS countries
 );
 
 INSERT INTO countries
-VALUES ('UA', 'UAH');
+VALUES ('DEFAULT', 'EUR'),
+       ('UA', 'UAH');
 
 CREATE TABLE IF NOT EXISTS users
 (
@@ -64,7 +65,7 @@ CREATE TABLE IF NOT EXISTS ext_users
 CREATE TABLE IF NOT EXISTS shops
 (
     id         TEXT                        NOT NULL CHECK ( length(id) >= 3 ) PRIMARY KEY,
-    owner_id   uuid NOT NULL REFERENCES users (id),
+    owner_id   uuid                        NOT NULL REFERENCES users (id),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITHOUT TIME ZONE
@@ -82,45 +83,48 @@ CREATE TABLE IF NOT EXISTS products
 (
     id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     shop_id    TEXT REFERENCES shops (id),
-    price      INT                         NOT NULL CHECK (price >= 0),
-    currency   TEXT                        NOT NULL CHECK (length(currency) > 0),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITHOUT TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS product_properties
-(
-    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7()
-);
-
-CREATE TABLE IF NOT EXISTS product_properties_i18n
-(
-    property_id uuid NOT NULL REFERENCES product_properties (id),
-    lang_id     TEXT NOT NULL REFERENCES languages (id),
-    title       TEXT NOT NULL CHECK ( length(title) > 0 ),
-
-    PRIMARY KEY (property_id, lang_id)
-);
-
-
--- Alternative product prices per country
 CREATE TABLE IF NOT EXISTS product_prices
 (
     product_id uuid NOT NULL REFERENCES products (id),
     country_id TEXT NOT NULL REFERENCES countries (id),
-    price      INT  NOT NULL CHECK (price >= 0),
-    currency   TEXT NOT NULL CHECK (length(currency) > 0),
-
+    value INT NOT NULL,
     PRIMARY KEY (product_id, country_id)
 );
 
-CREATE TABLE IF NOT EXISTS product_variants
+CREATE TABLE IF NOT EXISTS product_content
 (
-    id         uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
-    product_id uuid NOT NULL REFERENCES products (id),
-    lang_id    TEXT NOT NULL REFERENCES languages (id),
-    title      TEXT NOT NULL,
-    price_add  INT  NOT NULL
+    product_id  uuid NOT NULL REFERENCES products (id),
+    lang_id     TEXT NOT NULL REFERENCES languages (id),
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL,
+    PRIMARY KEY (product_id, lang_id)
+);
+
+CREATE TABLE IF NOT EXISTS properties
+(
+    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7()
+);
+
+CREATE TABLE IF NOT EXISTS property_names
+(
+    property_id uuid NOT NULL REFERENCES properties (id),
+    lang_id     TEXT NOT NULL REFERENCES languages (id),
+    name        TEXT NOT NULL CHECK ( length(name) > 0 ),
+    PRIMARY KEY (property_id, lang_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS product_property_values
+(
+    product_id  uuid NOT NULL REFERENCES products (id),
+    property_id uuid NOT NULL REFERENCES properties (id),
+    value       TEXT NOT NULL,
+    price_add   INT,
+    PRIMARY KEY (product_id, property_id)
 );
 

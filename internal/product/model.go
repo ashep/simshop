@@ -21,11 +21,6 @@ type Product struct {
 	ID string `json:"id"`
 }
 
-type Price struct {
-	CountryID string `json:"country_id"`
-	Value     int    `json:"value"`
-}
-
 type ContentItem struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -33,7 +28,7 @@ type ContentItem struct {
 
 type CreateRequest struct {
 	ShopID  string                 `json:"shop_id"`
-	Prices  []Price                `json:"prices"`
+	Prices  map[string]int         `json:"prices"`
 	Content map[string]ContentItem `json:"content"`
 }
 

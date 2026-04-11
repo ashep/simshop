@@ -16,6 +16,8 @@ import (
 )
 
 func TestCreateProduct(main *testing.T) {
+	main.Parallel()
+
 	app := testapp.New(main)
 	app.Start()
 
@@ -30,7 +32,7 @@ func TestCreateProduct(main *testing.T) {
 
 	doRequest := func(t *testing.T, body string, apiKey string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://localhost:9000/products",
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, app.URL("/products"),
 			bytes.NewBufferString(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
@@ -43,7 +45,7 @@ func TestCreateProduct(main *testing.T) {
 	}
 
 	validBody := func() string {
-		return `{"shop_id":"` + sh.ID + `","prices":[{"country_id":"DEFAULT","value":1000}],"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		return `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
 	}
 
 	main.Run("Success_Admin", func(t *testing.T) {
@@ -96,7 +98,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("ShopNotFound", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"no-such-shop","prices":[{"country_id":"DEFAULT","value":1000}],"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"no-such-shop","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -109,7 +111,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("MissingDefaultPrice", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"` + sh.ID + `","prices":[{"country_id":"UA","value":40000}],"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"UA":40000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -123,7 +125,7 @@ func TestCreateProduct(main *testing.T) {
 		t.Parallel()
 
 		// Shop has "en" and "uk"; request is missing "uk"
-		body := `{"shop_id":"` + sh.ID + `","prices":[{"country_id":"DEFAULT","value":1000}],"content":{"en":{"title":"Widget","description":"A fine widget"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -136,7 +138,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("InvalidCountry", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"` + sh.ID + `","prices":[{"country_id":"DEFAULT","value":1000},{"country_id":"XX","value":999}],"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000,"XX":999},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -150,7 +152,7 @@ func TestCreateProduct(main *testing.T) {
 		t.Parallel()
 
 		// "zz" is not in the languages table
-		body := `{"shop_id":"` + sh.ID + `","prices":[{"country_id":"DEFAULT","value":1000}],"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 

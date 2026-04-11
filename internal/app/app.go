@@ -56,7 +56,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	ctypeMw := contenttype.Middleware()
 	openapiMw := openAPI.Middleware()
 
-	srv := httpserver.New()
+	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
 	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
 	srv.HandleFunc("GET /shops/{id}", optionalAuthMw(openapiMw(hdl.GetShop)))

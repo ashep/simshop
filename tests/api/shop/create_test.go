@@ -25,7 +25,7 @@ func TestCreateShop(main *testing.T) {
 
 	doRequest := func(t *testing.T, body string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://localhost:9000/shops",
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, app.URL("/shops"),
 			bytes.NewBufferString(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")

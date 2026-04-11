@@ -46,14 +46,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 	}
 
 	// Validate DEFAULT price is present.
-	hasDefault := false
-	for _, p := range req.Prices {
-		if p.CountryID == "DEFAULT" {
-			hasDefault = true
-			break
-		}
-	}
-	if !hasDefault {
+	if _, hasDefault := req.Prices["DEFAULT"]; !hasDefault {
 		return nil, ErrMissingDefaultPrice
 	}
 
@@ -82,10 +75,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 		return nil, fmt.Errorf("insert product: %w", err)
 	}
 
-	for _, p := range req.Prices {
+	for countryID, value := range req.Prices {
 		if _, err = tx.Exec(ctx,
 			"INSERT INTO product_prices (product_id, country_id, value) VALUES ($1, $2, $3)",
-			productID, p.CountryID, p.Value,
+			productID, countryID, value,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			// product_id came from RETURNING above and cannot violate the FK;
