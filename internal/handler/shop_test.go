@@ -303,7 +303,6 @@ func TestGetShop(main *testing.T) {
 	})
 
 	main.Run("AdminUserGetsFullFields", func(t *testing.T) {
-		ownerID := "owner-uuid-1"
 		createdAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 		updatedAt := time.Date(2024, 6, 20, 12, 30, 0, 0, time.UTC)
 
@@ -312,7 +311,7 @@ func TestGetShop(main *testing.T) {
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
 				Shop:      shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
-				OwnerID:   &ownerID,
+				OwnerID:   "owner-uuid-1",
 				CreatedAt: createdAt,
 				UpdatedAt: updatedAt,
 			},
@@ -338,14 +337,12 @@ func TestGetShop(main *testing.T) {
 	})
 
 	main.Run("NonAdminUserGetsBasicFields", func(t *testing.T) {
-		ownerID := "owner-uuid-2"
-
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
 				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
-				OwnerID: &ownerID,
+				OwnerID: "owner-uuid-2",
 			},
 			nil,
 		)
@@ -363,14 +360,12 @@ func TestGetShop(main *testing.T) {
 	})
 
 	main.Run("UnauthenticatedGetsBasicFields", func(t *testing.T) {
-		ownerID := "owner-uuid-3"
-
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
 				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"en": "My Shop"}},
-				OwnerID: &ownerID,
+				OwnerID: "owner-uuid-3",
 			},
 			nil,
 		)
@@ -419,20 +414,72 @@ func TestUpdateShop(main *testing.T) {
 		}
 	})
 
-	main.Run("UserNotAdmin", func(t *testing.T) {
+	main.Run("UserIsNotOwnerAndNotAdmin", func(t *testing.T) {
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(
+			&shop.AdminShop{Shop: shop.Shop{ID: "myshop"}, OwnerID: "other-owner"}, nil)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{}`))
+		r.SetPathValue("id", "myshop")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
 		w := httptest.NewRecorder()
 
 		h.UpdateShop(w, r)
 
-		if w.Code != http.StatusForbidden {
-			t.Errorf("expected status %d, got %d", http.StatusForbidden, w.Code)
-		}
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("UserIsOwner", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(
+			&shop.AdminShop{Shop: shop.Shop{ID: "myshop"}, OwnerID: "u1"}, nil)
+		svc.On("Update", mock.Anything, "myshop", mock.Anything).Return(nil)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"en":"Updated"}}`))
+		r.SetPathValue("id", "myshop")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.UpdateShop(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("ShopNotFoundDuringOwnerCheck", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(nil, shop.ErrShopNotFound)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{}`))
+		r.SetPathValue("id", "myshop")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.UpdateShop(w, r)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"shop not found"}`, w.Body.String())
+	})
+
+	main.Run("GetErrorDuringOwnerCheck", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Get", mock.Anything, "myshop").Return(nil, errors.New("db error"))
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{}`))
+		r.SetPathValue("id", "myshop")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.UpdateShop(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 
 	main.Run("ShopNotFound", func(t *testing.T) {

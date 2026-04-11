@@ -120,12 +120,23 @@ func (h *Handler) UpdateShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !user.IsAdmin() {
-		h.writeError(w, &PermissionDeniedError{})
-		return
-	}
-
 	id := r.PathValue("id")
+
+	if !user.IsAdmin() {
+		sh, err := h.shop.Get(r.Context(), id)
+		if errors.Is(err, shop.ErrShopNotFound) {
+			h.writeError(w, &NotFoundError{Reason: "shop not found"})
+			return
+		} else if err != nil {
+			h.writeError(w, err)
+			return
+		}
+
+		if sh.OwnerID != user.ID {
+			h.writeError(w, &PermissionDeniedError{})
+			return
+		}
+	}
 
 	if err := h.shop.Update(r.Context(), id, req); err != nil {
 		if errors.Is(err, shop.ErrShopNotFound) {

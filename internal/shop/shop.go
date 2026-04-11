@@ -17,7 +17,7 @@ type Shop struct {
 
 type AdminShop struct {
 	Shop
-	OwnerID   *string   `json:"owner_id"`
+	OwnerID   string    `json:"owner_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

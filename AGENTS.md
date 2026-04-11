@@ -58,6 +58,12 @@ Found for missing resource — not a generic 400 Bad Request.
 When asked to implement a new feature, use `api/` and `internal/sql/` package content as additional context to
 understand the requirements.
 
+### Database migrations
+
+Whenever an `xxx-up` migration is created or modified, always update the corresponding `xxx-down` migration to drop
+all objects added by the up migration, in reverse dependency order (child tables before parent tables). Never leave the
+down migration out of sync with the up migration.
+
 ### Language validation
 
 Any create or update operation that accepts language-keyed data (e.g., a `names map[string]string` field) must handle

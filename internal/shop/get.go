@@ -21,8 +21,7 @@ func (s *Service) Get(ctx context.Context, id string) (*AdminShop, error) {
 	var sh *AdminShop
 
 	for rows.Next() {
-		var shopID string
-		var ownerID *string
+		var shopID, ownerID string
 		var createdAt, updatedAt time.Time
 		var langID, name *string
 		if err := rows.Scan(&shopID, &ownerID, &createdAt, &updatedAt, &langID, &name); err != nil {
