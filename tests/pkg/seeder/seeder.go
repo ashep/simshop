@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ashep/simshop/internal/auth"
+	"github.com/ashep/simshop/internal/product"
 	"github.com/ashep/simshop/internal/shop"
 	"github.com/ashep/simshop/tests/pkg/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -89,4 +90,41 @@ func (s *Seeder) GetAdminUser(t *testing.T) *auth.User {
 	require.NoError(t, err)
 	u.Scopes = []auth.Scope{auth.ScopeAdmin}
 	return u
+}
+
+func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices []product.Price, content map[string]product.ContentItem) *product.Product {
+	t.Helper()
+
+	var productID string
+	row := s.db.QueryRow(t.Context(), "INSERT INTO products (shop_id) VALUES ($1) RETURNING id", shopID)
+	require.NoError(t, row.Scan(&productID))
+
+	for _, p := range prices {
+		_, err := s.db.Exec(t.Context(),
+			"INSERT INTO product_prices (product_id, country_id, value) VALUES ($1, $2, $3)",
+			productID, p.CountryID, p.Value,
+		)
+		require.NoError(t, err)
+	}
+
+	for lang, c := range content {
+		_, err := s.db.Exec(t.Context(),
+			"INSERT INTO product_content (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
+			productID, lang, c.Title, c.Description,
+		)
+		require.NoError(t, err)
+	}
+
+	return &product.Product{ID: productID}
+}
+
+func (s *Seeder) GetProduct(t *testing.T, id string) *product.Product {
+	t.Helper()
+
+	var count int
+	err := s.db.QueryRow(t.Context(), "SELECT COUNT(*) FROM products WHERE id = $1", id).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "product %q not found in db", id)
+
+	return &product.Product{ID: id}
 }
