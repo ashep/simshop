@@ -16,6 +16,7 @@ func Middleware() func(http.HandlerFunc) http.HandlerFunc {
 			if err != nil || mediaType != "application/json" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnsupportedMediaType)
+				_, _ = w.Write([]byte(`{"error":"unsupported media type"}`))
 				return
 			}
 			next(w, r)

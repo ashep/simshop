@@ -36,8 +36,8 @@ func TestListShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "listshop1", map[string]string{"en": "List Shop One"})
-		sd.CreateShop(t, "listshop2", map[string]string{"en": "List Shop Two", "uk": "Перелік Два"})
+		sd.CreateShop(t, "listshop1", admin.ID, map[string]string{"en": "List Shop One"})
+		sd.CreateShop(t, "listshop2", admin.ID, map[string]string{"en": "List Shop Two", "uk": "Перелік Два"})
 
 		resp := doRequest(t)
 		defer resp.Body.Close()

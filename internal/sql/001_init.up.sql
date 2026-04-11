@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS ext_users
 CREATE TABLE IF NOT EXISTS shops
 (
     id         TEXT                        NOT NULL CHECK ( length(id) >= 3 ) PRIMARY KEY,
-    owner_id   uuid REFERENCES users (id),
+    owner_id   uuid NOT NULL REFERENCES users (id),
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITHOUT TIME ZONE

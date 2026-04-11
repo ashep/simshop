@@ -94,6 +94,9 @@ func (h *Handler) CreateShop(w http.ResponseWriter, r *http.Request) {
 	} else if errors.Is(err, shop.ErrInvalidLanguage) {
 		h.writeError(w, &BadRequestError{Reason: "invalid language code"})
 		return
+	} else if errors.Is(err, shop.ErrInvalidOwner) {
+		h.writeError(w, &BadRequestError{Reason: "invalid owner id"})
+		return
 	} else if err != nil {
 		h.writeError(w, err)
 		return

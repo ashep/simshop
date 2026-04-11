@@ -37,7 +37,7 @@ func TestUpdateShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "apishop1", map[string]string{"en": "Original"})
+		sd.CreateShop(t, "apishop1", admin.ID, map[string]string{"en": "Original"})
 
 		resp := doRequest(t, "apishop1", `{"names":{"en":"Updated","uk":"Оновлено"}}`)
 		defer resp.Body.Close()
@@ -64,7 +64,7 @@ func TestUpdateShop(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "apishop2", map[string]string{"en": "Lang Test"})
+		sd.CreateShop(t, "apishop2", admin.ID, map[string]string{"en": "Lang Test"})
 
 		resp := doRequest(t, "apishop2", `{"names":{"xx":"Unknown"}}`)
 		defer resp.Body.Close()

@@ -9,8 +9,9 @@ import (
 )
 
 type CreateRequest struct {
-	ID    string            `json:"id"`
-	Names map[string]string `json:"names"`
+	ID      string            `json:"id"`
+	Names   map[string]string `json:"names"`
+	OwnerID string            `json:"owner_id"`
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) {
@@ -20,10 +21,16 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if _, err = tx.Exec(ctx, "INSERT INTO shops (id) VALUES ($1)", req.ID); err != nil {
+	if _, err = tx.Exec(ctx,
+		"INSERT INTO shops (id, owner_id) VALUES ($1, $2)",
+		req.ID, req.OwnerID,
+	); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, ErrShopAlreadyExists
+		}
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return nil, ErrInvalidOwner
 		}
 		return nil, fmt.Errorf("insert shop: %w", err)
 	}

@@ -185,7 +185,26 @@ components:
       $ref: "#/components/schemas/Shop"
 
     CreateShopRequest:
-      $ref: "#/components/schemas/Shop"
+      type: object
+      required:
+        - id
+        - names
+        - owner_id
+      properties:
+        id:
+          type: string
+          minLength: 3
+          maxLength: 16
+        names:
+          type: object
+          required:
+            - en
+          additionalProperties:
+            type: string
+            minLength: 3
+            maxLength: 100
+        owner_id:
+          type: string
 
     UpdateShopRequest:
       type: object

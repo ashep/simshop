@@ -4,6 +4,7 @@ package shop_test
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"testing"
 
@@ -38,7 +39,8 @@ func TestCreateShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		resp := doRequest(t, `{"id":"testshop","names":{"en":"Test Shop"}}`)
+		body := `{"id":"testshop","names":{"en":"Test Shop"},"owner_id":"` + admin.ID + `"}`
+		resp := doRequest(t, body)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -47,12 +49,28 @@ func TestCreateShop(main *testing.T) {
 	main.Run("DuplicateID", func(t *testing.T) {
 		t.Parallel()
 
-		resp := doRequest(t, `{"id":"dupshop","names":{"en":"Dup Shop"}}`)
+		body := `{"id":"dupshop","names":{"en":"Dup Shop"},"owner_id":"` + admin.ID + `"}`
+
+		resp := doRequest(t, body)
 		resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-		resp = doRequest(t, `{"id":"dupshop","names":{"en":"Dup Shop"}}`)
+		resp = doRequest(t, body)
 		resp.Body.Close()
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	main.Run("InvalidOwnerID", func(t *testing.T) {
+		t.Parallel()
+
+		body := `{"id":"ownershop","names":{"en":"Owner Shop"},"owner_id":"00000000-0000-0000-0000-000000000000"}`
+		resp := doRequest(t, body)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error":"invalid owner id"}`, string(respBody))
 	})
 }

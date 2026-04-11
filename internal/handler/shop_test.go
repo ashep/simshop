@@ -198,6 +198,23 @@ func TestCreateShop(main *testing.T) {
 		}
 	})
 
+	main.Run("InvalidOwner", func(t *testing.T) {
+		svc := &shopServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Create", mock.Anything, mock.Anything).Return(nil, shop.ErrInvalidOwner)
+
+		h := &Handler{shop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPost, "/shops",
+			bytes.NewBufferString(`{"id":"myshop","names":{"en":"My Shop"},"owner_id":"non-existent-uuid"}`))
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.CreateShop(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid owner id"}`, w.Body.String())
+	})
+
 	main.Run("ShopAlreadyExists", func(t *testing.T) {
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)

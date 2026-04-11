@@ -57,7 +57,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop1", map[string]string{"en": "Get Shop", "uk": "Отримати Магазин"})
+		sd.CreateShop(t, "getshop1", admin.ID, map[string]string{"en": "Get Shop", "uk": "Отримати Магазин"})
 
 		resp := doRequest(t, "getshop1")
 		defer resp.Body.Close()
@@ -78,7 +78,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("AdminGetsExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop2", map[string]string{"en": "Admin Shop"})
+		sd.CreateShop(t, "getshop2", admin.ID, map[string]string{"en": "Admin Shop"})
 
 		resp := doAdminRequest(t, "getshop2")
 		defer resp.Body.Close()
@@ -106,7 +106,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("PublicGetsMissingExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop3", map[string]string{"en": "Public Shop"})
+		sd.CreateShop(t, "getshop3", admin.ID, map[string]string{"en": "Public Shop"})
 
 		resp := doRequest(t, "getshop3")
 		defer resp.Body.Close()

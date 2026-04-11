@@ -42,9 +42,9 @@ func (s *Seeder) AddUserScope(t *testing.T, u *auth.User, scope auth.Scope) {
 	u.Scopes = append(u.Scopes, scope)
 }
 
-func (s *Seeder) CreateShop(t *testing.T, id string, names map[string]string) *shop.Shop {
+func (s *Seeder) CreateShop(t *testing.T, id string, ownerID string, names map[string]string) *shop.Shop {
 	t.Helper()
-	_, err := s.db.Exec(t.Context(), "INSERT INTO shops (id) VALUES ($1)", id)
+	_, err := s.db.Exec(t.Context(), "INSERT INTO shops (id, owner_id) VALUES ($1, $2)", id, ownerID)
 	require.NoError(t, err)
 	for lang, name := range names {
 		_, err = s.db.Exec(t.Context(),
