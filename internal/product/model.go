@@ -1,16 +1,42 @@
 package product
 
+import "errors"
+
+var ErrShopNotFound = errors.New("shop not found")
+var ErrMissingDefaultPrice = errors.New("default country price is required")
+var ErrInvalidCountry = errors.New("invalid country id")
+var ErrInvalidLanguage = errors.New("invalid language code")
+
+// MissingContentError is returned when the request content map is missing an
+// entry for a language that the target shop has.
+type MissingContentError struct {
+	Lang string
+}
+
+func (e *MissingContentError) Error() string {
+	return "content missing for language: " + e.Lang
+}
+
 type Product struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID string `json:"id"`
+}
+
+type Price struct {
+	CountryID string `json:"country_id"`
+	Value     int    `json:"value"`
+}
+
+type ContentItem struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type CreateRequest struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ShopID  string                 `json:"shop_id"`
+	Prices  []Price                `json:"prices"`
+	Content map[string]ContentItem `json:"content"`
 }
 
 type CreateResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID string `json:"id"`
 }
