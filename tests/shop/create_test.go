@@ -23,14 +23,16 @@ func TestCreate(main *testing.T) {
 	)).DB()
 
 	sd := seeder.New(main, db)
+	admin := sd.GetAdminUser(main)
 
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
 		svc := shop.NewService(db, zerolog.Nop())
 		got, err := svc.Create(t.Context(), shop.CreateRequest{
-			ID:    "myshop",
-			Names: map[string]string{"en": "My Shop"},
+			ID:      "myshop",
+			Names:   map[string]string{"en": "My Shop"},
+			OwnerID: admin.ID,
 		})
 
 		require.NoError(t, err)
@@ -47,8 +49,9 @@ func TestCreate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		_, err := svc.Create(t.Context(), shop.CreateRequest{
-			ID:    "langshop",
-			Names: map[string]string{"xx": "Lang Shop"},
+			ID:      "langshop",
+			Names:   map[string]string{"xx": "Lang Shop"},
+			OwnerID: admin.ID,
 		})
 
 		require.ErrorIs(t, err, shop.ErrInvalidLanguage)
@@ -59,14 +62,16 @@ func TestCreate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		_, err := svc.Create(t.Context(), shop.CreateRequest{
-			ID:    "dupshop",
-			Names: map[string]string{"en": "Dup Shop"},
+			ID:      "dupshop",
+			Names:   map[string]string{"en": "Dup Shop"},
+			OwnerID: admin.ID,
 		})
 		require.NoError(t, err)
 
 		_, err = svc.Create(t.Context(), shop.CreateRequest{
-			ID:    "dupshop",
-			Names: map[string]string{"en": "Dup Shop"},
+			ID:      "dupshop",
+			Names:   map[string]string{"en": "Dup Shop"},
+			OwnerID: admin.ID,
 		})
 		require.Error(t, err)
 	})

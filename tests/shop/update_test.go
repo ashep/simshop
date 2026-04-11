@@ -23,11 +23,12 @@ func TestUpdate(main *testing.T) {
 	)).DB()
 
 	sd := seeder.New(main, db)
+	admin := sd.GetAdminUser(main)
 
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop1", map[string]string{"en": "Original"})
+		sd.CreateShop(t, "updshop1", admin.ID, map[string]string{"en": "Original"})
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop1", shop.UpdateRequest{
@@ -44,7 +45,7 @@ func TestUpdate(main *testing.T) {
 	main.Run("PartialUpsert", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop2", map[string]string{"en": "Original EN", "uk": "Original UK"})
+		sd.CreateShop(t, "updshop2", admin.ID, map[string]string{"en": "Original EN", "uk": "Original UK"})
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop2", shop.UpdateRequest{
@@ -72,7 +73,7 @@ func TestUpdate(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop3", map[string]string{"en": "Lang Test"})
+		sd.CreateShop(t, "updshop3", admin.ID, map[string]string{"en": "Lang Test"})
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop3", shop.UpdateRequest{
