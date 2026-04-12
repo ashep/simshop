@@ -3,6 +3,7 @@ package property
 import "errors"
 
 var ErrInvalidLanguage = errors.New("invalid language code")
+var ErrDuplicateTitle = errors.New("title already exists for this language")
 
 type CreateRequest struct {
 	Titles map[string]string `json:"titles"`

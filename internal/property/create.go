@@ -28,10 +28,15 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Property, err
 			propertyID, lang, title,
 		); err != nil {
 			var pgErr *pgconn.PgError
-			// property_id came from RETURNING above and cannot violate the FK;
-			// 23503 here is always an invalid lang_id.
-			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return nil, ErrInvalidLanguage
+			if errors.As(err, &pgErr) {
+				switch pgErr.Code {
+				case "23503":
+					// property_id came from RETURNING above and cannot violate the FK;
+					// 23503 here is always an invalid lang_id.
+					return nil, ErrInvalidLanguage
+				case "23505":
+					return nil, ErrDuplicateTitle
+				}
 			}
 			return nil, fmt.Errorf("insert property title: %w", err)
 		}

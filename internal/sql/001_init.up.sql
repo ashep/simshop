@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS property_titles
     property_id uuid NOT NULL REFERENCES properties (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),
     title       TEXT NOT NULL CHECK ( length(title) > 0 ),
-    PRIMARY KEY (property_id, lang_id)
+    PRIMARY KEY (lang_id, title)
 );
 
 

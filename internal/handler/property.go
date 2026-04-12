@@ -44,6 +44,8 @@ func (h *Handler) CreateProperty(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, property.ErrInvalidLanguage):
 			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		case errors.Is(err, property.ErrDuplicateTitle):
+			h.writeError(w, &ConflictError{Reason: "title already exists for this language"})
 		default:
 			h.writeError(w, err)
 		}
