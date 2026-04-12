@@ -14,7 +14,7 @@ type productService interface {
 	Create(ctx context.Context, req product.CreateRequest) (*product.Product, error)
 }
 
-func (h *Handler) ProductCreate(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	req := product.CreateRequest{}
 	if err := h.unmarshal(r.Body, &req); err != nil {
 		h.writeError(w, err)

@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS countries
 );
 
 INSERT INTO countries
-VALUES ('AE', 'AED'),
+VALUES ('DEFAULT', 'EUR'),
+       ('AE', 'AED'),
        ('AR', 'ARS'),
        ('AT', 'EUR'),
        ('AU', 'AUD'),
@@ -106,7 +107,6 @@ VALUES ('AE', 'AED'),
        ('CN', 'CNY'),
        ('CZ', 'CZK'),
        ('DE', 'EUR'),
-       ('DEFAULT', 'EUR'),
        ('DK', 'DKK'),
        ('EG', 'EGP'),
        ('ES', 'EUR'),

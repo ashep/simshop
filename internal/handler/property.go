@@ -14,7 +14,7 @@ type propertyService interface {
 	List(ctx context.Context) ([]property.Property, error)
 }
 
-func (h *Handler) PropertyList(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListProperties(w http.ResponseWriter, r *http.Request) {
 	props, err := h.prop.List(r.Context())
 	if err != nil {
 		h.writeError(w, err)
@@ -26,7 +26,7 @@ func (h *Handler) PropertyList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) PropertyCreate(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUserFromContext(r.Context())
 	if user == nil || !user.IsAdmin() {
 		h.writeError(w, &PermissionDeniedError{})

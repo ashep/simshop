@@ -43,7 +43,7 @@ func buildTestResponder(t *testing.T) *openapi.Responder {
 	return oas.Responder()
 }
 
-func TestPropertyList(main *testing.T) {
+func TestListProperties(main *testing.T) {
 	main.Run("ServiceError", func(t *testing.T) {
 		svc := &propertyServiceMock{}
 		defer svc.AssertExpectations(t)
@@ -54,7 +54,7 @@ func TestPropertyList(main *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/properties", nil)
 		w := httptest.NewRecorder()
 
-		h.PropertyList(w, r)
+		h.ListProperties(w, r)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -72,7 +72,7 @@ func TestPropertyList(main *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/properties", nil)
 		w := httptest.NewRecorder()
 
-		h.PropertyList(w, r)
+		h.ListProperties(w, r)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `[{"id":"018f4e3a-0000-7000-8000-000000000001","titles":{"EN":"Color"}}]`, w.Body.String())
@@ -88,7 +88,7 @@ func TestPropertyList(main *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/properties", nil)
 		w := httptest.NewRecorder()
 
-		h.PropertyList(w, r)
+		h.ListProperties(w, r)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `[]`, w.Body.String())
