@@ -90,6 +90,8 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `POST`  | `/products`               | Create a product in a shop                                    | Admin       |
 | `GET`   | `/products/{id}`          | Get a product (public; extra fields for admin/owner)          | No          |
 | `PATCH` | `/products/{id}`          | Fully replace a product's content (EN title required)         | Owner/Admin |
+| `PUT`   | `/products/{id}/prices`   | Fully replace all prices for a product                        | Owner/Admin |
+| `GET`   | `/products/{id}/prices`   | Get the resolved price for a country (`?country=XX`)          | No          |
 | `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
 | `POST`  | `/properties`      | Create a property                                    | Admin         |
 | `GET`   | `/properties`      | List all properties                                  | No            |

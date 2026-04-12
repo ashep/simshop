@@ -99,6 +99,19 @@ Language codes are stored and compared as **uppercase** (e.g., `"EN"`, `"UK"`). 
 lists, service checks, and test fixtures. Using lowercase (e.g., `"en"`) will cause response-validation failures
 because the DB always returns uppercase keys.
 
+### Country price fallback query pattern
+
+When resolving a price with a fallback to `DEFAULT`, use a single query with `ANY($2)` containing
+`[countryID, "DEFAULT"]` and an `ORDER BY CASE WHEN country_id = $3 THEN 0 ELSE 1 END LIMIT 1` to prefer the
+exact-country match. `pgx.ErrNoRows` (no price rows at all, or no DEFAULT) returns a zero-value result struct
+`&PriceResult{CountryID: "DEFAULT", Value: 0}` — never a domain error, since zero price is a valid state.
+
+### Country FK validation on prices
+
+The `product_prices` table has a FK on `country_id`. On INSERT, a PostgreSQL FK violation (error code `23503`) means
+the country code is not in the `countries` table. Return a typed error that carries the offending code
+(`InvalidCountryError{Country: code}`) so the handler can include it in the 400 response body.
+
 ### Full-replace update strategy for content tables
 
 When a content table has **all** non-nullable columns (e.g., `product_data` with both `title NOT NULL` and

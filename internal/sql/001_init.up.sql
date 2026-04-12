@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS shop_data
 (
     shop_id     TEXT NOT NULL REFERENCES shops (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),
-    title        TEXT NOT NULL CHECK ( length(title) >= 3 ),
+    title       TEXT NOT NULL CHECK ( length(title) >= 3 ),
     description TEXT,
     PRIMARY KEY (shop_id, lang_id)
 );
@@ -245,7 +245,14 @@ CREATE TABLE IF NOT EXISTS property_values
     property_id uuid NOT NULL REFERENCES properties (id),
     ordering    INT  NOT NULL DEFAULT 0,
     value       TEXT NOT NULL,
-    price_add   INT,
     PRIMARY KEY (product_id, property_id)
 );
 
+CREATE TABLE IF NOT EXISTS property_prices
+(
+    product_id  uuid NOT NULL REFERENCES products (id),
+    property_id uuid NOT NULL REFERENCES properties (id),
+    country_id  TEXT NOT NULL REFERENCES countries (id),
+    price       INT  NOT NULL,
+    PRIMARY KEY (product_id, property_id, country_id)
+);
