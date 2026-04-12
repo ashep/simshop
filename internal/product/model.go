@@ -81,3 +81,24 @@ func (r *UpdateRequest) Trim() {
 	}
 	r.Data = trimmed
 }
+
+type InvalidCountryError struct{ Country string }
+
+func (e *InvalidCountryError) Error() string { return "invalid country code: " + e.Country }
+
+type PriceResult struct {
+	CountryID string `json:"country_id"`
+	Value     int    `json:"value"`
+}
+
+type SetPricesRequest struct {
+	Prices map[string]int `json:"prices"`
+}
+
+func (r *SetPricesRequest) Trim() {
+	trimmed := make(map[string]int, len(r.Prices))
+	for k, v := range r.Prices {
+		trimmed[strings.TrimSpace(k)] = v
+	}
+	r.Prices = trimmed
+}
