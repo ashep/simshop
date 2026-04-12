@@ -28,6 +28,11 @@ func TestCreateProduct(main *testing.T) {
 		"UK": "Магазин продуктів",
 	}, nil)
 
+	limitShop := sd.CreateShop(main, "limitshop", shopOwner.ID, map[string]string{
+		"EN": "Limit Shop",
+	}, nil)
+	sd.SetShopMaxProducts(main, limitShop.ID, 0)
+
 	doRequest := func(t *testing.T, body string, apiKey string) *http.Response {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, app.URL("/products"),
@@ -144,6 +149,19 @@ func TestCreateProduct(main *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"error":"invalid country id"}`, string(respBody))
+	})
+
+	main.Run("ShopProductLimitReached", func(t *testing.T) {
+		t.Parallel()
+
+		body := `{"shop_id":"` + limitShop.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		resp := doRequest(t, body, admin.APIKey)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error":"shop product limit reached"}`, string(respBody))
 	})
 
 	main.Run("InvalidLanguage", func(t *testing.T) {

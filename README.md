@@ -49,6 +49,8 @@ Each shop has:
 - **Names** — a map of language code → name string (English required).
 - **Descriptions** — an optional map of language code → description string.
 - **Owner** — a reference to the user who owns the shop.
+- **Max products** — an integer cap on the number of active (non-deleted) products the shop may hold (default: 50).
+  Attempting to create a product when the cap is reached returns `409 Conflict`.
 - **Timestamps** — creation and last-update times.
 
 ### Product

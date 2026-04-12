@@ -56,6 +56,8 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, &BadRequestError{Reason: "invalid country id"})
 		case errors.Is(err, product.ErrInvalidLanguage):
 			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		case errors.Is(err, product.ErrShopProductLimitReached):
+			h.writeError(w, &ConflictError{Reason: "shop product limit reached"})
 		default:
 			h.writeError(w, err)
 		}

@@ -62,6 +62,12 @@ func (s *Seeder) CreateShop(t *testing.T, id string, ownerID string, names map[s
 	return s.GetShop(t, id)
 }
 
+func (s *Seeder) SetShopMaxProducts(t *testing.T, shopID string, maxProducts int) {
+	t.Helper()
+	_, err := s.db.Exec(t.Context(), "UPDATE shops SET max_products = $1 WHERE id = $2", maxProducts, shopID)
+	require.NoError(t, err)
+}
+
 func (s *Seeder) GetShop(t *testing.T, id string) *shop.Shop {
 	t.Helper()
 	sh := &shop.Shop{ID: id, Names: map[string]string{}, Descriptions: map[string]string{}}

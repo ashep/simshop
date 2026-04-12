@@ -6,6 +6,7 @@ var ErrShopNotFound = errors.New("shop not found")
 var ErrMissingDefaultPrice = errors.New("default country price is required")
 var ErrInvalidCountry = errors.New("invalid country id")
 var ErrInvalidLanguage = errors.New("invalid language code")
+var ErrShopProductLimitReached = errors.New("shop product limit reached")
 
 // MissingContentError is returned when the request content map is missing an
 // entry for a language that the target shop has.

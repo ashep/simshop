@@ -9,11 +9,11 @@ import (
 )
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, error) {
-	// Fetch shop existence and its language set in one query.
+	// Fetch shop existence, max_products, and its language set in one query.
 	// LEFT JOIN: if shop exists but has no names → one row with null lang_id.
 	// No rows at all → shop not found.
 	rows, err := s.db.Query(ctx, `
-		SELECT sn.lang_id
+		SELECT s.max_products, sn.lang_id
 		FROM shops s
 		LEFT JOIN shop_data sn ON sn.shop_id = s.id
 		WHERE s.id = $1
@@ -24,12 +24,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 	defer rows.Close()
 
 	shopFound := false
+	maxProducts := 0
 	shopLangs := make(map[string]struct{})
 
 	for rows.Next() {
 		shopFound = true
 		var lang *string
-		if err := rows.Scan(&lang); err != nil {
+		if err := rows.Scan(&maxProducts, &lang); err != nil {
 			return nil, fmt.Errorf("scan shop language: %w", err)
 		}
 		if lang != nil {
@@ -43,6 +44,18 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 
 	if !shopFound {
 		return nil, ErrShopNotFound
+	}
+
+	// Check product limit (only non-deleted products count).
+	var productCount int
+	if err = s.db.QueryRow(ctx,
+		"SELECT COUNT(*) FROM products WHERE shop_id = $1 AND deleted_at IS NULL",
+		req.ShopID,
+	).Scan(&productCount); err != nil {
+		return nil, fmt.Errorf("count shop products: %w", err)
+	}
+	if productCount >= maxProducts {
+		return nil, ErrShopProductLimitReached
 	}
 
 	// Validate DEFAULT price is present.

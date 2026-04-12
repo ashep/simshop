@@ -97,6 +97,14 @@ Language codes are stored and compared as **uppercase** (e.g., `"EN"`, `"UK"`). 
 lists, service checks, and test fixtures. Using lowercase (e.g., `"en"`) will cause response-validation failures
 because the DB always returns uppercase keys.
 
+### Product limit enforcement
+
+When a shop has a `max_products` cap, the `Create` method must count non-deleted products (`deleted_at IS NULL`) before
+inserting. If `count >= max_products`, return `ErrShopProductLimitReached`. The handler maps this to
+`&ConflictError{Reason: "shop product limit reached"}` (HTTP 409). The count query runs before the transaction (after the
+shop-existence check) using the existing pool connection, following the same pattern as the pre-transaction language
+validation.
+
 ### Owner validation
 
 When an `owner_id` FK insert fails with PostgreSQL error code `23503`, the service must return `ErrInvalidOwner`. The handler maps it to `&BadRequestError{Reason: "invalid owner id"}`. Unlike language FK violations (which appear in a separate loop on `shop_names`), the owner FK violation occurs on the `shops` INSERT itself, so the check is on the first `tx.Exec` call.
