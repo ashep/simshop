@@ -58,11 +58,11 @@ func TestListShop(main *testing.T) {
 		}
 
 		if s, ok := byID["listshop1"]; assert.True(t, ok, "listshop1 not in response") {
-			assert.Equal(t, "List Shop One", s.Names["EN"])
+			assert.Equal(t, "List Shop One", s.Titles["EN"])
 		}
 		if s, ok := byID["listshop2"]; assert.True(t, ok, "listshop2 not in response") {
-			assert.Equal(t, "List Shop Two", s.Names["EN"])
-			assert.Equal(t, "Перелік Два", s.Names["UK"])
+			assert.Equal(t, "List Shop Two", s.Titles["EN"])
+			assert.Equal(t, "Перелік Два", s.Titles["UK"])
 		}
 	})
 

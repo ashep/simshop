@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS shop_data
 (
     shop_id     TEXT NOT NULL REFERENCES shops (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),
-    name        TEXT NOT NULL CHECK ( length(name) >= 3 ),
+    title        TEXT NOT NULL CHECK ( length(title) >= 3 ),
     description TEXT,
     PRIMARY KEY (shop_id, lang_id)
 );

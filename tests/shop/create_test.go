@@ -31,17 +31,17 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		got, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "myshop",
-			Names:   map[string]string{"EN": "My Shop"},
+			Titles:   map[string]string{"EN": "My Shop"},
 			OwnerID: admin.ID,
 		})
 
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, "myshop", got.ID)
-		assert.Equal(t, map[string]string{"EN": "My Shop"}, got.Names)
+		assert.Equal(t, map[string]string{"EN": "My Shop"}, got.Titles)
 
 		dbShop := sd.GetShop(t, "myshop")
-		assert.Equal(t, map[string]string{"EN": "My Shop"}, dbShop.Names)
+		assert.Equal(t, map[string]string{"EN": "My Shop"}, dbShop.Titles)
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
@@ -50,7 +50,7 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		got, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:           "descshop",
-			Names:        map[string]string{"EN": "Desc Shop"},
+			Titles:        map[string]string{"EN": "Desc Shop"},
 			Descriptions: map[string]string{"EN": "A shop with a description"},
 			OwnerID:      admin.ID,
 		})
@@ -69,7 +69,7 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		_, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "langshop",
-			Names:   map[string]string{"xx": "Lang Shop"},
+			Titles:   map[string]string{"xx": "Lang Shop"},
 			OwnerID: admin.ID,
 		})
 
@@ -82,14 +82,14 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		_, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "dupshop",
-			Names:   map[string]string{"EN": "Dup Shop"},
+			Titles:   map[string]string{"EN": "Dup Shop"},
 			OwnerID: admin.ID,
 		})
 		require.NoError(t, err)
 
 		_, err = svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "dupshop",
-			Names:   map[string]string{"EN": "Dup Shop"},
+			Titles:   map[string]string{"EN": "Dup Shop"},
 			OwnerID: admin.ID,
 		})
 		require.Error(t, err)

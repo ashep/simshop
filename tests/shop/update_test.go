@@ -32,14 +32,14 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop1", shop.UpdateRequest{
-			Names: map[string]string{"EN": "Updated", "UK": "Оновлено"},
+			Titles: map[string]string{"EN": "Updated", "UK": "Оновлено"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop1")
-		assert.Equal(t, "Updated", got.Names["EN"])
-		assert.Equal(t, "Оновлено", got.Names["UK"])
+		assert.Equal(t, "Updated", got.Titles["EN"])
+		assert.Equal(t, "Оновлено", got.Titles["UK"])
 	})
 
 	main.Run("PartialUpsert", func(t *testing.T) {
@@ -49,14 +49,14 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop2", shop.UpdateRequest{
-			Names: map[string]string{"EN": "Updated EN"},
+			Titles: map[string]string{"EN": "Updated EN"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop2")
-		assert.Equal(t, "Updated EN", got.Names["EN"])
-		assert.Equal(t, "Original UK", got.Names["UK"])
+		assert.Equal(t, "Updated EN", got.Titles["EN"])
+		assert.Equal(t, "Original UK", got.Titles["UK"])
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
@@ -66,7 +66,7 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop4", shop.UpdateRequest{
-			Names:        map[string]string{"EN": "Desc Shop"},
+			Titles:        map[string]string{"EN": "Desc Shop"},
 			Descriptions: map[string]string{"EN": "A description"},
 		})
 
@@ -89,7 +89,7 @@ func TestUpdate(main *testing.T) {
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop5")
-		assert.Equal(t, "Keep Name", got.Names["EN"])
+		assert.Equal(t, "Keep Name", got.Titles["EN"])
 		assert.Equal(t, "New desc", got.Descriptions["EN"])
 	})
 
@@ -111,7 +111,7 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "nosuchshop", shop.UpdateRequest{
-			Names: map[string]string{"EN": "Test"},
+			Titles: map[string]string{"EN": "Test"},
 		})
 
 		require.ErrorIs(t, err, shop.ErrShopNotFound)
@@ -124,7 +124,7 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop3", shop.UpdateRequest{
-			Names: map[string]string{"xx": "Unknown"},
+			Titles: map[string]string{"xx": "Unknown"},
 		})
 
 		require.ErrorIs(t, err, shop.ErrInvalidLanguage)

@@ -96,8 +96,8 @@ func TestListShops(main *testing.T) {
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
 		svc.On("List", mock.Anything).Return([]shop.Shop{
-			{ID: "shop1", Names: map[string]string{"EN": "Shop One"}},
-			{ID: "shop2", Names: map[string]string{"EN": "Shop Two", "UK": "Магазин Два"}},
+			{ID: "shop1", Titles: map[string]string{"EN": "Shop One"}},
+			{ID: "shop2", Titles: map[string]string{"EN": "Shop Two", "UK": "Магазин Два"}},
 		}, nil)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
@@ -109,7 +109,7 @@ func TestListShops(main *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t,
-			`[{"id":"shop1","names":{"EN":"Shop One"}},{"id":"shop2","names":{"EN":"Shop Two","UK":"Магазин Два"}}]`,
+			`[{"id":"shop1","titles":{"EN":"Shop One"}},{"id":"shop2","titles":{"EN":"Shop Two","UK":"Магазин Два"}}]`,
 			w.Body.String(),
 		)
 	})
@@ -184,7 +184,7 @@ func TestCreateShop(main *testing.T) {
 		svc.On("Create", mock.Anything, mock.Anything).Return(nil, shop.ErrInvalidLanguage)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPost, "/shops", bytes.NewBufferString(`{"id":"myshop","names":{"xx":"My Shop"}}`))
+		r := httptest.NewRequest(http.MethodPost, "/shops", bytes.NewBufferString(`{"id":"myshop","titles":{"xx":"My Shop"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 
@@ -205,7 +205,7 @@ func TestCreateShop(main *testing.T) {
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPost, "/shops",
-			bytes.NewBufferString(`{"id":"myshop","names":{"EN":"My Shop"},"owner_id":"non-existent-uuid"}`))
+			bytes.NewBufferString(`{"id":"myshop","titles":{"EN":"My Shop"},"owner_id":"non-existent-uuid"}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 
@@ -310,7 +310,7 @@ func TestGetShop(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
-				Shop:      shop.Shop{ID: "myshop", Names: map[string]string{"EN": "My Shop"}},
+				Shop:      shop.Shop{ID: "myshop", Titles: map[string]string{"EN": "My Shop"}},
 				OwnerID:   "owner-uuid-1",
 				CreatedAt: createdAt,
 				UpdatedAt: updatedAt,
@@ -329,7 +329,7 @@ func TestGetShop(main *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `{
 			"id": "myshop",
-			"names": {"EN": "My Shop"},
+			"titles": {"EN": "My Shop"},
 			"owner_id": "owner-uuid-1",
 			"created_at": "2024-01-15T10:00:00Z",
 			"updated_at": "2024-06-20T12:30:00Z"
@@ -341,7 +341,7 @@ func TestGetShop(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
-				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"EN": "My Shop"}},
+				Shop:    shop.Shop{ID: "myshop", Titles: map[string]string{"EN": "My Shop"}},
 				OwnerID: "owner-uuid-2",
 			},
 			nil,
@@ -356,7 +356,7 @@ func TestGetShop(main *testing.T) {
 		h.GetShop(w, r)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.JSONEq(t, `{"id":"myshop","names":{"EN":"My Shop"}}`, w.Body.String())
+		assert.JSONEq(t, `{"id":"myshop","titles":{"EN":"My Shop"}}`, w.Body.String())
 	})
 
 	main.Run("UnauthenticatedGetsBasicFields", func(t *testing.T) {
@@ -364,7 +364,7 @@ func TestGetShop(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("Get", mock.Anything, "myshop").Return(
 			&shop.AdminShop{
-				Shop:    shop.Shop{ID: "myshop", Names: map[string]string{"EN": "My Shop"}},
+				Shop:    shop.Shop{ID: "myshop", Titles: map[string]string{"EN": "My Shop"}},
 				OwnerID: "owner-uuid-3",
 			},
 			nil,
@@ -379,7 +379,7 @@ func TestGetShop(main *testing.T) {
 		h.GetShop(w, r)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.JSONEq(t, `{"id":"myshop","names":{"EN":"My Shop"}}`, w.Body.String())
+		assert.JSONEq(t, `{"id":"myshop","titles":{"EN":"My Shop"}}`, w.Body.String())
 	})
 }
 
@@ -439,7 +439,7 @@ func TestUpdateShop(main *testing.T) {
 		svc.On("Update", mock.Anything, "myshop", mock.Anything).Return(nil)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r.SetPathValue("id", "myshop")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
 		w := httptest.NewRecorder()
@@ -488,7 +488,7 @@ func TestUpdateShop(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(shop.ErrShopNotFound)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"EN":"Test"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"EN":"Test"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 
@@ -508,7 +508,7 @@ func TestUpdateShop(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(shop.ErrInvalidLanguage)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"xx":"Test"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"xx":"Test"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 
@@ -528,7 +528,7 @@ func TestUpdateShop(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("db error"))
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"EN":"Test"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"EN":"Test"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 
@@ -545,7 +545,7 @@ func TestUpdateShop(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"names":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
 

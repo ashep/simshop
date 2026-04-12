@@ -11,7 +11,7 @@ import (
 
 type CreateRequest struct {
 	ID           string            `json:"id"`
-	Names        map[string]string `json:"names"`
+	Titles       map[string]string `json:"titles"`
 	Descriptions map[string]string `json:"descriptions"`
 	OwnerID      string            `json:"owner_id"`
 }
@@ -19,11 +19,11 @@ type CreateRequest struct {
 func (r *CreateRequest) Trim() {
 	r.ID = strings.TrimSpace(r.ID)
 	r.OwnerID = strings.TrimSpace(r.OwnerID)
-	trimmed := make(map[string]string, len(r.Names))
-	for k, v := range r.Names {
+	trimmed := make(map[string]string, len(r.Titles))
+	for k, v := range r.Titles {
 		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
-	r.Names = trimmed
+	r.Titles = trimmed
 	trimmed = make(map[string]string, len(r.Descriptions))
 	for k, v := range r.Descriptions {
 		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
@@ -52,14 +52,14 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 		return nil, fmt.Errorf("insert shop: %w", err)
 	}
 
-	for lang, name := range req.Names {
+	for lang, title := range req.Titles {
 		var desc *string
 		if d, ok := req.Descriptions[lang]; ok {
 			desc = &d
 		}
 		if _, err = tx.Exec(ctx,
-			"INSERT INTO shop_data (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
-			req.ID, lang, name, desc,
+			"INSERT INTO shop_data (shop_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
+			req.ID, lang, title, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
@@ -73,5 +73,5 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return &Shop{ID: req.ID, Names: req.Names, Descriptions: req.Descriptions}, nil
+	return &Shop{ID: req.ID, Titles: req.Titles, Descriptions: req.Descriptions}, nil
 }

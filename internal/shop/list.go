@@ -7,7 +7,7 @@ import (
 
 func (s *Service) List(ctx context.Context) ([]Shop, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT s.id, sn.lang_id, sn.name, sn.description
+		SELECT s.id, sn.lang_id, sn.title, sn.description
 		FROM shops s
 		LEFT JOIN shop_data sn ON sn.shop_id = s.id
 		ORDER BY s.id
@@ -22,20 +22,20 @@ func (s *Service) List(ctx context.Context) ([]Shop, error) {
 
 	for rows.Next() {
 		var id string
-		var langID, name, description *string
-		if err := rows.Scan(&id, &langID, &name, &description); err != nil {
+		var langID, title, description *string
+		if err := rows.Scan(&id, &langID, &title, &description); err != nil {
 			return nil, fmt.Errorf("scan shop row: %w", err)
 		}
 
 		idx, exists := byID[id]
 		if !exists {
-			result = append(result, Shop{ID: id, Names: map[string]string{}, Descriptions: map[string]string{}})
+			result = append(result, Shop{ID: id, Titles: map[string]string{}, Descriptions: map[string]string{}})
 			idx = len(result) - 1
 			byID[id] = idx
 		}
 
-		if langID != nil && name != nil {
-			result[idx].Names[*langID] = *name
+		if langID != nil && title != nil {
+			result[idx].Titles[*langID] = *title
 		}
 		if langID != nil && description != nil {
 			result[idx].Descriptions[*langID] = *description

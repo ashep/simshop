@@ -10,16 +10,16 @@ import (
 )
 
 type UpdateRequest struct {
-	Names        map[string]string `json:"names"`
+	Titles       map[string]string `json:"titles"`
 	Descriptions map[string]string `json:"descriptions"`
 }
 
 func (r *UpdateRequest) Trim() {
-	trimmed := make(map[string]string, len(r.Names))
-	for k, v := range r.Names {
+	trimmed := make(map[string]string, len(r.Titles))
+	for k, v := range r.Titles {
 		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
-	r.Names = trimmed
+	r.Titles = trimmed
 	trimmed = make(map[string]string, len(r.Descriptions))
 	for k, v := range r.Descriptions {
 		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
@@ -34,19 +34,19 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Pass 1: upsert names; include description for same lang if provided.
-	for lang, name := range req.Names {
+	// Pass 1: upsert titles; include description for same lang if provided.
+	for lang, title := range req.Titles {
 		var desc *string
 		if d, ok := req.Descriptions[lang]; ok {
 			desc = &d
 		}
 		if _, err = tx.Exec(ctx,
-			`INSERT INTO shop_data (shop_id, lang_id, name, description)
+			`INSERT INTO shop_data (shop_id, lang_id, title, description)
 			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (shop_id, lang_id) DO UPDATE
-			 SET name = excluded.name,
+			 SET title = excluded.title,
 			     description = COALESCE(excluded.description, shop_data.description)`,
-			id, lang, name, desc,
+			id, lang, title, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
@@ -63,7 +63,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 
 	// Pass 2: update description only for langs not handled in pass 1.
 	for lang, desc := range req.Descriptions {
-		if _, inNames := req.Names[lang]; inNames {
+		if _, inNames := req.Titles[lang]; inNames {
 			continue
 		}
 		d := desc

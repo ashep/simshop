@@ -73,8 +73,8 @@ func TestGetShop(main *testing.T) {
 		require.NoError(t, json.Unmarshal(body, &sh))
 
 		assert.Equal(t, "getshop1", sh.ID)
-		assert.Equal(t, "Get Shop", sh.Names["EN"])
-		assert.Equal(t, "Отримати Магазин", sh.Names["UK"])
+		assert.Equal(t, "Get Shop", sh.Titles["EN"])
+		assert.Equal(t, "Отримати Магазин", sh.Titles["UK"])
 
 		// descriptions omitted when not set
 		var raw map[string]any
@@ -127,7 +127,7 @@ func TestGetShop(main *testing.T) {
 		assert.NotNil(t, result["created_at"], "created_at should be present and non-null")
 		assert.NotNil(t, result["updated_at"], "updated_at should be present and non-null")
 
-		names, ok := result["names"].(map[string]any)
+		names, ok := result["titles"].(map[string]any)
 		assert.True(t, ok, "names should be a map")
 		assert.Equal(t, "Admin Shop", names["EN"])
 	})

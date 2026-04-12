@@ -12,7 +12,7 @@ var ErrInvalidOwner = errors.New("invalid owner")
 
 type Shop struct {
 	ID           string            `json:"id"`
-	Names        map[string]string `json:"names"`
+	Titles       map[string]string `json:"titles"`
 	Descriptions map[string]string `json:"descriptions,omitempty"`
 }
 
