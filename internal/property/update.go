@@ -15,8 +15,8 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if req.Titles["EN"] == "" {
-		return ErrMissingEnTitle
+	if len(req.Titles) == 0 {
+		return ErrMissingTitle
 	}
 
 	// Verify property exists.
@@ -44,7 +44,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return ErrInvalidLanguage
+				return &InvalidLanguageError{Lang: lang}
 			}
 			return fmt.Errorf("insert property title: %w", err)
 		}

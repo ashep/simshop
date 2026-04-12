@@ -92,7 +92,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 			// product_id came from RETURNING above and cannot violate the FK;
 			// 23503 here is always an invalid lang_id.
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return nil, ErrInvalidLanguage
+				return nil, &InvalidLanguageError{Lang: lang}
 			}
 			return nil, fmt.Errorf("insert product data: %w", err)
 		}

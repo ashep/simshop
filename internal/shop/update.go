@@ -54,7 +54,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 				case "shop_data_shop_id_fkey":
 					return ErrShopNotFound
 				case "shop_data_lang_id_fkey":
-					return ErrInvalidLanguage
+					return &InvalidLanguageError{Lang: lang}
 				}
 			}
 			return fmt.Errorf("upsert shop metadata: %w", err)
@@ -75,7 +75,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 			return fmt.Errorf("update shop description: %w", err)
 		}
 		if tag.RowsAffected() == 0 {
-			return ErrInvalidLanguage
+			return &InvalidLanguageError{Lang: lang}
 		}
 	}
 

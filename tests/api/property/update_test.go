@@ -106,6 +106,6 @@ func TestUpdateProperty(main *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"error":"invalid language code"}`, string(body))
+		assert.JSONEq(t, `{"error":"invalid language code: zz"}`, string(body))
 	})
 }

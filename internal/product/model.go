@@ -7,10 +7,13 @@ import (
 )
 
 var ErrShopNotFound = errors.New("shop not found")
-var ErrInvalidLanguage = errors.New("invalid language code")
 var ErrShopProductLimitReached = errors.New("shop product limit reached")
 var ErrProductNotFound = errors.New("product not found")
-var ErrMissingEnTitle = errors.New("EN title is required")
+var ErrMissingTitle = errors.New("at least one title is required")
+
+type InvalidLanguageError struct{ Lang string }
+
+func (e *InvalidLanguageError) Error() string { return "invalid language code: " + e.Lang }
 
 // MissingContentError is returned when the request content map is missing an
 // entry for a language that the target shop has.

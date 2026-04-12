@@ -149,6 +149,6 @@ func TestCreateProduct(main *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"error":"invalid language code"}`, string(respBody))
+		assert.JSONEq(t, `{"error":"invalid language code: zz"}`, string(respBody))
 	})
 }

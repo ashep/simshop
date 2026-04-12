@@ -299,28 +299,28 @@ func TestUpdateProduct(main *testing.T) {
 		assert.JSONEq(t, `{"error":"product not found"}`, w.Body.String())
 	})
 
-	main.Run("MissingEnTitle", func(t *testing.T) {
+	main.Run("MissingTitle", func(t *testing.T) {
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
-		prodSvc.On("Update", mock.Anything, productID, mock.Anything).Return(product.ErrMissingEnTitle)
+		prodSvc.On("Update", mock.Anything, productID, mock.Anything).Return(product.ErrMissingTitle)
 
 		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
 		w := doRequest(t, prodSvc, admin)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.JSONEq(t, `{"error":"EN title is required"}`, w.Body.String())
+		assert.JSONEq(t, `{"error":"at least one title is required"}`, w.Body.String())
 	})
 
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
-		prodSvc.On("Update", mock.Anything, productID, mock.Anything).Return(product.ErrInvalidLanguage)
+		prodSvc.On("Update", mock.Anything, productID, mock.Anything).Return(&product.InvalidLanguageError{Lang: "ZZ"})
 
 		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
 		w := doRequest(t, prodSvc, admin)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.JSONEq(t, `{"error":"invalid language code"}`, w.Body.String())
+		assert.JSONEq(t, `{"error":"invalid language code: ZZ"}`, w.Body.String())
 	})
 
 	main.Run("ProductNotFoundOnUpdate", func(t *testing.T) {

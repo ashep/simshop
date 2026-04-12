@@ -44,12 +44,12 @@ func (h *Handler) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	p, err := h.prop.Create(r.Context(), req)
 	if err != nil {
 		switch {
-		case errors.Is(err, property.ErrMissingEnTitle):
-			h.writeError(w, &BadRequestError{Reason: "EN title is required"})
-		case errors.Is(err, property.ErrInvalidLanguage):
-			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
-		case errors.Is(err, property.ErrDuplicateTitle):
-			h.writeError(w, &ConflictError{Reason: "title is already taken"})
+		case errors.Is(err, property.ErrMissingTitle):
+			h.writeError(w, &BadRequestError{Reason: "at least one title is required"})
+		case errors.As(err, new(*property.InvalidLanguageError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
+		case errors.As(err, new(*property.DuplicateTitleError)):
+			h.writeError(w, &ConflictError{Reason: err.Error()})
 		default:
 			h.writeError(w, err)
 		}
@@ -81,12 +81,12 @@ func (h *Handler) UpdateProperty(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.prop.Update(r.Context(), id, req); err != nil {
 		switch {
-		case errors.Is(err, property.ErrMissingEnTitle):
-			h.writeError(w, &BadRequestError{Reason: "EN title is required"})
+		case errors.Is(err, property.ErrMissingTitle):
+			h.writeError(w, &BadRequestError{Reason: "at least one title is required"})
 		case errors.Is(err, property.ErrPropertyNotFound):
 			h.writeError(w, &NotFoundError{Reason: "property not found"})
-		case errors.Is(err, property.ErrInvalidLanguage):
-			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		case errors.As(err, new(*property.InvalidLanguageError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
 		default:
 			h.writeError(w, err)
 		}

@@ -15,8 +15,8 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Property, err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if req.Titles["EN"] == "" {
-		return nil, ErrMissingEnTitle
+	if len(req.Titles) == 0 {
+		return nil, ErrMissingTitle
 	}
 
 	var propertyID string
@@ -37,9 +37,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Property, err
 				case "23503":
 					// property_id came from RETURNING above and cannot violate the FK;
 					// 23503 here is always an invalid lang_id.
-					return nil, ErrInvalidLanguage
+					return nil, &InvalidLanguageError{Lang: lang}
 				case "23505":
-					return nil, ErrDuplicateTitle
+					return nil, &DuplicateTitleError{Lang: lang}
 				}
 			}
 			return nil, fmt.Errorf("insert property title: %w", err)

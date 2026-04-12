@@ -92,8 +92,8 @@ func (h *Handler) CreateShop(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, shop.ErrShopAlreadyExists) {
 		h.writeError(w, &ConflictError{Reason: "shop already exists"})
 		return
-	} else if errors.Is(err, shop.ErrInvalidLanguage) {
-		h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+	} else if errors.As(err, new(*shop.InvalidLanguageError)) {
+		h.writeError(w, &BadRequestError{Reason: err.Error()})
 		return
 	} else if errors.Is(err, shop.ErrInvalidOwner) {
 		h.writeError(w, &BadRequestError{Reason: "invalid owner id"})
@@ -143,8 +143,8 @@ func (h *Handler) UpdateShop(w http.ResponseWriter, r *http.Request) {
 	if err := h.shop.Update(r.Context(), id, req); err != nil {
 		if errors.Is(err, shop.ErrShopNotFound) {
 			h.writeError(w, &NotFoundError{Reason: "shop not found"})
-		} else if errors.Is(err, shop.ErrInvalidLanguage) {
-			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		} else if errors.As(err, new(*shop.InvalidLanguageError)) {
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
 		} else {
 			h.writeError(w, err)
 		}

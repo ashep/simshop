@@ -9,8 +9,8 @@ import (
 )
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) error {
-	if req.Data["EN"].Title == "" {
-		return ErrMissingEnTitle
+	if len(req.Data) == 0 {
+		return ErrMissingTitle
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -41,7 +41,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return ErrInvalidLanguage
+				return &InvalidLanguageError{Lang: lang}
 			}
 			return fmt.Errorf("insert product data: %w", err)
 		}

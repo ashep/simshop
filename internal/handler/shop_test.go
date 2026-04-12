@@ -181,7 +181,7 @@ func TestCreateShop(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("Create", mock.Anything, mock.Anything).Return(nil, shop.ErrInvalidLanguage)
+		svc.On("Create", mock.Anything, mock.Anything).Return(nil, &shop.InvalidLanguageError{Lang: "xx"})
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPost, "/shops", bytes.NewBufferString(`{"id":"myshop","titles":{"xx":"My Shop"}}`))
@@ -193,7 +193,7 @@ func TestCreateShop(main *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 		}
-		if body := w.Body.String(); body != `{"error": "invalid language code"}` {
+		if body := w.Body.String(); body != `{"error": "invalid language code: xx"}` {
 			t.Errorf("unexpected body: %s", body)
 		}
 	})
@@ -505,7 +505,7 @@ func TestUpdateShop(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		svc := &shopServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(shop.ErrInvalidLanguage)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(&shop.InvalidLanguageError{Lang: "xx"})
 
 		h := &Handler{shop: svc, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPatch, "/shops/myshop", bytes.NewBufferString(`{"titles":{"xx":"Test"}}`))
@@ -517,7 +517,7 @@ func TestUpdateShop(main *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 		}
-		if body := w.Body.String(); body != `{"error": "invalid language code"}` {
+		if body := w.Body.String(); body != `{"error": "invalid language code: xx"}` {
 			t.Errorf("unexpected body: %s", body)
 		}
 	})

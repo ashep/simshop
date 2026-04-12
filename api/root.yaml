@@ -337,8 +337,7 @@ components:
           maxLength: 16
         titles:
           type: object
-          required:
-            - EN
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 3
@@ -368,8 +367,7 @@ components:
           format: uuid
         titles:
           type: object
-          required:
-            - EN
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 1
@@ -396,8 +394,7 @@ components:
           maxLength: 16
         titles:
           type: object
-          required:
-            - EN
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 3
@@ -430,13 +427,7 @@ components:
       properties:
         titles:
           type: object
-          required:
-            - EN
-          properties:
-            EN:
-              type: string
-              minLength: 1
-              maxLength: 100
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 1
@@ -461,8 +452,7 @@ components:
       properties:
         titles:
           type: object
-          required:
-            - EN
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 1
@@ -511,11 +501,7 @@ components:
       properties:
         data:
           type: object
-          required:
-            - EN
-          properties:
-            EN:
-              $ref: '#/components/schemas/ProductDataItem'
+          minProperties: 1
           additionalProperties:
             $ref: '#/components/schemas/ProductDataItem'
 

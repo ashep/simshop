@@ -73,7 +73,7 @@ func TestCreate(main *testing.T) {
 			OwnerID: admin.ID,
 		})
 
-		require.ErrorIs(t, err, shop.ErrInvalidLanguage)
+		require.ErrorAs(t, err, new(*shop.InvalidLanguageError))
 	})
 
 	main.Run("DuplicateID", func(t *testing.T) {

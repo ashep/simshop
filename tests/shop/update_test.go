@@ -103,7 +103,7 @@ func TestUpdate(main *testing.T) {
 			Descriptions: map[string]string{"UK": "No name for uk"},
 		})
 
-		require.ErrorIs(t, err, shop.ErrInvalidLanguage)
+		require.ErrorAs(t, err, new(*shop.InvalidLanguageError))
 	})
 
 	main.Run("ShopNotFound", func(t *testing.T) {
@@ -127,6 +127,6 @@ func TestUpdate(main *testing.T) {
 			Titles: map[string]string{"xx": "Unknown"},
 		})
 
-		require.ErrorIs(t, err, shop.ErrInvalidLanguage)
+		require.ErrorAs(t, err, new(*shop.InvalidLanguageError))
 	})
 }

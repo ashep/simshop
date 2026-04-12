@@ -130,13 +130,13 @@ func TestUpdateProperty(main *testing.T) {
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
-	main.Run("MissingEnTitle", func(t *testing.T) {
+	main.Run("MissingTitle", func(t *testing.T) {
 		svc := &propertyServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrMissingEnTitle)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrMissingTitle)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"UK":"Колір"}}`))
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
@@ -144,7 +144,7 @@ func TestUpdateProperty(main *testing.T) {
 		h.UpdateProperty(w, r)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.JSONEq(t, `{"error":"EN title is required"}`, w.Body.String())
+		assert.JSONEq(t, `{"error":"at least one title is required"}`, w.Body.String())
 	})
 
 	main.Run("PropertyNotFound", func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestUpdateProperty(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		svc := &propertyServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrInvalidLanguage)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(&property.InvalidLanguageError{Lang: "zz"})
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"zz":"Bad"}}`))
@@ -178,7 +178,7 @@ func TestUpdateProperty(main *testing.T) {
 		h.UpdateProperty(w, r)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.JSONEq(t, `{"error":"invalid language code"}`, w.Body.String())
+		assert.JSONEq(t, `{"error":"invalid language code: zz"}`, w.Body.String())
 	})
 
 	main.Run("ServiceError", func(t *testing.T) {

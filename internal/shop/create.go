@@ -63,7 +63,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return nil, ErrInvalidLanguage
+				return nil, &InvalidLanguageError{Lang: lang}
 			}
 			return nil, fmt.Errorf("insert shop metadata: %w", err)
 		}

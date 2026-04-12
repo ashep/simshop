@@ -54,8 +54,8 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, &NotFoundError{Reason: "shop not found"})
 		case errors.As(err, &mce):
 			h.writeError(w, &BadRequestError{Reason: mce.Error()})
-		case errors.Is(err, product.ErrInvalidLanguage):
-			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		case errors.As(err, new(*product.InvalidLanguageError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
 		case errors.Is(err, product.ErrShopProductLimitReached):
 			h.writeError(w, &ConflictError{Reason: "shop product limit reached"})
 		default:
@@ -166,10 +166,10 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, product.ErrProductNotFound):
 			h.writeError(w, &NotFoundError{Reason: "product not found"})
-		case errors.Is(err, product.ErrMissingEnTitle):
-			h.writeError(w, &BadRequestError{Reason: "EN title is required"})
-		case errors.Is(err, product.ErrInvalidLanguage):
-			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		case errors.Is(err, product.ErrMissingTitle):
+			h.writeError(w, &BadRequestError{Reason: "at least one title is required"})
+		case errors.As(err, new(*product.InvalidLanguageError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
 		default:
 			h.writeError(w, err)
 		}
