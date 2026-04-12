@@ -7,6 +7,7 @@ import (
 
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/property"
 	"github.com/ashep/simshop/internal/shop"
 	"github.com/ashep/simshop/tests/pkg/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,6 +99,24 @@ func (s *Seeder) GetAdminUser(t *testing.T) *auth.User {
 	require.NoError(t, err)
 	u.Scopes = []auth.Scope{auth.ScopeAdmin}
 	return u
+}
+
+func (s *Seeder) CreateProperty(t *testing.T, titles map[string]string) *property.Property {
+	t.Helper()
+
+	var propertyID string
+	row := s.db.QueryRow(t.Context(), "INSERT INTO properties DEFAULT VALUES RETURNING id")
+	require.NoError(t, row.Scan(&propertyID))
+
+	for lang, title := range titles {
+		_, err := s.db.Exec(t.Context(),
+			"INSERT INTO property_titles (property_id, lang_id, title) VALUES ($1, $2, $3)",
+			propertyID, lang, title,
+		)
+		require.NoError(t, err)
+	}
+
+	return &property.Property{ID: propertyID, Titles: titles}
 }
 
 func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]int, content map[string]product.ContentItem) *product.Product {

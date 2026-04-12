@@ -11,6 +11,19 @@ import (
 
 type propertyService interface {
 	Create(ctx context.Context, req property.CreateRequest) (*property.Property, error)
+	List(ctx context.Context) ([]property.Property, error)
+}
+
+func (h *Handler) PropertyList(w http.ResponseWriter, r *http.Request) {
+	props, err := h.prop.List(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, props); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
 }
 
 func (h *Handler) PropertyCreate(w http.ResponseWriter, r *http.Request) {

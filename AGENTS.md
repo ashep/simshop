@@ -9,6 +9,10 @@ code.
 **This is mandatory, not optional.** Do not wait for the user to ask. Update this file as the final step of every task,
 before responding with a summary.
 
+After implementing a new feature or changing an existing one, update `README.md` if the change affects business logic
+worth describing (new entities, new concepts, new endpoints, changed behavior). This is mandatory — do not skip it.
+When editing `README.md`, always wrap lines at 120 characters.
+
 Never run `git commit` or `git push` unless the user explicitly asks. When dispatching subagents, include an explicit
 "do not commit" instruction at the top of every subagent prompt.
 

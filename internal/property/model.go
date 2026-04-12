@@ -9,7 +9,8 @@ type CreateRequest struct {
 }
 
 type Property struct {
-	ID string `json:"id"`
+	ID     string            `json:"id"`
+	Titles map[string]string `json:"titles"`
 }
 
 type CreateResponse struct {

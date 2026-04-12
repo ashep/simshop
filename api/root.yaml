@@ -139,7 +139,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
+    get:
+      operationId: listProperties
+      responses:
+        "200":
+          description: List request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPropertiesResponse'
 
   /products:
     post:
@@ -218,6 +226,24 @@ components:
           type: string
           format: date-time
 
+    Property:
+      type: object
+      required:
+        - id
+        - titles
+      properties:
+        id:
+          type: string
+          format: uuid
+        titles:
+          type: object
+          required:
+            - en
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 100
+
     ListShopsResponse:
       type: array
       items:
@@ -277,6 +303,7 @@ components:
           additionalProperties:
             type: string
             minLength: 1
+            maxLength: 100
 
     CreatePropertyResponse:
       type: object
@@ -286,6 +313,11 @@ components:
         id:
           type: string
           format: uuid
+
+    ListPropertiesResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Property"
 
     ProductContentItem:
       type: object
