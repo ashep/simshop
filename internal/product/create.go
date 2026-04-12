@@ -92,7 +92,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 
 	for lang, c := range req.Content {
 		if _, err = tx.Exec(ctx,
-			"INSERT INTO product_content (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
+			"INSERT INTO product_data (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			productID, lang, c.Title, c.Description,
 		); err != nil {
 			var pgErr *pgconn.PgError

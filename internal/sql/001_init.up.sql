@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS product_prices
     PRIMARY KEY (product_id, country_id)
 );
 
-CREATE TABLE IF NOT EXISTS product_content
+CREATE TABLE IF NOT EXISTS product_data
 (
     product_id  uuid NOT NULL REFERENCES products (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),

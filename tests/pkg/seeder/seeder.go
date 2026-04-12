@@ -117,7 +117,7 @@ func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]in
 
 	for lang, c := range content {
 		_, err := s.db.Exec(t.Context(),
-			"INSERT INTO product_content (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
+			"INSERT INTO product_data (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			productID, lang, c.Title, c.Description,
 		)
 		require.NoError(t, err)
