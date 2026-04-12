@@ -88,5 +88,6 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`   | `/shops/{id}` | Get a shop (public; extra fields for admins) | No            |
 | `PATCH` | `/shops/{id}` | Update a shop's names/descriptions           | Owner/Admin   |
 | `POST`  | `/products`   | Create a product in a shop                   | Admin         |
-| `POST`  | `/properties` | Create a property                            | Admin         |
-| `GET`   | `/properties` | List all properties                          | No            |
+| `POST`  | `/properties`     | Create a property              | Admin         |
+| `GET`   | `/properties`     | List all properties            | No            |
+| `PATCH` | `/properties/{id}` | Update a property's titles    | Admin         |

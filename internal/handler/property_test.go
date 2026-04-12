@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ashep/simshop/api"
+	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/property"
 	"github.com/rs/zerolog"
@@ -34,6 +36,11 @@ func (m *propertyServiceMock) List(ctx context.Context) ([]property.Property, er
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]property.Property), args.Error(1)
+}
+
+func (m *propertyServiceMock) Update(ctx context.Context, id string, req property.UpdateRequest) error {
+	args := m.Called(ctx, id, req)
+	return args.Error(0)
 }
 
 func buildTestResponder(t *testing.T) *openapi.Responder {
@@ -92,5 +99,117 @@ func TestListProperties(main *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `[]`, w.Body.String())
+	})
+}
+
+func TestUpdateProperty(main *testing.T) {
+	main.Run("Forbidden_Unauthenticated", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("Forbidden_NonAdmin", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("MissingEnTitle", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrMissingEnTitle)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"UK":"Колір"}}`))
+		r.SetPathValue("id", "some-id")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"EN title is required"}`, w.Body.String())
+	})
+
+	main.Run("PropertyNotFound", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Update", mock.Anything, "some-id", mock.Anything).Return(property.ErrPropertyNotFound)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r.SetPathValue("id", "some-id")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"property not found"}`, w.Body.String())
+	})
+
+	main.Run("InvalidLanguage", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrInvalidLanguage)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"zz":"Bad"}}`))
+		r.SetPathValue("id", "some-id")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid language code"}`, w.Body.String())
+	})
+
+	main.Run("ServiceError", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("db failure"))
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r.SetPathValue("id", "some-id")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("Success", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Update", mock.Anything, "some-id", property.UpdateRequest{Titles: map[string]string{"EN": "Updated"}}).Return(nil)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r.SetPathValue("id", "some-id")
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.UpdateProperty(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }

@@ -113,7 +113,7 @@ paths:
     post:
       operationId: createProperty
       security:
-        - ApiKeyAuth: []
+        - ApiKeyAuth: [ ]
       requestBody:
         required: true
         content:
@@ -155,11 +155,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListPropertiesResponse'
 
+  /properties/{id}:
+    patch:
+      operationId: updateProperty
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePropertyRequest'
+      responses:
+        "200":
+          description: Property updated
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /products:
     post:
       operationId: createProduct
       security:
-        - ApiKeyAuth: []
+        - ApiKeyAuth: [ ]
       requestBody:
         required: true
         content:
@@ -213,7 +253,7 @@ components:
         names:
           type: object
           required:
-            - en
+            - EN
           additionalProperties:
             type: string
             minLength: 3
@@ -272,7 +312,7 @@ components:
         names:
           type: object
           required:
-            - en
+            - EN
           additionalProperties:
             type: string
             minLength: 3
@@ -330,6 +370,18 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Property"
+
+    UpdatePropertyRequest:
+      type: object
+      properties:
+        titles:
+          type: object
+          required:
+            - EN
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 100
 
     ProductContentItem:
       type: object

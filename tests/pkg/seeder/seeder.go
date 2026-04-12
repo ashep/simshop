@@ -131,6 +131,28 @@ func (s *Seeder) CreateProperty(t *testing.T, titles map[string]string) *propert
 	return &property.Property{ID: propertyID, Titles: titles}
 }
 
+func (s *Seeder) GetProperty(t *testing.T, id string) *property.Property {
+	t.Helper()
+
+	var count int
+	err := s.db.QueryRow(t.Context(), "SELECT COUNT(*) FROM properties WHERE id = $1", id).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "property %q not found in db", id)
+
+	titles := map[string]string{}
+	rows, err := s.db.Query(t.Context(), "SELECT lang_id, title FROM property_titles WHERE property_id = $1", id)
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var lang, title string
+		require.NoError(t, rows.Scan(&lang, &title))
+		titles[lang] = title
+	}
+	require.NoError(t, rows.Err())
+
+	return &property.Property{ID: id, Titles: titles}
+}
+
 func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]int, content map[string]product.ContentItem) *product.Product {
 	t.Helper()
 

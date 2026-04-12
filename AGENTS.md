@@ -87,7 +87,7 @@ the case where the caller supplies an unknown language code. In the service laye
 ### EN title requirement
 
 Any entity that carries language-keyed titles (e.g., `titles map[string]string`) must always include an `EN` entry on
-creation. Enforce this at three layers:
+creation **and on update**. Enforce this at three layers:
 
 1. **OpenAPI spec** — add `required: [EN]` under the `titles` object in the create request schema.
 2. **Service layer** — check `req.Titles["EN"] == ""` at the top of `Create` and return `ErrMissingEnTitle`.
@@ -175,6 +175,8 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 ### OpenAPI spec
 
 The OpenAPI validator (`kin-openapi`) operates in OpenAPI 3.0 compatibility mode. Do **not** use OpenAPI 3.1 array type syntax (`type: ["string", "null"]`) — it will cause `unsupported 'type' value "null"` at startup. Use the 3.0 style instead: `type: string` + `nullable: true`.
+
+For path parameters that hold UUID values, always write `type: string` + `format: uuid`, never `type: uuid`. Using `type: uuid` causes an `unsupported 'type' value "uuid"` panic at startup.
 
 ### API functional tests (`tests/api/`)
 
