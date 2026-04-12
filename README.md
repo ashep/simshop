@@ -18,7 +18,7 @@ SimShop is designed as a backend for marketplace or shop-hosting scenarios where
 ### Multilingual content
 
 All user-facing text — shop names and descriptions, product titles and descriptions, property titles — is stored per
-language. At minimum an English (`en`) entry is required. Additional languages (e.g. Ukrainian `uk`) can be supplied for
+language. At minimum an English (`EN`) entry is required. Additional languages (e.g. Ukrainian `uk`) can be supplied for
 any entity.
 
 ### Country-based pricing
@@ -73,7 +73,7 @@ Properties can be associated with products to capture variant-specific values an
 
 | Entity   | Purpose                                                     |
 |----------|-------------------------------------------------------------|
-| Language | Supported locale codes (e.g. `en`, `uk`).                   |
+| Language | Supported locale codes (e.g. `EN`, `UK`).                   |
 | Currency | Currency definitions (e.g. `EUR`, `USD`, `UAH`).            |
 | Country  | Country codes mapped to their currency (e.g. `UA` → `UAH`). |
 
@@ -81,14 +81,15 @@ Properties can be associated with products to capture variant-specific values an
 
 The service exposes a JSON REST API validated against an OpenAPI specification.
 
-| Method  | Path          | Description                                  | Auth required |
-|---------|---------------|----------------------------------------------|---------------|
-| `GET`   | `/shops`      | List all shops                               | Admin         |
-| `POST`  | `/shops`      | Create a shop                                | Admin         |
-| `GET`   | `/shops/{id}` | Get a shop (public; extra fields for admins) | No            |
-| `PATCH` | `/shops/{id}` | Update a shop's names/descriptions           | Owner/Admin   |
-| `POST`  | `/products`   | Create a product in a shop                   | Admin         |
-| `GET`   | `/products/{id}` | Get a product (public; extra fields for admin/owner) | No  |
-| `POST`  | `/properties`     | Create a property              | Admin         |
-| `GET`   | `/properties`     | List all properties            | No            |
-| `PATCH` | `/properties/{id}` | Update a property's titles    | Admin         |
+| Method  | Path               | Description                                          | Auth required |
+|---------|--------------------|------------------------------------------------------|---------------|
+| `GET`   | `/shops`           | List all shops                                       | Admin         |
+| `POST`  | `/shops`           | Create a shop                                        | Admin         |
+| `GET`   | `/shops/{id}`      | Get a shop (public; extra fields for admins)         | No            |
+| `PATCH` | `/shops/{id}`      | Update a shop's names/descriptions                   | Owner/Admin   |
+| `POST`  | `/products`               | Create a product in a shop                                    | Admin       |
+| `GET`   | `/products/{id}`          | Get a product (public; extra fields for admin/owner)          | No          |
+| `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
+| `POST`  | `/properties`      | Create a property                                    | Admin         |
+| `GET`   | `/properties`      | List all properties                                  | No            |
+| `PATCH` | `/properties/{id}` | Update a property's titles                           | Admin         |

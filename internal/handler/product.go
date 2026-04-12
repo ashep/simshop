@@ -13,6 +13,7 @@ import (
 type productService interface {
 	Create(ctx context.Context, req product.CreateRequest) (*product.Product, error)
 	Get(ctx context.Context, id string) (*product.AdminProduct, error)
+	ListByShop(ctx context.Context, shopID string) ([]*product.AdminProduct, error)
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +70,41 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	h.l.Info().Str("product_id", p.ID).Str("shop_id", req.ShopID).Str("user_id", user.ID).Msg("product created")
 
 	if err := h.resp.Write(w, r, http.StatusCreated, &product.CreateResponse{ID: p.ID}); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
+}
+
+func (h *Handler) ListShopProducts(w http.ResponseWriter, r *http.Request) {
+	shopID := r.PathValue("id")
+
+	sh, err := h.shop.Get(r.Context(), shopID)
+	if errors.Is(err, shop.ErrShopNotFound) {
+		h.writeError(w, &NotFoundError{Reason: "shop not found"})
+		return
+	} else if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	products, err := h.prod.ListByShop(r.Context(), shopID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	user := auth.GetUserFromContext(r.Context())
+	var body any
+	if user != nil && (user.IsAdmin() || user.ID == sh.OwnerID) {
+		body = products
+	} else {
+		pub := make([]product.PublicProduct, len(products))
+		for i, p := range products {
+			pub[i] = p.PublicProduct
+		}
+		body = pub
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, body); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
 }

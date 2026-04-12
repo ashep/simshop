@@ -232,6 +232,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /shops/{id}/products:
+    get:
+      operationId: listShopProducts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListShopProductsResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /products/{id}:
     get:
       operationId: getProduct
@@ -469,6 +492,31 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    ShopProductItem:
+      type: object
+      required:
+        - id
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ProductContentItem'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ListShopProductsResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/ShopProductItem'
 
     ErrorResponse:
       type: object
