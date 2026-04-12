@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) error {
-	if req.Content["EN"].Title == "" {
+	if req.Data["EN"].Title == "" {
 		return ErrMissingEnTitle
 	}
 
@@ -31,10 +31,10 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 	}
 
 	if _, err = tx.Exec(ctx, "DELETE FROM product_data WHERE product_id = $1", id); err != nil {
-		return fmt.Errorf("delete product content: %w", err)
+		return fmt.Errorf("delete product data: %w", err)
 	}
 
-	for lang, c := range req.Content {
+	for lang, c := range req.Data {
 		if _, err = tx.Exec(ctx,
 			"INSERT INTO product_data (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			id, lang, c.Title, c.Description,
@@ -43,7 +43,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 				return ErrInvalidLanguage
 			}
-			return fmt.Errorf("insert product content: %w", err)
+			return fmt.Errorf("insert product data: %w", err)
 		}
 	}
 

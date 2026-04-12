@@ -48,7 +48,7 @@ func TestCreateProduct(main *testing.T) {
 	}
 
 	validBody := func() string {
-		return `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
+		return `{"shop_id":"` + sh.ID + `","data":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 	}
 
 	main.Run("Success_Admin", func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("ShopNotFound", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"no-such-shop","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"no-such-shop","data":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -111,24 +111,11 @@ func TestCreateProduct(main *testing.T) {
 		assert.JSONEq(t, `{"error":"shop not found"}`, string(respBody))
 	})
 
-	main.Run("MissingDefaultPrice", func(t *testing.T) {
-		t.Parallel()
-
-		body := `{"shop_id":"` + sh.ID + `","prices":{"UA":40000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
-		resp := doRequest(t, body, admin.APIKey)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"error":"default country price is required"}`, string(respBody))
-	})
-
 	main.Run("MissingContent", func(t *testing.T) {
 		t.Parallel()
 
 		// Shop has "EN" and "UK"; request is missing "UK"
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		body := `{"shop_id":"` + sh.ID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -138,23 +125,10 @@ func TestCreateProduct(main *testing.T) {
 		assert.JSONEq(t, `{"error":"content missing for language: UK"}`, string(respBody))
 	})
 
-	main.Run("InvalidCountry", func(t *testing.T) {
-		t.Parallel()
-
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000,"XX":999},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
-		resp := doRequest(t, body, admin.APIKey)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		assert.JSONEq(t, `{"error":"invalid country id"}`, string(respBody))
-	})
-
 	main.Run("ShopProductLimitReached", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"` + limitShop.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		body := `{"shop_id":"` + limitShop.ID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -168,7 +142,7 @@ func TestCreateProduct(main *testing.T) {
 		t.Parallel()
 
 		// "zz" is not in the languages table
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
+		body := `{"shop_id":"` + sh.ID + `","data":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 

@@ -7,8 +7,6 @@ import (
 )
 
 var ErrShopNotFound = errors.New("shop not found")
-var ErrMissingDefaultPrice = errors.New("default country price is required")
-var ErrInvalidCountry = errors.New("invalid country id")
 var ErrInvalidLanguage = errors.New("invalid language code")
 var ErrShopProductLimitReached = errors.New("shop product limit reached")
 var ErrProductNotFound = errors.New("product not found")
@@ -30,7 +28,7 @@ type Product struct {
 
 type PublicProduct struct {
 	ID      string                 `json:"id"`
-	Content map[string]ContentItem `json:"content"`
+	Data map[string]DataItem `json:"data"`
 }
 
 type AdminProduct struct {
@@ -40,15 +38,14 @@ type AdminProduct struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type ContentItem struct {
+type DataItem struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
 
 type CreateRequest struct {
 	ShopID  string                 `json:"shop_id"`
-	Prices  map[string]int         `json:"prices"`
-	Content map[string]ContentItem `json:"content"`
+	Data map[string]DataItem `json:"data"`
 }
 
 type CreateResponse struct {
@@ -57,32 +54,27 @@ type CreateResponse struct {
 
 func (r *CreateRequest) Trim() {
 	r.ShopID = strings.TrimSpace(r.ShopID)
-	trimmedContent := make(map[string]ContentItem, len(r.Content))
-	for k, v := range r.Content {
-		trimmedContent[strings.TrimSpace(k)] = ContentItem{
+	trimmedContent := make(map[string]DataItem, len(r.Data))
+	for k, v := range r.Data {
+		trimmedContent[strings.TrimSpace(k)] = DataItem{
 			Title:       strings.TrimSpace(v.Title),
 			Description: strings.TrimSpace(v.Description),
 		}
 	}
-	r.Content = trimmedContent
-	trimmedPrices := make(map[string]int, len(r.Prices))
-	for k, v := range r.Prices {
-		trimmedPrices[strings.TrimSpace(k)] = v
-	}
-	r.Prices = trimmedPrices
+	r.Data = trimmedContent
 }
 
 type UpdateRequest struct {
-	Content map[string]ContentItem `json:"content"`
+	Data map[string]DataItem `json:"data"`
 }
 
 func (r *UpdateRequest) Trim() {
-	trimmed := make(map[string]ContentItem, len(r.Content))
-	for k, v := range r.Content {
-		trimmed[strings.TrimSpace(k)] = ContentItem{
+	trimmed := make(map[string]DataItem, len(r.Data))
+	for k, v := range r.Data {
+		trimmed[strings.TrimSpace(k)] = DataItem{
 			Title:       strings.TrimSpace(v.Title),
 			Description: strings.TrimSpace(v.Description),
 		}
 	}
-	r.Content = trimmed
+	r.Data = trimmed
 }

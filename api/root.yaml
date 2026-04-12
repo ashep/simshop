@@ -468,7 +468,7 @@ components:
             minLength: 1
             maxLength: 100
 
-    ProductContentItem:
+    ProductDataItem:
       type: object
       required:
         - title
@@ -485,22 +485,15 @@ components:
       type: object
       required:
         - shop_id
-        - prices
-        - content
+        - data
       properties:
         shop_id:
           type: string
           minLength: 3
-        prices:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: integer
-            minimum: 0
-        content:
+        data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/ProductContentItem'
+            $ref: '#/components/schemas/ProductDataItem'
 
     CreateProductResponse:
       type: object
@@ -514,31 +507,31 @@ components:
     UpdateProductRequest:
       type: object
       required:
-        - content
+        - data
       properties:
-        content:
+        data:
           type: object
           required:
             - EN
           properties:
             EN:
-              $ref: '#/components/schemas/ProductContentItem'
+              $ref: '#/components/schemas/ProductDataItem'
           additionalProperties:
-            $ref: '#/components/schemas/ProductContentItem'
+            $ref: '#/components/schemas/ProductDataItem'
 
     GetProductResponse:
       type: object
       required:
         - id
-        - content
+        - data
       properties:
         id:
           type: string
           format: uuid
-        content:
+        data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/ProductContentItem'
+            $ref: '#/components/schemas/ProductDataItem'
         created_at:
           type: string
           format: date-time
@@ -550,15 +543,15 @@ components:
       type: object
       required:
         - id
-        - content
+        - data
       properties:
         id:
           type: string
           format: uuid
-        content:
+        data:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/ProductContentItem'
+            $ref: '#/components/schemas/ProductDataItem'
         created_at:
           type: string
           format: date-time

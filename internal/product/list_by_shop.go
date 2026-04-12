@@ -37,7 +37,7 @@ func (s *Service) ListByShop(ctx context.Context, shopID string) ([]*AdminProduc
 			index[id] = &AdminProduct{
 				PublicProduct: PublicProduct{
 					ID:      id,
-					Content: map[string]ContentItem{},
+					Data: map[string]DataItem{},
 				},
 				ShopOwnerID: ownerID,
 				CreatedAt:   createdAt,
@@ -47,7 +47,7 @@ func (s *Service) ListByShop(ctx context.Context, shopID string) ([]*AdminProduc
 		}
 
 		if langID != nil && title != nil && description != nil {
-			index[id].Content[*langID] = ContentItem{
+			index[id].Data[*langID] = DataItem{
 				Title:       *title,
 				Description: *description,
 			}

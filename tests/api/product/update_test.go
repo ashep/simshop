@@ -42,48 +42,48 @@ func TestUpdateProduct(main *testing.T) {
 	main.Run("Success_Admin", func(t *testing.T) {
 		t.Parallel()
 
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.ContentItem{
+		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
 			"EN": {Title: "Old Title", Description: "Old Desc"},
 			"UK": {Title: "Старий заголовок", Description: "Старий опис"},
 		})
 
-		body := `{"content":{"EN":{"title":"New Title","description":"New Desc"}}}`
+		body := `{"data":{"EN":{"title":"New Title","description":"New Desc"}}}`
 		resp := doRequest(t, p.ID, body, admin.APIKey)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		content := sd.GetProductContent(t, p.ID)
-		assert.Equal(t, product.ContentItem{Title: "New Title", Description: "New Desc"}, content["EN"])
+		content := sd.GetProductData(t, p.ID)
+		assert.Equal(t, product.DataItem{Title: "New Title", Description: "New Desc"}, content["EN"])
 		assert.Len(t, content, 1) // UK row was deleted (full replace)
 	})
 
 	main.Run("Success_ShopOwner", func(t *testing.T) {
 		t.Parallel()
 
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.ContentItem{
+		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
 			"EN": {Title: "Old Title", Description: "Old Desc"},
 		})
 
-		body := `{"content":{"EN":{"title":"Owner Update","description":"Owner Desc"}}}`
+		body := `{"data":{"EN":{"title":"Owner Update","description":"Owner Desc"}}}`
 		resp := doRequest(t, p.ID, body, shopOwner.APIKey)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		content := sd.GetProductContent(t, p.ID)
-		assert.Equal(t, product.ContentItem{Title: "Owner Update", Description: "Owner Desc"}, content["EN"])
+		content := sd.GetProductData(t, p.ID)
+		assert.Equal(t, product.DataItem{Title: "Owner Update", Description: "Owner Desc"}, content["EN"])
 	})
 
 	main.Run("Forbidden_NonOwner", func(t *testing.T) {
 		t.Parallel()
 
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.ContentItem{
+		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
 			"EN": {Title: "Title", Description: "Desc"},
 		})
 
 		otherUser := sd.CreateUser(t)
-		body := `{"content":{"EN":{"title":"Hack","description":"Hack"}}}`
+		body := `{"data":{"EN":{"title":"Hack","description":"Hack"}}}`
 		resp := doRequest(t, p.ID, body, otherUser.APIKey)
 		defer resp.Body.Close()
 
@@ -93,7 +93,7 @@ func TestUpdateProduct(main *testing.T) {
 	main.Run("Forbidden_Unauthenticated", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"content":{"EN":{"title":"Hack","description":"Hack"}}}`
+		body := `{"data":{"EN":{"title":"Hack","description":"Hack"}}}`
 		resp := doRequest(t, "00000000-0000-7000-8000-000000000000", body, "")
 		defer resp.Body.Close()
 
@@ -103,7 +103,7 @@ func TestUpdateProduct(main *testing.T) {
 	main.Run("ProductNotFound", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"content":{"EN":{"title":"Title","description":"Desc"}}}`
+		body := `{"data":{"EN":{"title":"Title","description":"Desc"}}}`
 		resp := doRequest(t, "00000000-0000-7000-8000-000000000000", body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -116,12 +116,12 @@ func TestUpdateProduct(main *testing.T) {
 	main.Run("MissingEnTitle", func(t *testing.T) {
 		t.Parallel()
 
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.ContentItem{
+		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
 			"EN": {Title: "Title", Description: "Desc"},
 		})
 
 		// OpenAPI spec enforces required: [EN] — sending without EN key returns 400
-		body := `{"content":{"UK":{"title":"Заголовок","description":"Опис"}}}`
+		body := `{"data":{"UK":{"title":"Заголовок","description":"Опис"}}}`
 		resp := doRequest(t, p.ID, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -131,12 +131,12 @@ func TestUpdateProduct(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.ContentItem{
+		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
 			"EN": {Title: "Title", Description: "Desc"},
 		})
 
 		// "zz" is not in the languages table
-		body := `{"content":{"EN":{"title":"Title","description":"Desc"},"zz":{"title":"Zz","description":"Zz desc"}}}`
+		body := `{"data":{"EN":{"title":"Title","description":"Desc"},"zz":{"title":"Zz","description":"Zz desc"}}}`
 		resp := doRequest(t, p.ID, body, admin.APIKey)
 		defer resp.Body.Close()
 

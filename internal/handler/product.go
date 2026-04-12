@@ -54,10 +54,6 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, &NotFoundError{Reason: "shop not found"})
 		case errors.As(err, &mce):
 			h.writeError(w, &BadRequestError{Reason: mce.Error()})
-		case errors.Is(err, product.ErrMissingDefaultPrice):
-			h.writeError(w, &BadRequestError{Reason: "default country price is required"})
-		case errors.Is(err, product.ErrInvalidCountry):
-			h.writeError(w, &BadRequestError{Reason: "invalid country id"})
 		case errors.Is(err, product.ErrInvalidLanguage):
 			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
 		case errors.Is(err, product.ErrShopProductLimitReached):

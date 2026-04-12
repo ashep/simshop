@@ -68,7 +68,7 @@ func TestListShopProducts(main *testing.T) {
 			{
 				PublicProduct: product.PublicProduct{
 					ID:      "018f4e3a-0000-7000-8000-000000000099",
-					Content: map[string]product.ContentItem{"EN": {Title: "Widget", Description: "A fine widget"}},
+					Data: map[string]product.DataItem{"EN": {Title: "Widget", Description: "A fine widget"}},
 				},
 				ShopOwnerID: ownerID,
 				CreatedAt:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -149,7 +149,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
 		assert.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.NotContains(t, body[0], "created_at")
 		assert.NotContains(t, body[0], "updated_at")
 	})
@@ -171,7 +171,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
 		assert.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.NotContains(t, body[0], "created_at")
 		assert.NotContains(t, body[0], "updated_at")
 	})
@@ -193,7 +193,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
 		assert.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.Contains(t, body[0], "created_at")
 		assert.Contains(t, body[0], "updated_at")
 	})
@@ -215,7 +215,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
 		assert.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.Contains(t, body[0], "created_at")
 		assert.Contains(t, body[0], "updated_at")
 	})
@@ -244,7 +244,7 @@ func TestUpdateProduct(main *testing.T) {
 		return &product.AdminProduct{
 			PublicProduct: product.PublicProduct{
 				ID:      productID,
-				Content: map[string]product.ContentItem{"EN": {Title: "Widget", Description: "Desc"}},
+				Data: map[string]product.DataItem{"EN": {Title: "Widget", Description: "Desc"}},
 			},
 			ShopOwnerID: ownerID,
 			CreatedAt:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -252,7 +252,7 @@ func TestUpdateProduct(main *testing.T) {
 		}
 	}
 
-	validBody := `{"content":{"EN":{"title":"New Title","description":"New Desc"}}}`
+	validBody := `{"data":{"EN":{"title":"New Title","description":"New Desc"}}}`
 
 	doRequest := func(t *testing.T, prodSvc *productServiceMock, user *auth.User) *httptest.ResponseRecorder {
 		t.Helper()

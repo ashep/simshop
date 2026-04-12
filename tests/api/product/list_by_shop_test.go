@@ -27,7 +27,7 @@ func TestListShopProducts(main *testing.T) {
 		"EN": "List Products Shop",
 	}, nil)
 
-	p := sd.CreateProduct(main, sh.ID, map[string]int{"DEFAULT": 300}, map[string]product.ContentItem{
+	p := sd.CreateProduct(main, sh.ID, map[string]int{"DEFAULT": 300}, map[string]product.DataItem{
 		"EN": {Title: "Gadget", Description: "A useful gadget"},
 	})
 
@@ -67,7 +67,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Equal(t, p.ID, body[0]["id"])
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.NotContains(t, body[0], "created_at")
 		assert.NotContains(t, body[0], "updated_at")
 	})
@@ -85,7 +85,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.NotContains(t, body[0], "created_at")
 		assert.NotContains(t, body[0], "updated_at")
 	})
@@ -102,7 +102,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.Contains(t, body[0], "created_at")
 		assert.NotNil(t, body[0]["created_at"])
 		assert.Contains(t, body[0], "updated_at")
@@ -121,7 +121,7 @@ func TestListShopProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Contains(t, body[0], "id")
-		assert.Contains(t, body[0], "content")
+		assert.Contains(t, body[0], "data")
 		assert.Contains(t, body[0], "created_at")
 		assert.NotNil(t, body[0]["created_at"])
 		assert.Contains(t, body[0], "updated_at")

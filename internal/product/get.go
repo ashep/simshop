@@ -34,7 +34,7 @@ func (s *Service) Get(ctx context.Context, id string) (*AdminProduct, error) {
 			p = &AdminProduct{
 				PublicProduct: PublicProduct{
 					ID:      id,
-					Content: map[string]ContentItem{},
+					Data: map[string]DataItem{},
 				},
 				ShopOwnerID: ownerID,
 				CreatedAt:   createdAt,
@@ -43,7 +43,7 @@ func (s *Service) Get(ctx context.Context, id string) (*AdminProduct, error) {
 		}
 
 		if langID != nil && title != nil && description != nil {
-			p.Content[*langID] = ContentItem{
+			p.Data[*langID] = DataItem{
 				Title:       *title,
 				Description: *description,
 			}

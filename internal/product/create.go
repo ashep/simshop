@@ -58,14 +58,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 		return nil, ErrShopProductLimitReached
 	}
 
-	// Validate DEFAULT price is present.
-	if _, hasDefault := req.Prices["DEFAULT"]; !hasDefault {
-		return nil, ErrMissingDefaultPrice
-	}
-
 	// Validate content covers every shop language.
 	for lang := range shopLangs {
-		if _, ok := req.Content[lang]; !ok {
+		if _, ok := req.Data[lang]; !ok {
 			return nil, &MissingContentError{Lang: lang}
 		}
 	}
@@ -88,22 +83,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 		return nil, fmt.Errorf("insert product: %w", err)
 	}
 
-	for countryID, value := range req.Prices {
-		if _, err = tx.Exec(ctx,
-			"INSERT INTO product_prices (product_id, country_id, value) VALUES ($1, $2, $3)",
-			productID, countryID, value,
-		); err != nil {
-			var pgErr *pgconn.PgError
-			// product_id came from RETURNING above and cannot violate the FK;
-			// 23503 here is always an invalid country_id.
-			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				return nil, ErrInvalidCountry
-			}
-			return nil, fmt.Errorf("insert product price: %w", err)
-		}
-	}
-
-	for lang, c := range req.Content {
+	for lang, c := range req.Data {
 		if _, err = tx.Exec(ctx,
 			"INSERT INTO product_data (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			productID, lang, c.Title, c.Description,
@@ -114,7 +94,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 				return nil, ErrInvalidLanguage
 			}
-			return nil, fmt.Errorf("insert product content: %w", err)
+			return nil, fmt.Errorf("insert product data: %w", err)
 		}
 	}
 

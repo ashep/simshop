@@ -23,8 +23,8 @@ any entity.
 
 ### Country-based pricing
 
-Product prices are defined per country. A `DEFAULT` country price is required and serves as the fallback.
-Country-specific overrides (e.g. `UA`) can be added on top of that.
+Product prices are defined per country. A `DEFAULT` country price serves as the fallback, with country-specific
+overrides (e.g. `UA`) layered on top. Pricing is managed separately from product creation.
 
 ### Authentication and authorization
 
@@ -57,8 +57,8 @@ Each shop has:
 
 A product belongs to a shop. Each product has:
 
-- **Content** — per-language title and description.
-- **Prices** — per-country integer prices (smallest currency unit). A `DEFAULT` price is mandatory.
+- **Data** — per-language title and description.
+- **Prices** — per-country integer prices (smallest currency unit). Managed separately from product creation.
 
 ### Property
 

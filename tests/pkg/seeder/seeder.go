@@ -153,7 +153,7 @@ func (s *Seeder) GetProperty(t *testing.T, id string) *property.Property {
 	return &property.Property{ID: id, Titles: titles}
 }
 
-func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]int, content map[string]product.ContentItem) *product.Product {
+func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]int, data map[string]product.DataItem) *product.Product {
 	t.Helper()
 
 	var productID string
@@ -168,7 +168,7 @@ func (s *Seeder) CreateProduct(t *testing.T, shopID string, prices map[string]in
 		require.NoError(t, err)
 	}
 
-	for lang, c := range content {
+	for lang, c := range data {
 		_, err := s.db.Exec(t.Context(),
 			"INSERT INTO product_data (product_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			productID, lang, c.Title, c.Description,
@@ -190,10 +190,10 @@ func (s *Seeder) GetProduct(t *testing.T, id string) *product.Product {
 	return &product.Product{ID: id}
 }
 
-func (s *Seeder) GetProductContent(t *testing.T, productID string) map[string]product.ContentItem {
+func (s *Seeder) GetProductData(t *testing.T, productID string) map[string]product.DataItem {
 	t.Helper()
 
-	content := map[string]product.ContentItem{}
+	data := map[string]product.DataItem{}
 	rows, err := s.db.Query(t.Context(),
 		"SELECT lang_id, title, description FROM product_data WHERE product_id = $1", productID)
 	require.NoError(t, err)
@@ -201,9 +201,9 @@ func (s *Seeder) GetProductContent(t *testing.T, productID string) map[string]pr
 	for rows.Next() {
 		var lang, title, description string
 		require.NoError(t, rows.Scan(&lang, &title, &description))
-		content[lang] = product.ContentItem{Title: title, Description: description}
+		data[lang] = product.DataItem{Title: title, Description: description}
 	}
 	require.NoError(t, rows.Err())
 
-	return content
+	return data
 }
