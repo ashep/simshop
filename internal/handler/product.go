@@ -12,6 +12,7 @@ import (
 
 type productService interface {
 	Create(ctx context.Context, req product.CreateRequest) (*product.Product, error)
+	Get(ctx context.Context, id string) (*product.AdminProduct, error)
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +69,31 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	h.l.Info().Str("product_id", p.ID).Str("shop_id", req.ShopID).Str("user_id", user.ID).Msg("product created")
 
 	if err := h.resp.Write(w, r, http.StatusCreated, &product.CreateResponse{ID: p.ID}); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
+}
+
+func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	p, err := h.prod.Get(r.Context(), id)
+	if errors.Is(err, product.ErrProductNotFound) {
+		h.writeError(w, &NotFoundError{Reason: "product not found"})
+		return
+	} else if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	user := auth.GetUserFromContext(r.Context())
+	var body any
+	if user != nil && (user.IsAdmin() || user.ID == p.ShopOwnerID) {
+		body = p
+	} else {
+		body = p.PublicProduct
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, body); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
 }

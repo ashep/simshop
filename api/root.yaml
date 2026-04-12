@@ -232,6 +232,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /products/{id}:
+    get:
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Get request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProductResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -425,6 +449,26 @@ components:
         id:
           type: string
           format: uuid
+
+    GetProductResponse:
+      type: object
+      required:
+        - id
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ProductContentItem'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     ErrorResponse:
       type: object

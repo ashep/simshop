@@ -113,10 +113,15 @@ When an `owner_id` FK insert fails with PostgreSQL error code `23503`, the servi
 
 ### Admin vs public response shaping
 
-When an endpoint is publicly accessible but returns additional fields for admin callers, use `auth.GetUserFromContext`
-to check for admin status in the handler, then encode either the admin struct (e.g., `*shop.AdminShop`) or just the
-public embedded struct (e.g., `sh.Shop`). Declare the local variable as `any` so both types satisfy it without a cast.
-The service always returns the full admin struct; the handler decides what to serialise.
+When an endpoint is publicly accessible but returns additional fields for admin callers (or also shop owners), use
+`auth.GetUserFromContext` to check for admin status in the handler, then encode either the admin struct (e.g.,
+`*shop.AdminShop`) or just the public embedded struct (e.g., `sh.Shop`). Declare the local variable as `any` so both
+types satisfy it without a cast. The service always returns the full admin struct; the handler decides what to
+serialise.
+
+When shop-owner access must also be checked (e.g., `GET /products/{id}`), include the owner_id in the admin struct
+with `json:"-"` (so it is never serialised) and compare `user.ID == p.ShopOwnerID` alongside `user.IsAdmin()`. The
+service fetches owner_id from the DB in the same query that fetches the resource.
 
 ## Tests
 
