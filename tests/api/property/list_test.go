@@ -44,8 +44,8 @@ func TestListProperties(main *testing.T) {
 	main.Run("WithProperties", func(t *testing.T) {
 		t.Parallel()
 
-		p1 := sd.CreateProperty(t, map[string]string{"en": "Color", "uk": "Колір"})
-		p2 := sd.CreateProperty(t, map[string]string{"en": "Size"})
+		p1 := sd.CreateProperty(t, map[string]string{"EN": "Color", "UK": "Колір"})
+		p2 := sd.CreateProperty(t, map[string]string{"EN": "Size"})
 
 		resp := doRequest(t)
 		defer resp.Body.Close()

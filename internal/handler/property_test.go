@@ -64,7 +64,7 @@ func TestPropertyList(main *testing.T) {
 		defer svc.AssertExpectations(t)
 
 		props := []property.Property{
-			{ID: "018f4e3a-0000-7000-8000-000000000001", Titles: map[string]string{"en": "Color"}},
+			{ID: "018f4e3a-0000-7000-8000-000000000001", Titles: map[string]string{"EN": "Color"}},
 		}
 		svc.On("List", mock.Anything).Return(props, nil)
 
@@ -75,7 +75,7 @@ func TestPropertyList(main *testing.T) {
 		h.PropertyList(w, r)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.JSONEq(t, `[{"id":"018f4e3a-0000-7000-8000-000000000001","titles":{"en":"Color"}}]`, w.Body.String())
+		assert.JSONEq(t, `[{"id":"018f4e3a-0000-7000-8000-000000000001","titles":{"EN":"Color"}}]`, w.Body.String())
 	})
 
 	main.Run("SuccessEmpty", func(t *testing.T) {

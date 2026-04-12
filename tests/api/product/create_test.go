@@ -24,8 +24,8 @@ func TestCreateProduct(main *testing.T) {
 
 	shopOwner := sd.CreateUser(main)
 	sh := sd.CreateShop(main, "prodshop", shopOwner.ID, map[string]string{
-		"en": "Product Shop",
-		"uk": "Магазин продуктів",
+		"EN": "Product Shop",
+		"UK": "Магазин продуктів",
 	}, nil)
 
 	doRequest := func(t *testing.T, body string, apiKey string) *http.Response {
@@ -43,7 +43,7 @@ func TestCreateProduct(main *testing.T) {
 	}
 
 	validBody := func() string {
-		return `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		return `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 	}
 
 	main.Run("Success_Admin", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("ShopNotFound", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"no-such-shop","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"no-such-shop","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -109,7 +109,7 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("MissingDefaultPrice", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"` + sh.ID + `","prices":{"UA":40000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"UA":40000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -122,21 +122,21 @@ func TestCreateProduct(main *testing.T) {
 	main.Run("MissingContent", func(t *testing.T) {
 		t.Parallel()
 
-		// Shop has "en" and "uk"; request is missing "uk"
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"}}}`
+		// Shop has "EN" and "UK"; request is missing "UK"
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"error":"content missing for language: uk"}`, string(respBody))
+		assert.JSONEq(t, `{"error":"content missing for language: UK"}`, string(respBody))
 	})
 
 	main.Run("InvalidCountry", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000,"XX":999},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000,"XX":999},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 
@@ -150,7 +150,7 @@ func TestCreateProduct(main *testing.T) {
 		t.Parallel()
 
 		// "zz" is not in the languages table
-		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"en":{"title":"Widget","description":"A fine widget"},"uk":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
+		body := `{"shop_id":"` + sh.ID + `","prices":{"DEFAULT":1000},"content":{"EN":{"title":"Widget","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"},"zz":{"title":"Zz","description":"Zz desc"}}}`
 		resp := doRequest(t, body, admin.APIKey)
 		defer resp.Body.Close()
 

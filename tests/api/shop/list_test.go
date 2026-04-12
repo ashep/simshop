@@ -38,8 +38,8 @@ func TestListShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "listshop1", admin.ID, map[string]string{"en": "List Shop One"}, nil)
-		sd.CreateShop(t, "listshop2", admin.ID, map[string]string{"en": "List Shop Two", "uk": "Перелік Два"}, nil)
+		sd.CreateShop(t, "listshop1", admin.ID, map[string]string{"EN": "List Shop One"}, nil)
+		sd.CreateShop(t, "listshop2", admin.ID, map[string]string{"EN": "List Shop Two", "UK": "Перелік Два"}, nil)
 
 		resp := doRequest(t)
 		defer resp.Body.Close()
@@ -58,11 +58,11 @@ func TestListShop(main *testing.T) {
 		}
 
 		if s, ok := byID["listshop1"]; assert.True(t, ok, "listshop1 not in response") {
-			assert.Equal(t, "List Shop One", s.Names["en"])
+			assert.Equal(t, "List Shop One", s.Names["EN"])
 		}
 		if s, ok := byID["listshop2"]; assert.True(t, ok, "listshop2 not in response") {
-			assert.Equal(t, "List Shop Two", s.Names["en"])
-			assert.Equal(t, "Перелік Два", s.Names["uk"])
+			assert.Equal(t, "List Shop Two", s.Names["EN"])
+			assert.Equal(t, "Перелік Два", s.Names["UK"])
 		}
 	})
 
@@ -70,8 +70,8 @@ func TestListShop(main *testing.T) {
 		t.Parallel()
 
 		sd.CreateShop(t, "listshop3", admin.ID,
-			map[string]string{"en": "Described Shop"},
-			map[string]string{"en": "A listed shop with a description"},
+			map[string]string{"EN": "Described Shop"},
+			map[string]string{"EN": "A listed shop with a description"},
 		)
 
 		resp := doRequest(t)
@@ -91,7 +91,7 @@ func TestListShop(main *testing.T) {
 		}
 
 		if s, ok := byID["listshop3"]; assert.True(t, ok, "listshop3 not in response") {
-			assert.Equal(t, "A listed shop with a description", s.Descriptions["en"])
+			assert.Equal(t, "A listed shop with a description", s.Descriptions["EN"])
 		}
 	})
 }

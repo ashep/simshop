@@ -31,17 +31,17 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		got, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "myshop",
-			Names:   map[string]string{"en": "My Shop"},
+			Names:   map[string]string{"EN": "My Shop"},
 			OwnerID: admin.ID,
 		})
 
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, "myshop", got.ID)
-		assert.Equal(t, map[string]string{"en": "My Shop"}, got.Names)
+		assert.Equal(t, map[string]string{"EN": "My Shop"}, got.Names)
 
 		dbShop := sd.GetShop(t, "myshop")
-		assert.Equal(t, map[string]string{"en": "My Shop"}, dbShop.Names)
+		assert.Equal(t, map[string]string{"EN": "My Shop"}, dbShop.Names)
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
@@ -50,17 +50,17 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		got, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:           "descshop",
-			Names:        map[string]string{"en": "Desc Shop"},
-			Descriptions: map[string]string{"en": "A shop with a description"},
+			Names:        map[string]string{"EN": "Desc Shop"},
+			Descriptions: map[string]string{"EN": "A shop with a description"},
 			OwnerID:      admin.ID,
 		})
 
 		require.NoError(t, err)
 		require.NotNil(t, got)
-		assert.Equal(t, "A shop with a description", got.Descriptions["en"])
+		assert.Equal(t, "A shop with a description", got.Descriptions["EN"])
 
 		dbShop := sd.GetShop(t, "descshop")
-		assert.Equal(t, "A shop with a description", dbShop.Descriptions["en"])
+		assert.Equal(t, "A shop with a description", dbShop.Descriptions["EN"])
 	})
 
 	main.Run("InvalidLanguage", func(t *testing.T) {
@@ -82,14 +82,14 @@ func TestCreate(main *testing.T) {
 		svc := shop.NewService(db, zerolog.Nop())
 		_, err := svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "dupshop",
-			Names:   map[string]string{"en": "Dup Shop"},
+			Names:   map[string]string{"EN": "Dup Shop"},
 			OwnerID: admin.ID,
 		})
 		require.NoError(t, err)
 
 		_, err = svc.Create(t.Context(), shop.CreateRequest{
 			ID:      "dupshop",
-			Names:   map[string]string{"en": "Dup Shop"},
+			Names:   map[string]string{"EN": "Dup Shop"},
 			OwnerID: admin.ID,
 		})
 		require.Error(t, err)

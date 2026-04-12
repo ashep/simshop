@@ -39,36 +39,36 @@ func TestUpdateShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "apishop1", admin.ID, map[string]string{"en": "Original"}, nil)
+		sd.CreateShop(t, "apishop1", admin.ID, map[string]string{"EN": "Original"}, nil)
 
-		resp := doRequest(t, "apishop1", `{"names":{"en":"Updated","uk":"Оновлено"}}`)
+		resp := doRequest(t, "apishop1", `{"names":{"EN":"Updated","UK":"Оновлено"}}`)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		got := sd.GetShop(t, "apishop1")
-		assert.Equal(t, "Updated", got.Names["en"])
-		assert.Equal(t, "Оновлено", got.Names["uk"])
+		assert.Equal(t, "Updated", got.Names["EN"])
+		assert.Equal(t, "Оновлено", got.Names["UK"])
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "apishop3", admin.ID, map[string]string{"en": "Shop"}, nil)
+		sd.CreateShop(t, "apishop3", admin.ID, map[string]string{"EN": "Shop"}, nil)
 
-		resp := doRequest(t, "apishop3", `{"names":{"en":"Shop"},"descriptions":{"en":"Updated description"}}`)
+		resp := doRequest(t, "apishop3", `{"names":{"EN":"Shop"},"descriptions":{"EN":"Updated description"}}`)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		got := sd.GetShop(t, "apishop3")
-		assert.Equal(t, "Updated description", got.Descriptions["en"])
+		assert.Equal(t, "Updated description", got.Descriptions["EN"])
 	})
 
 	main.Run("ShopNotFound", func(t *testing.T) {
 		t.Parallel()
 
-		resp := doRequest(t, "nonexistent", `{"names":{"en":"Test"}}`)
+		resp := doRequest(t, "nonexistent", `{"names":{"EN":"Test"}}`)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -80,7 +80,7 @@ func TestUpdateShop(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "apishop2", admin.ID, map[string]string{"en": "Lang Test"}, nil)
+		sd.CreateShop(t, "apishop2", admin.ID, map[string]string{"EN": "Lang Test"}, nil)
 
 		resp := doRequest(t, "apishop2", `{"names":{"xx":"Unknown"}}`)
 		defer resp.Body.Close()

@@ -59,7 +59,7 @@ func TestGetShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop1", admin.ID, map[string]string{"en": "Get Shop", "uk": "Отримати Магазин"}, nil)
+		sd.CreateShop(t, "getshop1", admin.ID, map[string]string{"EN": "Get Shop", "UK": "Отримати Магазин"}, nil)
 
 		resp := doRequest(t, "getshop1")
 		defer resp.Body.Close()
@@ -73,8 +73,8 @@ func TestGetShop(main *testing.T) {
 		require.NoError(t, json.Unmarshal(body, &sh))
 
 		assert.Equal(t, "getshop1", sh.ID)
-		assert.Equal(t, "Get Shop", sh.Names["en"])
-		assert.Equal(t, "Отримати Магазин", sh.Names["uk"])
+		assert.Equal(t, "Get Shop", sh.Names["EN"])
+		assert.Equal(t, "Отримати Магазин", sh.Names["UK"])
 
 		// descriptions omitted when not set
 		var raw map[string]any
@@ -86,8 +86,8 @@ func TestGetShop(main *testing.T) {
 		t.Parallel()
 
 		sd.CreateShop(t, "getshop4", admin.ID,
-			map[string]string{"en": "Desc Shop"},
-			map[string]string{"en": "Shop description"},
+			map[string]string{"EN": "Desc Shop"},
+			map[string]string{"EN": "Shop description"},
 		)
 
 		resp := doRequest(t, "getshop4")
@@ -101,13 +101,13 @@ func TestGetShop(main *testing.T) {
 		var sh shop.Shop
 		require.NoError(t, json.Unmarshal(body, &sh))
 
-		assert.Equal(t, "Shop description", sh.Descriptions["en"])
+		assert.Equal(t, "Shop description", sh.Descriptions["EN"])
 	})
 
 	main.Run("AdminGetsExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop2", admin.ID, map[string]string{"en": "Admin Shop"}, nil)
+		sd.CreateShop(t, "getshop2", admin.ID, map[string]string{"EN": "Admin Shop"}, nil)
 
 		resp := doAdminRequest(t, "getshop2")
 		defer resp.Body.Close()
@@ -129,13 +129,13 @@ func TestGetShop(main *testing.T) {
 
 		names, ok := result["names"].(map[string]any)
 		assert.True(t, ok, "names should be a map")
-		assert.Equal(t, "Admin Shop", names["en"])
+		assert.Equal(t, "Admin Shop", names["EN"])
 	})
 
 	main.Run("PublicGetsMissingExtraFields", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "getshop3", admin.ID, map[string]string{"en": "Public Shop"}, nil)
+		sd.CreateShop(t, "getshop3", admin.ID, map[string]string{"EN": "Public Shop"}, nil)
 
 		resp := doRequest(t, "getshop3")
 		defer resp.Body.Close()

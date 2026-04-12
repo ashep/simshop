@@ -28,79 +28,79 @@ func TestUpdate(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop1", admin.ID, map[string]string{"en": "Original"}, nil)
+		sd.CreateShop(t, "updshop1", admin.ID, map[string]string{"EN": "Original"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop1", shop.UpdateRequest{
-			Names: map[string]string{"en": "Updated", "uk": "Оновлено"},
+			Names: map[string]string{"EN": "Updated", "UK": "Оновлено"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop1")
-		assert.Equal(t, "Updated", got.Names["en"])
-		assert.Equal(t, "Оновлено", got.Names["uk"])
+		assert.Equal(t, "Updated", got.Names["EN"])
+		assert.Equal(t, "Оновлено", got.Names["UK"])
 	})
 
 	main.Run("PartialUpsert", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop2", admin.ID, map[string]string{"en": "Original EN", "uk": "Original UK"}, nil)
+		sd.CreateShop(t, "updshop2", admin.ID, map[string]string{"EN": "Original EN", "UK": "Original UK"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop2", shop.UpdateRequest{
-			Names: map[string]string{"en": "Updated EN"},
+			Names: map[string]string{"EN": "Updated EN"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop2")
-		assert.Equal(t, "Updated EN", got.Names["en"])
-		assert.Equal(t, "Original UK", got.Names["uk"])
+		assert.Equal(t, "Updated EN", got.Names["EN"])
+		assert.Equal(t, "Original UK", got.Names["UK"])
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop4", admin.ID, map[string]string{"en": "Desc Shop"}, nil)
+		sd.CreateShop(t, "updshop4", admin.ID, map[string]string{"EN": "Desc Shop"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop4", shop.UpdateRequest{
-			Names:        map[string]string{"en": "Desc Shop"},
-			Descriptions: map[string]string{"en": "A description"},
+			Names:        map[string]string{"EN": "Desc Shop"},
+			Descriptions: map[string]string{"EN": "A description"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop4")
-		assert.Equal(t, "A description", got.Descriptions["en"])
+		assert.Equal(t, "A description", got.Descriptions["EN"])
 	})
 
 	main.Run("DescriptionOnlyPreservesName", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop5", admin.ID, map[string]string{"en": "Keep Name"}, nil)
+		sd.CreateShop(t, "updshop5", admin.ID, map[string]string{"EN": "Keep Name"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop5", shop.UpdateRequest{
-			Descriptions: map[string]string{"en": "New desc"},
+			Descriptions: map[string]string{"EN": "New desc"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop5")
-		assert.Equal(t, "Keep Name", got.Names["en"])
-		assert.Equal(t, "New desc", got.Descriptions["en"])
+		assert.Equal(t, "Keep Name", got.Names["EN"])
+		assert.Equal(t, "New desc", got.Descriptions["EN"])
 	})
 
 	main.Run("DescriptionOnlyForUnknownLangFails", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop6", admin.ID, map[string]string{"en": "Only EN"}, nil)
+		sd.CreateShop(t, "updshop6", admin.ID, map[string]string{"EN": "Only EN"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop6", shop.UpdateRequest{
-			Descriptions: map[string]string{"uk": "No name for uk"},
+			Descriptions: map[string]string{"UK": "No name for uk"},
 		})
 
 		require.ErrorIs(t, err, shop.ErrInvalidLanguage)
@@ -111,7 +111,7 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "nosuchshop", shop.UpdateRequest{
-			Names: map[string]string{"en": "Test"},
+			Names: map[string]string{"EN": "Test"},
 		})
 
 		require.ErrorIs(t, err, shop.ErrShopNotFound)
@@ -120,7 +120,7 @@ func TestUpdate(main *testing.T) {
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop3", admin.ID, map[string]string{"en": "Lang Test"}, nil)
+		sd.CreateShop(t, "updshop3", admin.ID, map[string]string{"EN": "Lang Test"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop3", shop.UpdateRequest{

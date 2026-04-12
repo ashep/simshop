@@ -37,7 +37,7 @@ func TestCreateProperty(main *testing.T) {
 		return resp
 	}
 
-	validBody := `{"titles":{"en":"Color","uk":"Колір"}}`
+	validBody := `{"titles":{"EN":"Color","UK":"Колір"}}`
 
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()

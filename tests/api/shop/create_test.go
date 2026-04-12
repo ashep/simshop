@@ -39,7 +39,7 @@ func TestCreateShop(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"id":"testshop","names":{"en":"Test Shop"},"owner_id":"` + admin.ID + `"}`
+		body := `{"id":"testshop","names":{"EN":"Test Shop"},"owner_id":"` + admin.ID + `"}`
 		resp := doRequest(t, body)
 		defer resp.Body.Close()
 
@@ -49,20 +49,20 @@ func TestCreateShop(main *testing.T) {
 	main.Run("WithDescriptions", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"id":"descshopapi","names":{"en":"Desc Shop"},"descriptions":{"en":"A shop description"},"owner_id":"` + admin.ID + `"}`
+		body := `{"id":"descshopapi","names":{"EN":"Desc Shop"},"descriptions":{"EN":"A shop description"},"owner_id":"` + admin.ID + `"}`
 		resp := doRequest(t, body)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		got := sd.GetShop(t, "descshopapi")
-		assert.Equal(t, "A shop description", got.Descriptions["en"])
+		assert.Equal(t, "A shop description", got.Descriptions["EN"])
 	})
 
 	main.Run("DuplicateID", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"id":"dupshop","names":{"en":"Dup Shop"},"owner_id":"` + admin.ID + `"}`
+		body := `{"id":"dupshop","names":{"EN":"Dup Shop"},"owner_id":"` + admin.ID + `"}`
 
 		resp := doRequest(t, body)
 		resp.Body.Close()
@@ -76,7 +76,7 @@ func TestCreateShop(main *testing.T) {
 	main.Run("InvalidOwnerID", func(t *testing.T) {
 		t.Parallel()
 
-		body := `{"id":"ownershop","names":{"en":"Owner Shop"},"owner_id":"00000000-0000-0000-0000-000000000000"}`
+		body := `{"id":"ownershop","names":{"EN":"Owner Shop"},"owner_id":"00000000-0000-0000-0000-000000000000"}`
 		resp := doRequest(t, body)
 		defer resp.Body.Close()
 
