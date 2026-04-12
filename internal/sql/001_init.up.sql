@@ -256,3 +256,16 @@ CREATE TABLE IF NOT EXISTS property_prices
     price       INT  NOT NULL,
     PRIMARY KEY (product_id, property_id, country_id)
 );
+
+CREATE TABLE IF NOT EXISTS files
+(
+    id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
+    owner_id   uuid                        NOT NULL REFERENCES users (id),
+    mime_type  TEXT                        NOT NULL,
+    size_bytes INT                         NOT NULL,
+    data       BYTEA                       NOT NULL,
+    metadata   jsonb,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITHOUT TIME ZONE
+);

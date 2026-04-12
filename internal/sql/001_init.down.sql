@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS files;
 DROP TABLE IF EXISTS property_values;
 DROP TABLE IF EXISTS property_titles;
 DROP TABLE IF EXISTS properties;
