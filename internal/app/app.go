@@ -55,7 +55,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	hdl := handler.NewHandler(shopSvc, prodSvc, propSvc, openAPI.Responder(), l)
 	authMw := auth.Middleware(authSvc)
 	optionalAuthMw := auth.OptionalMiddleware(authSvc)
-	ctypeMw := contenttype.Middleware()
+	ctypeMw := contenttype.Middleware("application/json")
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))

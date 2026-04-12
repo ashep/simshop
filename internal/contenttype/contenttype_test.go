@@ -16,7 +16,7 @@ func nextHandler() http.HandlerFunc {
 }
 
 func TestMiddleware_MissingHeader(t *testing.T) {
-	h := contenttype.Middleware()(nextHandler())
+	h := contenttype.Middleware("application/json")(nextHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -26,7 +26,7 @@ func TestMiddleware_MissingHeader(t *testing.T) {
 }
 
 func TestMiddleware_WrongContentType(t *testing.T) {
-	h := contenttype.Middleware()(nextHandler())
+	h := contenttype.Middleware("application/json")(nextHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("Content-Type", "text/plain")
 	rr := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestMiddleware_WrongContentType(t *testing.T) {
 }
 
 func TestMiddleware_UnparseableContentType(t *testing.T) {
-	h := contenttype.Middleware()(nextHandler())
+	h := contenttype.Middleware("application/json")(nextHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("Content-Type", ";;;")
 	rr := httptest.NewRecorder()
@@ -48,7 +48,7 @@ func TestMiddleware_UnparseableContentType(t *testing.T) {
 }
 
 func TestMiddleware_ApplicationJSON(t *testing.T) {
-	h := contenttype.Middleware()(nextHandler())
+	h := contenttype.Middleware("application/json")(nextHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -57,10 +57,28 @@ func TestMiddleware_ApplicationJSON(t *testing.T) {
 }
 
 func TestMiddleware_ApplicationJSONWithParams(t *testing.T) {
-	h := contenttype.Middleware()(nextHandler())
+	h := contenttype.Middleware("application/json")(nextHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestMiddleware_MultipartFormData(t *testing.T) {
+	h := contenttype.Middleware("multipart/form-data")(nextHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=abc123")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestMiddleware_MultipartFormData_WrongType(t *testing.T) {
+	h := contenttype.Middleware("multipart/form-data")(nextHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
 }
