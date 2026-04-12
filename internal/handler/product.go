@@ -229,3 +229,21 @@ func (h *Handler) SetProductPrices(w http.ResponseWriter, r *http.Request) {
 	h.l.Info().Str("product_id", id).Str("user_id", user.ID).Msg("product prices updated")
 	w.WriteHeader(http.StatusOK)
 }
+
+func (h *Handler) GetProductPrice(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	country := r.URL.Query().Get("country")
+
+	result, err := h.prod.GetPrice(r.Context(), id, country)
+	if errors.Is(err, product.ErrProductNotFound) {
+		h.writeError(w, &NotFoundError{Reason: "product not found"})
+		return
+	} else if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, result); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
+}

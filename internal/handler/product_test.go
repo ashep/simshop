@@ -482,3 +482,52 @@ func TestSetProductPrices(main *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }
+
+func TestGetProductPrice(main *testing.T) {
+	productID := "018f4e3a-0000-7000-8000-000000000099"
+
+	doRequest := func(t *testing.T, prodSvc *productServiceMock, country string) *httptest.ResponseRecorder {
+		t.Helper()
+		h := &Handler{prod: prodSvc, resp: buildTestResponder(t), l: zerolog.Nop()}
+		url := "/products/" + productID + "/prices?country=" + country
+		r := httptest.NewRequest(http.MethodGet, url, nil)
+		r.SetPathValue("id", productID)
+		w := httptest.NewRecorder()
+		h.GetProductPrice(w, r)
+		return w
+	}
+
+	main.Run("ProductNotFound", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("GetPrice", mock.Anything, productID, "US").Return(nil, product.ErrProductNotFound)
+
+		w := doRequest(t, prodSvc, "US")
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"product not found"}`, w.Body.String())
+	})
+
+	main.Run("Success", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("GetPrice", mock.Anything, productID, "US").Return(
+			&product.PriceResult{CountryID: "US", Value: 999}, nil,
+		)
+
+		w := doRequest(t, prodSvc, "US")
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"country_id":"US","value":999}`, w.Body.String())
+	})
+
+	main.Run("ServiceError", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("GetPrice", mock.Anything, productID, "US").Return(nil, errors.New("db error"))
+
+		w := doRequest(t, prodSvc, "US")
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
