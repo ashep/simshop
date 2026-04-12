@@ -89,6 +89,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `PATCH` | `/shops/{id}`      | Update a shop's names/descriptions                   | Owner/Admin   |
 | `POST`  | `/products`               | Create a product in a shop                                    | Admin       |
 | `GET`   | `/products/{id}`          | Get a product (public; extra fields for admin/owner)          | No          |
+| `PATCH` | `/products/{id}`          | Fully replace a product's content (EN title required)         | Owner/Admin |
 | `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
 | `POST`  | `/properties`      | Create a property                                    | Admin         |
 | `GET`   | `/properties`      | List all properties                                  | No            |

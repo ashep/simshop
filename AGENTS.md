@@ -99,6 +99,29 @@ Language codes are stored and compared as **uppercase** (e.g., `"EN"`, `"UK"`). 
 lists, service checks, and test fixtures. Using lowercase (e.g., `"en"`) will cause response-validation failures
 because the DB always returns uppercase keys.
 
+### Full-replace update strategy for content tables
+
+When a content table has **all** non-nullable columns (e.g., `product_data` with both `title NOT NULL` and
+`description NOT NULL`) and the update API replaces the entire content set in one call, use a full-replace strategy:
+DELETE all existing rows for the parent entity, then INSERT the new set inside the same transaction.
+
+This is simpler and correct when no partial-update edge case exists. Contrast with the two-pass upsert pattern (see
+"Partial upsert with nullable columns") which is needed only when some columns are nullable and callers may omit them
+on a per-language basis.
+
+### Atomic existence check via UPDATE RowsAffected
+
+To verify a resource exists inside a transaction without a separate `SELECT EXISTS` query (which would introduce a
+TOCTOU race), run:
+
+```sql
+UPDATE <table> SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL
+```
+
+Then call `tag.RowsAffected()`. If it returns `0`, no live row matched — return the appropriate domain error (e.g.,
+`ErrProductNotFound`). This is the preferred pattern for any update endpoint that must confirm existence atomically
+before modifying related rows.
+
 ### Product limit enforcement
 
 When a shop has a `max_products` cap, the `Create` method must count non-deleted products (`deleted_at IS NULL`) before

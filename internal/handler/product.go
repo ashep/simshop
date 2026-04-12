@@ -14,6 +14,7 @@ type productService interface {
 	Create(ctx context.Context, req product.CreateRequest) (*product.Product, error)
 	Get(ctx context.Context, id string) (*product.AdminProduct, error)
 	ListByShop(ctx context.Context, shopID string) ([]*product.AdminProduct, error)
+	Update(ctx context.Context, id string, req product.UpdateRequest) error
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -132,4 +133,54 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	if err := h.resp.Write(w, r, http.StatusOK, body); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
+}
+
+func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+	req := product.UpdateRequest{}
+	if err := h.unmarshal(r.Body, &req); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	req.Trim()
+
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		h.writeError(w, &PermissionDeniedError{})
+		return
+	}
+
+	id := r.PathValue("id")
+
+	if !user.IsAdmin() {
+		p, err := h.prod.Get(r.Context(), id)
+		if errors.Is(err, product.ErrProductNotFound) {
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+			return
+		} else if err != nil {
+			h.writeError(w, err)
+			return
+		}
+		if p.ShopOwnerID != user.ID {
+			h.writeError(w, &PermissionDeniedError{})
+			return
+		}
+	}
+
+	if err := h.prod.Update(r.Context(), id, req); err != nil {
+		switch {
+		case errors.Is(err, product.ErrProductNotFound):
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+		case errors.Is(err, product.ErrMissingEnTitle):
+			h.writeError(w, &BadRequestError{Reason: "EN title is required"})
+		case errors.Is(err, product.ErrInvalidLanguage):
+			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
+		default:
+			h.writeError(w, err)
+		}
+		return
+	}
+
+	h.l.Info().Str("product_id", id).Str("user_id", user.ID).Msg("product updated")
+
+	w.WriteHeader(http.StatusOK)
 }

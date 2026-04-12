@@ -189,3 +189,21 @@ func (s *Seeder) GetProduct(t *testing.T, id string) *product.Product {
 
 	return &product.Product{ID: id}
 }
+
+func (s *Seeder) GetProductContent(t *testing.T, productID string) map[string]product.ContentItem {
+	t.Helper()
+
+	content := map[string]product.ContentItem{}
+	rows, err := s.db.Query(t.Context(),
+		"SELECT lang_id, title, description FROM product_data WHERE product_id = $1", productID)
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var lang, title, description string
+		require.NoError(t, rows.Scan(&lang, &title, &description))
+		content[lang] = product.ContentItem{Title: title, Description: description}
+	}
+	require.NoError(t, rows.Err())
+
+	return content
+}

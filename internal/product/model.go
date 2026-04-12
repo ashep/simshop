@@ -12,6 +12,7 @@ var ErrInvalidCountry = errors.New("invalid country id")
 var ErrInvalidLanguage = errors.New("invalid language code")
 var ErrShopProductLimitReached = errors.New("shop product limit reached")
 var ErrProductNotFound = errors.New("product not found")
+var ErrMissingEnTitle = errors.New("EN title is required")
 
 // MissingContentError is returned when the request content map is missing an
 // entry for a language that the target shop has.
@@ -69,4 +70,19 @@ func (r *CreateRequest) Trim() {
 		trimmedPrices[strings.TrimSpace(k)] = v
 	}
 	r.Prices = trimmedPrices
+}
+
+type UpdateRequest struct {
+	Content map[string]ContentItem `json:"content"`
+}
+
+func (r *UpdateRequest) Trim() {
+	trimmed := make(map[string]ContentItem, len(r.Content))
+	for k, v := range r.Content {
+		trimmed[strings.TrimSpace(k)] = ContentItem{
+			Title:       strings.TrimSpace(v.Title),
+			Description: strings.TrimSpace(v.Description),
+		}
+	}
+	r.Content = trimmed
 }

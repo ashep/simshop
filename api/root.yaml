@@ -278,6 +278,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      operationId: updateProduct
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        "200":
+          description: Product updated
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -472,6 +510,21 @@ components:
         id:
           type: string
           format: uuid
+
+    UpdateProductRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: object
+          required:
+            - EN
+          properties:
+            EN:
+              $ref: '#/components/schemas/ProductContentItem'
+          additionalProperties:
+            $ref: '#/components/schemas/ProductContentItem'
 
     GetProductResponse:
       type: object
