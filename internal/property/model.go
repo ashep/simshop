@@ -1,6 +1,9 @@
 package property
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var ErrInvalidLanguage = errors.New("invalid language code")
 var ErrDuplicateTitle = errors.New("title already exists for this language")
@@ -22,4 +25,20 @@ type Property struct {
 
 type CreateResponse struct {
 	ID string `json:"id"`
+}
+
+func (r *CreateRequest) Trim() {
+	trimmed := make(map[string]string, len(r.Titles))
+	for k, v := range r.Titles {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Titles = trimmed
+}
+
+func (r *UpdateRequest) Trim() {
+	trimmed := make(map[string]string, len(r.Titles))
+	for k, v := range r.Titles {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Titles = trimmed
 }

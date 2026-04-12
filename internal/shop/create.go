@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -13,6 +14,21 @@ type CreateRequest struct {
 	Names        map[string]string `json:"names"`
 	Descriptions map[string]string `json:"descriptions"`
 	OwnerID      string            `json:"owner_id"`
+}
+
+func (r *CreateRequest) Trim() {
+	r.ID = strings.TrimSpace(r.ID)
+	r.OwnerID = strings.TrimSpace(r.OwnerID)
+	trimmed := make(map[string]string, len(r.Names))
+	for k, v := range r.Names {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Names = trimmed
+	trimmed = make(map[string]string, len(r.Descriptions))
+	for k, v := range r.Descriptions {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Descriptions = trimmed
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) {

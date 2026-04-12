@@ -40,6 +40,8 @@ Do not run `docker compose` directly — the `task` commands manage containers a
 
 Request processing middleware chain (innermost to outermost): `content-type → auth → openapi validation → handler`.
 
+Each request struct exposes a `Trim()` method that strips leading/trailing whitespace from all string fields (including map keys and values). Handlers call `req.Trim()` immediately after `h.unmarshal()`, before any validation or service call.
+
 Endpoints that are public but return extra fields for authenticated admins use `optionalAuthMw` (from `auth.OptionalMiddleware`). This middleware sets the user in context if a valid API key is present, but does not reject unauthenticated requests. Example: `GET /shops/{id}` uses `optionalAuthMw(openapiMw(hdl.GetShop))`.
 
 Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g., `"POST /shops"`).

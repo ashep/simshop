@@ -1,6 +1,9 @@
 package product
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var ErrShopNotFound = errors.New("shop not found")
 var ErrMissingDefaultPrice = errors.New("default country price is required")
@@ -35,4 +38,21 @@ type CreateRequest struct {
 
 type CreateResponse struct {
 	ID string `json:"id"`
+}
+
+func (r *CreateRequest) Trim() {
+	r.ShopID = strings.TrimSpace(r.ShopID)
+	trimmedContent := make(map[string]ContentItem, len(r.Content))
+	for k, v := range r.Content {
+		trimmedContent[strings.TrimSpace(k)] = ContentItem{
+			Title:       strings.TrimSpace(v.Title),
+			Description: strings.TrimSpace(v.Description),
+		}
+	}
+	r.Content = trimmedContent
+	trimmedPrices := make(map[string]int, len(r.Prices))
+	for k, v := range r.Prices {
+		trimmedPrices[strings.TrimSpace(k)] = v
+	}
+	r.Prices = trimmedPrices
 }

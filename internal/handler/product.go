@@ -20,6 +20,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
+	req.Trim()
 
 	user := auth.GetUserFromContext(r.Context())
 	if user == nil {

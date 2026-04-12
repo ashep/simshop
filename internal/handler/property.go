@@ -39,6 +39,7 @@ func (h *Handler) CreateProperty(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
+	req.Trim()
 
 	p, err := h.prop.Create(r.Context(), req)
 	if err != nil {
@@ -76,6 +77,7 @@ func (h *Handler) UpdateProperty(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
+	req.Trim()
 
 	if err := h.prop.Update(r.Context(), id, req); err != nil {
 		switch {

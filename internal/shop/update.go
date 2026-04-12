@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -11,6 +12,19 @@ import (
 type UpdateRequest struct {
 	Names        map[string]string `json:"names"`
 	Descriptions map[string]string `json:"descriptions"`
+}
+
+func (r *UpdateRequest) Trim() {
+	trimmed := make(map[string]string, len(r.Names))
+	for k, v := range r.Names {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Names = trimmed
+	trimmed = make(map[string]string, len(r.Descriptions))
+	for k, v := range r.Descriptions {
+		trimmed[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	r.Descriptions = trimmed
 }
 
 func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) error {
