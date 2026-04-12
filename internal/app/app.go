@@ -67,6 +67,8 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.CreateProduct))))
 	srv.HandleFunc("PATCH /products/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateProduct))))
+	srv.HandleFunc("PUT /products/{id}/prices", ctypeMw(authMw(openapiMw(hdl.SetProductPrices))))
+	srv.HandleFunc("GET /products/{id}/prices", optionalAuthMw(openapiMw(hdl.GetProductPrice)))
 	srv.HandleFunc("GET /products/{id}", optionalAuthMw(openapiMw(hdl.GetProduct)))
 	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
 	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
