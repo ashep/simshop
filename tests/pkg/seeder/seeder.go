@@ -104,17 +104,23 @@ func (s *Seeder) GetAdminUser(t *testing.T) *auth.User {
 func (s *Seeder) CreateProperty(t *testing.T, titles map[string]string) *property.Property {
 	t.Helper()
 
+	tx, err := s.db.Begin(t.Context())
+	require.NoError(t, err)
+	defer tx.Rollback(t.Context()) //nolint:errcheck
+
 	var propertyID string
-	row := s.db.QueryRow(t.Context(), "INSERT INTO properties DEFAULT VALUES RETURNING id")
+	row := tx.QueryRow(t.Context(), "INSERT INTO properties DEFAULT VALUES RETURNING id")
 	require.NoError(t, row.Scan(&propertyID))
 
 	for lang, title := range titles {
-		_, err := s.db.Exec(t.Context(),
+		_, err := tx.Exec(t.Context(),
 			"INSERT INTO property_titles (property_id, lang_id, title) VALUES ($1, $2, $3)",
 			propertyID, lang, title,
 		)
 		require.NoError(t, err)
 	}
+
+	require.NoError(t, tx.Commit(t.Context()))
 
 	return &property.Property{ID: propertyID, Titles: titles}
 }

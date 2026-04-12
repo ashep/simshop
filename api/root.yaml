@@ -244,7 +244,7 @@ components:
         titles:
           type: object
           required:
-            - en
+            - EN
           additionalProperties:
             type: string
             minLength: 1
@@ -305,7 +305,13 @@ components:
       properties:
         titles:
           type: object
-          minProperties: 1
+          required:
+            - EN
+          properties:
+            EN:
+              type: string
+              minLength: 1
+              maxLength: 100
           additionalProperties:
             type: string
             minLength: 1

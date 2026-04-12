@@ -4,6 +4,7 @@ import "errors"
 
 var ErrInvalidLanguage = errors.New("invalid language code")
 var ErrDuplicateTitle = errors.New("title already exists for this language")
+var ErrMissingEnTitle = errors.New("EN title is required")
 
 type CreateRequest struct {
 	Titles map[string]string `json:"titles"`

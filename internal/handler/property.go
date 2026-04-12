@@ -42,6 +42,8 @@ func (h *Handler) CreateProperty(w http.ResponseWriter, r *http.Request) {
 	p, err := h.prop.Create(r.Context(), req)
 	if err != nil {
 		switch {
+		case errors.Is(err, property.ErrMissingEnTitle):
+			h.writeError(w, &BadRequestError{Reason: "EN title is required"})
 		case errors.Is(err, property.ErrInvalidLanguage):
 			h.writeError(w, &BadRequestError{Reason: "invalid language code"})
 		case errors.Is(err, property.ErrDuplicateTitle):

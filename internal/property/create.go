@@ -15,6 +15,10 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Property, err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if req.Titles["EN"] == "" {
+		return nil, ErrMissingEnTitle
+	}
+
 	var propertyID string
 	if err = tx.QueryRow(ctx,
 		"INSERT INTO properties DEFAULT VALUES RETURNING id",
