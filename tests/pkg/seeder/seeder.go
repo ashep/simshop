@@ -207,3 +207,22 @@ func (s *Seeder) GetProductData(t *testing.T, productID string) map[string]produ
 
 	return data
 }
+
+func (s *Seeder) GetProductPrices(t *testing.T, productID string) map[string]int {
+	t.Helper()
+
+	prices := map[string]int{}
+	rows, err := s.db.Query(t.Context(),
+		"SELECT country_id, value FROM product_prices WHERE product_id = $1", productID)
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var countryID string
+		var value int
+		require.NoError(t, rows.Scan(&countryID, &value))
+		prices[countryID] = value
+	}
+	require.NoError(t, rows.Err())
+
+	return prices
+}
