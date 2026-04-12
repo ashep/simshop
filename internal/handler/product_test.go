@@ -52,6 +52,19 @@ func (m *productServiceMock) Update(ctx context.Context, id string, req product.
 	return args.Error(0)
 }
 
+func (m *productServiceMock) SetPrices(ctx context.Context, id string, prices map[string]int) error {
+	args := m.Called(ctx, id, prices)
+	return args.Error(0)
+}
+
+func (m *productServiceMock) GetPrice(ctx context.Context, id string, countryID string) (*product.PriceResult, error) {
+	args := m.Called(ctx, id, countryID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*product.PriceResult), args.Error(1)
+}
+
 func TestListShopProducts(main *testing.T) {
 	shopID := "myshop"
 	ownerID := "owner-1"

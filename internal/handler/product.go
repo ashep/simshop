@@ -15,6 +15,8 @@ type productService interface {
 	Get(ctx context.Context, id string) (*product.AdminProduct, error)
 	ListByShop(ctx context.Context, shopID string) ([]*product.AdminProduct, error)
 	Update(ctx context.Context, id string, req product.UpdateRequest) error
+	SetPrices(ctx context.Context, id string, prices map[string]int) error
+	GetPrice(ctx context.Context, id string, countryID string) (*product.PriceResult, error)
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
