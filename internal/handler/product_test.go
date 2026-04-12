@@ -371,3 +371,114 @@ func TestUpdateProduct(main *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }
+
+func TestSetProductPrices(main *testing.T) {
+	productID := "018f4e3a-0000-7000-8000-000000000099"
+	ownerID := "owner-1"
+
+	makeAdminProduct := func() *product.AdminProduct {
+		return &product.AdminProduct{
+			PublicProduct: product.PublicProduct{
+				ID:   productID,
+				Data: map[string]product.DataItem{"EN": {Title: "Widget", Description: "Desc"}},
+			},
+			ShopOwnerID: ownerID,
+			CreatedAt:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			UpdatedAt:   time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+		}
+	}
+
+	validBody := `{"prices":{"DEFAULT":1000,"US":999}}`
+
+	doRequest := func(t *testing.T, prodSvc *productServiceMock, user *auth.User) *httptest.ResponseRecorder {
+		t.Helper()
+		h := &Handler{prod: prodSvc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPut, "/products/"+productID+"/prices", strings.NewReader(validBody))
+		r.SetPathValue("id", productID)
+		if user != nil {
+			r = r.WithContext(auth.ContextWithUser(r.Context(), user))
+		}
+		w := httptest.NewRecorder()
+		h.SetProductPrices(w, r)
+		return w
+	}
+
+	main.Run("Unauthenticated", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+
+		w := doRequest(t, prodSvc, nil)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("NonOwnerForbidden", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeAdminProduct(), nil)
+
+		other := &auth.User{ID: "other-user", Scopes: nil}
+		w := doRequest(t, prodSvc, other)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("ProductNotFoundForNonAdmin", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(nil, product.ErrProductNotFound)
+
+		other := &auth.User{ID: "other-user", Scopes: nil}
+		w := doRequest(t, prodSvc, other)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"product not found"}`, w.Body.String())
+	})
+
+	main.Run("ProductNotFoundOnSet", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("SetPrices", mock.Anything, productID, mock.Anything).Return(product.ErrProductNotFound)
+
+		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+		w := doRequest(t, prodSvc, admin)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"product not found"}`, w.Body.String())
+	})
+
+	main.Run("InvalidCountry", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("SetPrices", mock.Anything, productID, mock.Anything).Return(&product.InvalidCountryError{Country: "ZZ"})
+
+		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+		w := doRequest(t, prodSvc, admin)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid country code: ZZ"}`, w.Body.String())
+	})
+
+	main.Run("AdminSuccess", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("SetPrices", mock.Anything, productID, mock.Anything).Return(nil)
+
+		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+		w := doRequest(t, prodSvc, admin)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("ShopOwnerSuccess", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeAdminProduct(), nil)
+		prodSvc.On("SetPrices", mock.Anything, productID, mock.Anything).Return(nil)
+
+		owner := &auth.User{ID: ownerID, Scopes: nil}
+		w := doRequest(t, prodSvc, owner)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}

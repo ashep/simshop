@@ -182,3 +182,50 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+func (h *Handler) SetProductPrices(w http.ResponseWriter, r *http.Request) {
+	req := product.SetPricesRequest{}
+	if err := h.unmarshal(r.Body, &req); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	req.Trim()
+
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		h.writeError(w, &PermissionDeniedError{})
+		return
+	}
+
+	id := r.PathValue("id")
+
+	if !user.IsAdmin() {
+		p, err := h.prod.Get(r.Context(), id)
+		if errors.Is(err, product.ErrProductNotFound) {
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+			return
+		} else if err != nil {
+			h.writeError(w, err)
+			return
+		}
+		if p.ShopOwnerID != user.ID {
+			h.writeError(w, &PermissionDeniedError{})
+			return
+		}
+	}
+
+	if err := h.prod.SetPrices(r.Context(), id, req.Prices); err != nil {
+		switch {
+		case errors.Is(err, product.ErrProductNotFound):
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+		case errors.As(err, new(*product.InvalidCountryError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
+		default:
+			h.writeError(w, err)
+		}
+		return
+	}
+
+	h.l.Info().Str("product_id", id).Str("user_id", user.ID).Msg("product prices updated")
+	w.WriteHeader(http.StatusOK)
+}
