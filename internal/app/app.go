@@ -12,6 +12,7 @@ import (
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/property"
 	"github.com/ashep/simshop/internal/shop"
 	appsql "github.com/ashep/simshop/internal/sql"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,6 +43,7 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	shopSvc := shop.NewService(db, l)
 	prodSvc := product.NewService(db, l)
+	propSvc := property.NewService(db, l)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
@@ -50,7 +52,7 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	authSvc := auth.NewService(db)
 
-	hdl := handler.NewHandler(shopSvc, prodSvc, openAPI.Responder(), l)
+	hdl := handler.NewHandler(shopSvc, prodSvc, propSvc, openAPI.Responder(), l)
 	authMw := auth.Middleware(authSvc)
 	optionalAuthMw := auth.OptionalMiddleware(authSvc)
 	ctypeMw := contenttype.Middleware()
@@ -64,6 +66,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("PATCH /shops/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateShop))))
 
 	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.ProductCreate))))
+	srv.HandleFunc("POST /properties", ctypeMw(authMw(openapiMw(hdl.PropertyCreate))))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

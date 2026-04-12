@@ -109,6 +109,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /properties:
+    post:
+      operationId: createProperty
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePropertyRequest'
+      responses:
+        "201":
+          description: Property created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePropertyResponse'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
   /products:
     post:
       operationId: createProduct
@@ -233,6 +265,27 @@ components:
           type: object
           additionalProperties:
             type: string
+
+    CreatePropertyRequest:
+      type: object
+      required:
+        - titles
+      properties:
+        titles:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            type: string
+            minLength: 1
+
+    CreatePropertyResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
 
     ProductContentItem:
       type: object
