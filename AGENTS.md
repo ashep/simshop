@@ -136,8 +136,8 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 ### Rules
 
 - Before implementing any feature or fix, invoke the `superpowers:test-driven-development` skill.
-- Before claiming any work is done, invoke the `superpowers:verification-before-completion` skill and run the relevant
-  tests.
+- Before claiming any work is done, invoke the `superpowers:verification-before-completion` skill and run **both**
+  `task go:test:unit -- ./...` and `task go:test:func -- -v`. Both suites must pass — running only one is not sufficient.
 - Do not consider a task complete until tests pass. Do not respond with a summary of changes before running tests.
 - Group related tests under a single parent function `TestFoo(main *testing.T)` and use `main.Run("CaseName", ...)` for
   sub-tests. Never write separate top-level functions like `TestFoo_CaseName`.

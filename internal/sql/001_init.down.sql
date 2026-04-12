@@ -1,5 +1,5 @@
-DROP TABLE IF EXISTS product_property_values;
-DROP TABLE IF EXISTS property_names;
+DROP TABLE IF EXISTS property_values;
+DROP TABLE IF EXISTS property_titles;
 DROP TABLE IF EXISTS properties;
 DROP TABLE IF EXISTS product_data;
 DROP TABLE IF EXISTS product_prices;

@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS product_prices
 (
     product_id uuid NOT NULL REFERENCES products (id),
     country_id TEXT NOT NULL REFERENCES countries (id),
-    value INT NOT NULL,
+    value      INT  NOT NULL,
     PRIMARY KEY (product_id, country_id)
 );
 
@@ -111,19 +111,20 @@ CREATE TABLE IF NOT EXISTS properties
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7()
 );
 
-CREATE TABLE IF NOT EXISTS property_names
+CREATE TABLE IF NOT EXISTS property_titles
 (
     property_id uuid NOT NULL REFERENCES properties (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),
-    name        TEXT NOT NULL CHECK ( length(name) > 0 ),
+    title       TEXT NOT NULL CHECK ( length(title) > 0 ),
     PRIMARY KEY (property_id, lang_id)
 );
 
 
-CREATE TABLE IF NOT EXISTS product_property_values
+CREATE TABLE IF NOT EXISTS property_values
 (
     product_id  uuid NOT NULL REFERENCES products (id),
     property_id uuid NOT NULL REFERENCES properties (id),
+    ordering    INT  NOT NULL DEFAULT 0,
     value       TEXT NOT NULL,
     price_add   INT,
     PRIMARY KEY (product_id, property_id)
