@@ -42,7 +42,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Shop, error) 
 			desc = &d
 		}
 		if _, err = tx.Exec(ctx,
-			"INSERT INTO shop_metadata (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
+			"INSERT INTO shop_data (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
 			req.ID, lang, name, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError

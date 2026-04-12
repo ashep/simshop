@@ -27,19 +27,19 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 			desc = &d
 		}
 		if _, err = tx.Exec(ctx,
-			`INSERT INTO shop_metadata (shop_id, lang_id, name, description)
+			`INSERT INTO shop_data (shop_id, lang_id, name, description)
 			 VALUES ($1, $2, $3, $4)
 			 ON CONFLICT (shop_id, lang_id) DO UPDATE
 			 SET name = excluded.name,
-			     description = COALESCE(excluded.description, shop_metadata.description)`,
+			     description = COALESCE(excluded.description, shop_data.description)`,
 			id, lang, name, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 				switch pgErr.ConstraintName {
-				case "shop_metadata_shop_id_fkey":
+				case "shop_data_shop_id_fkey":
 					return ErrShopNotFound
-				case "shop_metadata_lang_id_fkey":
+				case "shop_data_lang_id_fkey":
 					return ErrInvalidLanguage
 				}
 			}
@@ -55,7 +55,7 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 		d := desc
 		var tag pgconn.CommandTag
 		if tag, err = tx.Exec(ctx,
-			`UPDATE shop_metadata SET description = $1 WHERE shop_id = $2 AND lang_id = $3`,
+			`UPDATE shop_data SET description = $1 WHERE shop_id = $2 AND lang_id = $3`,
 			&d, id, lang,
 		); err != nil {
 			return fmt.Errorf("update shop description: %w", err)

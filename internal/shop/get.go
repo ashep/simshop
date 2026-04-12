@@ -10,7 +10,7 @@ func (s *Service) Get(ctx context.Context, id string) (*AdminShop, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT s.id, s.owner_id, s.created_at, s.updated_at, sn.lang_id, sn.name, sn.description
 		FROM shops s
-		LEFT JOIN shop_metadata sn ON sn.shop_id = s.id
+		LEFT JOIN shop_data sn ON sn.shop_id = s.id
 		WHERE s.id = $1
 	`, id)
 	if err != nil {

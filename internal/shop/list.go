@@ -9,7 +9,7 @@ func (s *Service) List(ctx context.Context) ([]Shop, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT s.id, sn.lang_id, sn.name, sn.description
 		FROM shops s
-		LEFT JOIN shop_metadata sn ON sn.shop_id = s.id
+		LEFT JOIN shop_data sn ON sn.shop_id = s.id
 		ORDER BY s.id
 	`)
 	if err != nil {

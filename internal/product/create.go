@@ -15,7 +15,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 	rows, err := s.db.Query(ctx, `
 		SELECT sn.lang_id
 		FROM shops s
-		LEFT JOIN shop_metadata sn ON sn.shop_id = s.id
+		LEFT JOIN shop_data sn ON sn.shop_id = s.id
 		WHERE s.id = $1
 	`, req.ShopID)
 	if err != nil {

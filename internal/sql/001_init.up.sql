@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS shops
     deleted_at TIMESTAMP WITHOUT TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS shop_metadata
+CREATE TABLE IF NOT EXISTS shop_data
 (
     shop_id     TEXT NOT NULL REFERENCES shops (id),
     lang_id     TEXT NOT NULL REFERENCES languages (id),

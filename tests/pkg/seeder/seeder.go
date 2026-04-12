@@ -53,7 +53,7 @@ func (s *Seeder) CreateShop(t *testing.T, id string, ownerID string, names map[s
 			desc = &d
 		}
 		_, err = s.db.Exec(t.Context(),
-			"INSERT INTO shop_metadata (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
+			"INSERT INTO shop_data (shop_id, lang_id, name, description) VALUES ($1, $2, $3, $4)",
 			id, lang, name, desc,
 		)
 		require.NoError(t, err)
@@ -70,7 +70,7 @@ func (s *Seeder) GetShop(t *testing.T, id string) *shop.Shop {
 	require.NoError(t, err)
 	require.Equal(t, 1, count, "shop %q not found in db", id)
 
-	rows, err := s.db.Query(t.Context(), "SELECT lang_id, name, description FROM shop_metadata WHERE shop_id = $1", id)
+	rows, err := s.db.Query(t.Context(), "SELECT lang_id, name, description FROM shop_data WHERE shop_id = $1", id)
 	require.NoError(t, err)
 	defer rows.Close()
 	for rows.Next() {

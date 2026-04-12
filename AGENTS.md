@@ -60,9 +60,19 @@ understand the requirements.
 
 ### Database migrations
 
+**Modify existing migration files in place** — never create a new numbered migration file to alter an existing schema. If the schema needs a change (rename a table, add a column), edit the existing `xxx_init.up.sql` and its matching `xxx_init.down.sql` directly. Creating a separate `002_rename.up.sql` is wrong.
+
 Whenever an `xxx-up` migration is created or modified, always update the corresponding `xxx-down` migration to drop
 all objects added by the up migration, in reverse dependency order (child tables before parent tables). Never leave the
 down migration out of sync with the up migration.
+
+### Partial upsert with nullable columns
+
+When a table has a NOT NULL column (e.g., `name`) and an optional column (e.g., `description`), and the update API allows updating each independently, use a two-pass approach:
+
+**Pass 1** — Upsert rows that include a `name`. Use `ON CONFLICT DO UPDATE SET name = excluded.name, description = COALESCE(excluded.description, table.description)` so that an omitted description preserves the existing value.
+
+**Pass 2** — For description-only entries (no `name` provided for that language), use a plain `UPDATE` and check `tag.RowsAffected() == 0`. A zero count means no row exists for that language yet, so return the appropriate domain error (e.g., `ErrInvalidLanguage`) rather than silently doing nothing. A bare INSERT would violate the NOT NULL constraint on `name`.
 
 ### Language validation
 
