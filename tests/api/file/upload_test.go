@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ashep/simshop/tests/pkg/seeder"
@@ -61,7 +63,16 @@ func TestUploadFile(main *testing.T) {
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.NotEmpty(t, body["id"])
+		id, ok := body["id"].(string)
+		require.True(t, ok, "id must be a string")
+		assert.NotEmpty(t, id)
+		assert.Equal(t, "my-file", body["name"])
+		assert.Equal(t, "image/jpeg", body["mime_type"])
+		assert.Equal(t, "/files/"+id+"/my-file", body["path"])
+		assert.Contains(t, body, "created_at")
+		assert.NotNil(t, body["created_at"])
+		assert.Contains(t, body, "updated_at")
+		assert.NotNil(t, body["updated_at"])
 	})
 
 	main.Run("Success_RegularUser", func(t *testing.T) {
@@ -71,7 +82,16 @@ func TestUploadFile(main *testing.T) {
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.NotEmpty(t, body["id"])
+		id, ok := body["id"].(string)
+		require.True(t, ok, "id must be a string")
+		assert.NotEmpty(t, id)
+		assert.Equal(t, "my-file", body["name"])
+		assert.Equal(t, "image/jpeg", body["mime_type"])
+		assert.Equal(t, "/files/"+id+"/my-file", body["path"])
+		assert.Contains(t, body, "created_at")
+		assert.NotNil(t, body["created_at"])
+		assert.Contains(t, body, "updated_at")
+		assert.NotNil(t, body["updated_at"])
 	})
 
 	main.Run("Forbidden_Unauthenticated", func(t *testing.T) {
@@ -162,5 +182,21 @@ func TestUploadFile(main *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		assert.NotEmpty(t, body["id"])
+		assert.NotEmpty(t, body["path"])
+	})
+
+	main.Run("FileMaterialized", func(t *testing.T) {
+		t.Parallel()
+		resp := doUpload(t, jpegData, "photo.jpg", "my-photo", admin.APIKey)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		id, ok := body["id"].(string)
+		require.True(t, ok, "id must be a string")
+		expectedDiskPath := filepath.Join(app.PublicDir(), "files", id, "my-photo")
+		_, err := os.Stat(expectedDiskPath)
+		assert.NoError(t, err, "file should exist on disk at %s", expectedDiskPath)
+		assert.Equal(t, "/files/"+id+"/my-photo", body["path"])
 	})
 }

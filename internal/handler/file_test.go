@@ -24,12 +24,12 @@ type fileServiceMock struct {
 	mock.Mock
 }
 
-func (m *fileServiceMock) Upload(ctx context.Context, req file.UploadRequest) (*file.File, error) {
+func (m *fileServiceMock) Upload(ctx context.Context, req file.UploadRequest) (*file.FileInfo, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*file.File), args.Error(1)
+	return args.Get(0).(*file.FileInfo), args.Error(1)
 }
 
 func (m *fileServiceMock) GetForProduct(ctx context.Context, productID string) ([]file.FileInfo, error) {
@@ -196,15 +196,46 @@ func TestUploadFile(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		fileSvc := &fileServiceMock{}
 		defer fileSvc.AssertExpectations(t)
+		now := time.Now().UTC().Truncate(time.Second)
 		fileSvc.On("Upload", mock.Anything, mock.MatchedBy(func(req file.UploadRequest) bool {
 			return req.Name == "my-file" && req.OwnerID == admin.ID && req.MimeType == "image/jpeg"
-		})).Return(&file.File{ID: "018f4e3a-0000-7000-8000-000000000001"}, nil)
+		})).Return(&file.FileInfo{
+			ID:        "018f4e3a-0000-7000-8000-000000000001",
+			Name:      "my-file",
+			MimeType:  "image/jpeg",
+			SizeBytes: len(jpegData),
+			Path:      "/files/018f4e3a-0000-7000-8000-000000000001/my-file",
+			CreatedAt: now,
+			UpdatedAt: now,
+		}, nil)
 
 		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
-		assert.JSONEq(t, `{"id":"018f4e3a-0000-7000-8000-000000000001"}`, w.Body.String())
+		var resp map[string]any
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000001", resp["id"])
+		assert.Equal(t, "my-file", resp["name"])
+		assert.Equal(t, "image/jpeg", resp["mime_type"])
+		assert.Equal(t, float64(len(jpegData)), resp["size_bytes"])
+		assert.Equal(t, "/files/018f4e3a-0000-7000-8000-000000000001/my-file", resp["path"])
+		assert.Contains(t, resp, "created_at")
+		assert.NotNil(t, resp["created_at"])
+		assert.Contains(t, resp, "updated_at")
+		assert.NotNil(t, resp["updated_at"])
+	})
+
+	main.Run("MaterializationError", func(t *testing.T) {
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("Upload", mock.Anything, mock.Anything).
+			Return(nil, errors.New("stat file: permission denied"))
+
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
+		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 

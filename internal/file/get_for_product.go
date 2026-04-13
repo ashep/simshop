@@ -2,11 +2,7 @@ package file
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 )
 
 func (s *Service) GetForProduct(ctx context.Context, productID string) ([]FileInfo, error) {
@@ -32,21 +28,11 @@ func (s *Service) GetForProduct(ctx context.Context, productID string) ([]FileIn
 			return nil, fmt.Errorf("scan file row: %w", err)
 		}
 
-		diskPath := filepath.Join(s.publicDir, "files", fi.ID, fi.Name)
-		if _, statErr := os.Stat(diskPath); statErr != nil {
-			if !errors.Is(statErr, fs.ErrNotExist) {
-				return nil, fmt.Errorf("stat file: %w", statErr)
-			}
-			dirPath := filepath.Join(s.publicDir, "files", fi.ID)
-			if err := os.MkdirAll(dirPath, 0755); err != nil {
-				return nil, fmt.Errorf("create file dir: %w", err)
-			}
-			if err := os.WriteFile(diskPath, data, 0644); err != nil {
-				return nil, fmt.Errorf("write file to disk: %w", err)
-			}
+		path, err := s.materialize(fi.ID, fi.Name, data)
+		if err != nil {
+			return nil, fmt.Errorf("materialize file %s: %w", fi.ID, err)
 		}
-
-		fi.Path = "/files/" + fi.ID + "/" + fi.Name
+		fi.Path = path
 		result = append(result, fi)
 	}
 	if err := rows.Err(); err != nil {

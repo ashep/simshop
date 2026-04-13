@@ -769,10 +769,31 @@ components:
       type: object
       required:
         - id
+        - name
+        - mime_type
+        - size_bytes
+        - path
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
           format: uuid
+        name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+        path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     ProductFileItem:
       type: object

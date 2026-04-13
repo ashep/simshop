@@ -1,8 +1,10 @@
 .ci
 .claude
 .idea
+.worktrees
+
+config.yml
 /docs
+/public
 /tmp
 /vendor
-config.yml
-.worktrees

@@ -78,6 +78,17 @@ File uploads use `multipart/form-data` with field name `file`. Handler flow:
    filename — both are client-controlled and untrustworthy).
 5. Seek back to start with `f.Seek(0, io.SeekStart)` before reading the full file with `io.ReadAll`.
 
+Apply `filepath.Base` to the `name` field immediately after `TrimSpace` to strip any directory components that could
+cause path traversal. Check `name == "" || name == "."` (not just `name == ""`) to reject the degenerate base case
+`filepath.Base("")` returns `"."`.
+
+### File materialization ordering
+
+In `Upload`, commit the DB transaction **before** calling `materialize`. This is the safe failure direction: if
+materialization fails after commit, the row persists in the DB and `GetForProduct` can re-materialize from the stored
+`data` column on next read. The reverse order (materialize → commit) risks an orphan file if commit fails after the
+disk write.
+
 ### Circular import: handler ↔ app
 
 `internal/app` imports `internal/handler`; therefore `internal/handler` must never import `internal/app`. When the
@@ -191,6 +202,58 @@ resource owner (e.g. the shop owner for a product). Admins skip this check. Pass
 struct (following the `file.UploadRequest.IsAdmin` pattern) so the service can branch on it without depending on
 `internal/auth`.
 
+### File materialization in service layer
+
+When a service method materializes files from the database onto disk, use `errors.Is(statErr, fs.ErrNotExist)` (not
+`os.IsNotExist`) to distinguish "file missing" from other `os.Stat` failures (e.g., permission denied). The full
+pattern:
+
+```go
+if _, statErr := os.Stat(diskPath); statErr != nil {
+    if !errors.Is(statErr, fs.ErrNotExist) {
+        return nil, fmt.Errorf("stat file: %w", statErr)
+    }
+    // materialize: MkdirAll + WriteFile
+}
+```
+
+Silently swallowing non-ENOENT stat errors with the old `os.IsNotExist(err)` guard means broken static asset URLs when
+the filesystem is inaccessible — always propagate unexpected errors.
+
+When materialization logic is needed in multiple methods within the same service, extract it into a private helper
+method like `s.materialize(id, name, data) (path string, error)`. This method returns the URL-relative path
+(e.g., `/files/{id}/{name}`) after writing the file to disk if needed. Reusing the helper prevents duplication and
+ensures consistent behavior across `GetForProduct()`, `Upload()`, and similar methods.
+
+### Upload response vs listing response types in file package
+
+The `file` package separates internal and JSON types deliberately:
+
+- `FileInfo` — internal record returned by `Upload()` and `GetForProduct()`; no JSON tags.
+- `UploadResponse` — JSON shape for `POST /files` response (all 7 fields including `created_at`/`updated_at`).
+- `PublicFileItem` / `AdminFileItem` — JSON shapes for listing endpoints that shape output differently per caller.
+
+The DB `INSERT INTO files ... RETURNING id, created_at, updated_at` is the canonical way to capture the server-assigned
+timestamps without a second round-trip. The `Upload()` service method materializes the file to disk *after* the INSERT,
+so `path` is derived in the service layer and never stored in the DB.
+
+### Transactional upload with deferred materialization
+
+The `file.Service.Upload()` method must wrap the INSERT and `materialize()` call inside a single DB transaction. If
+materialization fails (disk full, permission denied), the transaction is rolled back and the orphaned DB row is
+removed. Pre-transaction checks (e.g., file count limit) run on the pool connection before `tx := s.db.Begin()`.
+
+The pattern:
+1. Run pre-transaction validation (counts, limits) on `s.db` (not `tx`).
+2. `tx, err := s.db.Begin(ctx)` — start transaction.
+3. `defer tx.Rollback(ctx) //nolint:errcheck` — safe even after successful commit; pgx ignores the error.
+4. Run INSERT with `tx.QueryRow()` and scan result.
+5. Call `s.materialize()` — if this fails, the deferred rollback cleans up the INSERT.
+6. `tx.Commit(ctx)` — only if both INSERT and materialize succeed.
+
+The `//nolint:errcheck` comment suppresses the linter because rollback-after-commit returns an error that is expected
+and harmless.
+
 ### SQL migration table ordering
 
 Tables must be defined in dependency order: a table referencing another must come after it. When adding or reordering
@@ -283,4 +346,7 @@ path (body too large to even parse) can safely omit `name`.
   present) and `assert.NotNil` (value non-null). Use `assert.Contains` alone only for nullable fields like `owner_id`.
 - When testing response body shape, assert the `names` map value directly (e.g., `names["en"]`) rather than only
   checking the field exists, so the test catches serialization regressions.
+- For computed fields with a known format (e.g., `path: "/files/{uuid}/{name}"`), extract and assert the exact format
+  rather than just checking non-emptiness. Type-assert dependent values first (e.g., `id, ok := body["id"].(string)`)
+  to avoid malformed data slipping through tests.
 

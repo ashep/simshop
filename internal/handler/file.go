@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/ashep/simshop/internal/auth"
@@ -13,7 +14,7 @@ import (
 )
 
 type fileService interface {
-	Upload(ctx context.Context, req file.UploadRequest) (*file.File, error)
+	Upload(ctx context.Context, req file.UploadRequest) (*file.FileInfo, error)
 	GetForProduct(ctx context.Context, productID string) ([]file.FileInfo, error)
 }
 
@@ -105,8 +106,8 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
+	name := filepath.Base(strings.TrimSpace(r.FormValue("name")))
+	if name == "" || name == "." {
 		h.writeError(w, &BadRequestError{Reason: "name field is required"})
 		return
 	}
@@ -162,7 +163,15 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	h.l.Info().Str("file_id", result.ID).Str("user_id", user.ID).Msg("file uploaded")
 
-	if err := h.resp.Write(w, r, http.StatusCreated, &file.UploadResponse{ID: result.ID}); err != nil {
+	if err := h.resp.Write(w, r, http.StatusCreated, &file.UploadResponse{
+		ID:        result.ID,
+		Name:      result.Name,
+		MimeType:  result.MimeType,
+		SizeBytes: result.SizeBytes,
+		Path:      result.Path,
+		CreatedAt: result.CreatedAt,
+		UpdatedAt: result.UpdatedAt,
+	}); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
 }

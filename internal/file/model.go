@@ -7,10 +7,6 @@ import (
 
 var ErrFileLimitReached = errors.New("file limit reached")
 
-type File struct {
-	ID string
-}
-
 type UploadRequest struct {
 	OwnerID  string
 	Name     string
@@ -21,10 +17,16 @@ type UploadRequest struct {
 }
 
 type UploadResponse struct {
-	ID string `json:"id"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	MimeType  string    `json:"mime_type"`
+	SizeBytes int       `json:"size_bytes"`
+	Path      string    `json:"path"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// FileInfo is the internal record returned by GetForProduct.
+// FileInfo is the internal record returned by Upload and GetForProduct.
 type FileInfo struct {
 	ID        string
 	Name      string
