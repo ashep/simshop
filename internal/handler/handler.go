@@ -51,20 +51,35 @@ func (e *NotFoundError) Error() string {
 }
 
 type Handler struct {
-	shop shopService
-	prod productService
-	prop propertyService
-	resp *openapi.Responder
-	l    zerolog.Logger
+	shop           shopService
+	prod           productService
+	prop           propertyService
+	file           fileService
+	fileMaxSize    int
+	fileAllowedMTs []string
+	resp           *openapi.Responder
+	l              zerolog.Logger
 }
 
-func NewHandler(shop shopService, prod productService, prop propertyService, resp *openapi.Responder, l zerolog.Logger) *Handler {
+func NewHandler(
+	shop shopService,
+	prod productService,
+	prop propertyService,
+	file fileService,
+	fileMaxSize int,
+	fileAllowedMTs []string,
+	resp *openapi.Responder,
+	l zerolog.Logger,
+) *Handler {
 	return &Handler{
-		shop: shop,
-		prod: prod,
-		prop: prop,
-		resp: resp,
-		l:    l,
+		shop:           shop,
+		prod:           prod,
+		prop:           prop,
+		file:           file,
+		fileMaxSize:    fileMaxSize,
+		fileAllowedMTs: fileAllowedMTs,
+		resp:           resp,
+		l:              l,
 	}
 }
 

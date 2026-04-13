@@ -1,0 +1,95 @@
+package handler
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+
+	"github.com/ashep/simshop/internal/auth"
+	"github.com/ashep/simshop/internal/file"
+)
+
+type fileService interface {
+	Upload(ctx context.Context, req file.UploadRequest) (*file.File, error)
+}
+
+func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		h.writeError(w, &PermissionDeniedError{})
+		return
+	}
+
+	maxSize := int64(h.fileMaxSize)
+	if err := r.ParseMultipartForm(maxSize); err != nil {
+		h.writeError(w, &BadRequestError{Reason: "failed to parse multipart form"})
+		return
+	}
+
+	f, fh, err := r.FormFile("file")
+	if err != nil {
+		h.writeError(w, &BadRequestError{Reason: "file field is required"})
+		return
+	}
+	defer f.Close()
+
+	if fh.Size > maxSize {
+		h.writeError(w, &BadRequestError{Reason: "file too large"})
+		return
+	}
+
+	// Read first 512 bytes for MIME sniffing.
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		h.writeError(w, err)
+		return
+	}
+	mimeType := http.DetectContentType(buf[:n])
+
+	allowed := false
+	for _, t := range h.fileAllowedMTs {
+		if t == mimeType {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		h.writeError(w, &BadRequestError{Reason: "unsupported file type"})
+		return
+	}
+
+	// Seek back to start, then read full content.
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	result, err := h.file.Upload(r.Context(), file.UploadRequest{
+		OwnerID:  user.ID,
+		MimeType: mimeType,
+		Size:     len(data),
+		Data:     data,
+		IsAdmin:  user.IsAdmin(),
+	})
+	if err != nil {
+		if errors.Is(err, file.ErrFileLimitReached) {
+			h.writeError(w, &ConflictError{Reason: "file limit reached"})
+		} else {
+			h.writeError(w, err)
+		}
+		return
+	}
+
+	h.l.Info().Str("file_id", result.ID).Str("user_id", user.ID).Msg("file uploaded")
+
+	if err := h.resp.Write(w, r, http.StatusCreated, &file.UploadResponse{ID: result.ID}); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
+}

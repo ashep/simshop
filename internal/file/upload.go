@@ -14,7 +14,7 @@ func (s *Service) Upload(ctx context.Context, req UploadRequest) (*File, error) 
 		).Scan(&count); err != nil {
 			return nil, fmt.Errorf("count user files: %w", err)
 		}
-		if count >= s.cfg.MaxNumPerUser {
+		if count >= s.maxNumPerUser {
 			return nil, ErrFileLimitReached
 		}
 	}
