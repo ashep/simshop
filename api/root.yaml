@@ -2,7 +2,7 @@ openapi: "3.0.0"
 
 info:
   title: SimShop API
-  version: "0.2.0"
+  version: "0.3.0"
 
 paths:
   /products:
@@ -18,32 +18,104 @@ paths:
 
 components:
   schemas:
-    ProductDataItem:
+    SpecItem:
       type: object
       required:
         - title
-        - description
+        - value
       properties:
         title:
           type: string
-          minLength: 1
-        description:
+        value:
           type: string
-          minLength: 1
+
+    PriceItem:
+      type: object
+      required:
+        - currency
+        - value
+      properties:
+        currency:
+          type: string
+        value:
+          type: number
+
+    AttrValue:
+      type: object
+      required:
+        - title
+        - add_price
+      properties:
+        title:
+          type: string
+        add_price:
+          type: number
+
+    AttrLang:
+      type: object
+      required:
+        - title
+        - values
+      properties:
+        title:
+          type: string
+        values:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AttrValue'
+
+    ImageItem:
+      type: object
+      required:
+        - preview
+        - full
+      properties:
+        preview:
+          type: string
+        full:
+          type: string
 
     GetProductResponse:
       type: object
       required:
         - id
-        - data
+        - name
+        - description
+        - price
       properties:
         id:
           type: string
-          format: uuid
-        data:
+        name:
           type: object
           additionalProperties:
-            $ref: '#/components/schemas/ProductDataItem'
+            type: string
+        description:
+          type: object
+          additionalProperties:
+            type: string
+        specs:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/SpecItem'
+        price:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PriceItem'
+        attrs:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/AttrLang'
+        images:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ImageItem'
 
     ListProductsResponse:
       type: array

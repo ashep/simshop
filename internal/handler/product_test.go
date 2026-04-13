@@ -57,8 +57,10 @@ func TestListProducts(main *testing.T) {
 		defer prodSvc.AssertExpectations(t)
 		prodSvc.On("List", mock.Anything).Return([]*product.Product{
 			{
-				ID:   "018f4e3a-0000-7000-8000-000000000099",
-				Data: map[string]product.DataItem{"EN": {Title: "Widget", Description: "A widget"}},
+				ID:          "widget",
+				Name:        map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A widget"},
+				Price:       map[string]product.PriceItem{"default": {Currency: "EUR", Value: 10}},
 			},
 		}, nil)
 
@@ -68,6 +70,6 @@ func TestListProducts(main *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		require.Len(t, body, 1)
-		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000099", body[0]["id"])
+		assert.Equal(t, "widget", body[0]["id"])
 	})
 }

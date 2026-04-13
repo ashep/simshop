@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ashep/simshop/internal/product"
 	"gopkg.in/yaml.v3"
@@ -19,7 +18,7 @@ type Catalog struct {
 
 // Load reads data_dir, returning a populated Catalog.
 // A missing data_dir is not an error — it results in an empty catalog.
-// A malformed YAML file is a fatal error.
+// A malformed YAML file or a validation error is fatal.
 func Load(dataDir string) (*Catalog, error) {
 	c := &Catalog{}
 
@@ -40,11 +39,12 @@ func loadProducts(dataDir string, c *Catalog) error {
 	}
 
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+		if !e.IsDir() {
 			continue
 		}
-		id := strings.TrimSuffix(e.Name(), ".yaml")
-		p, err := loadProduct(filepath.Join(prodsDir, e.Name()), id)
+		id := e.Name()
+		prodDir := filepath.Join(prodsDir, id)
+		p, err := loadProduct(prodDir, id)
 		if err != nil {
 			return fmt.Errorf("load product %s: %w", id, err)
 		}
@@ -53,8 +53,8 @@ func loadProducts(dataDir string, c *Catalog) error {
 	return nil
 }
 
-func loadProduct(path, id string) (*product.Product, error) {
-	data, err := os.ReadFile(path)
+func loadProduct(dir, id string) (*product.Product, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "product.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
@@ -65,5 +65,98 @@ func loadProduct(path, id string) (*product.Product, error) {
 	}
 	p.ID = id
 
+	if err := validate(&p, dir); err != nil {
+		return nil, err
+	}
+
+	for i, img := range p.Images {
+		if img.Preview != "" {
+			p.Images[i].Preview = "/images/" + id + "/" + img.Preview
+		}
+		if img.Full != "" {
+			p.Images[i].Full = "/images/" + id + "/" + img.Full
+		}
+	}
+
 	return &p, nil
+}
+
+func validate(p *product.Product, dir string) error {
+	if len(p.Name) == 0 {
+		return fmt.Errorf("name is required")
+	}
+	if len(p.Description) == 0 {
+		return fmt.Errorf("description is required")
+	}
+
+	// All languages in name must appear in description and vice versa.
+	for lang := range p.Name {
+		if _, ok := p.Description[lang]; !ok {
+			return fmt.Errorf("description missing language %q (defined in name)", lang)
+		}
+	}
+	for lang := range p.Description {
+		if _, ok := p.Name[lang]; !ok {
+			return fmt.Errorf("description has extra language %q not present in name", lang)
+		}
+	}
+
+	// Each spec must carry all languages defined in name.
+	for specKey, spec := range p.Specs {
+		for lang := range p.Name {
+			if _, ok := spec[lang]; !ok {
+				return fmt.Errorf("spec %q missing language %q", specKey, lang)
+			}
+		}
+		for lang := range spec {
+			if _, ok := p.Name[lang]; !ok {
+				return fmt.Errorf("spec %q has extra language %q not present in name", specKey, lang)
+			}
+		}
+	}
+
+	// Price must always define the "default" key.
+	if _, ok := p.Price["default"]; !ok {
+		return fmt.Errorf("price must define a \"default\" key")
+	}
+
+	// Each attr must carry all languages defined in name, and each language entry
+	// must have at least one value.
+	for attrKey, attr := range p.Attrs {
+		for lang := range p.Name {
+			attrLang, ok := attr[lang]
+			if !ok {
+				return fmt.Errorf("attr %q missing language %q", attrKey, lang)
+			}
+			if len(attrLang.Values) == 0 {
+				return fmt.Errorf("attr %q language %q has no values", attrKey, lang)
+			}
+		}
+		for lang := range attr {
+			if _, ok := p.Name[lang]; !ok {
+				return fmt.Errorf("attr %q has extra language %q not present in name", attrKey, lang)
+			}
+		}
+	}
+
+	// All image paths must exist on disk relative to the product's images directory.
+	imagesDir := filepath.Join(dir, "images")
+	for i, img := range p.Images {
+		if img.Preview != "" {
+			if _, statErr := os.Stat(filepath.Join(imagesDir, img.Preview)); errors.Is(statErr, fs.ErrNotExist) {
+				return fmt.Errorf("image[%d] preview file not found: %s", i, img.Preview)
+			} else if statErr != nil {
+				return fmt.Errorf("image[%d] preview: %w", i, statErr)
+			}
+		}
+		if img.Full != "" {
+			if _, statErr := os.Stat(filepath.Join(imagesDir, img.Full)); errors.Is(statErr, fs.ErrNotExist) {
+				return fmt.Errorf("image[%d] full file not found: %s", i, img.Full)
+			} else if statErr != nil {
+				return fmt.Errorf("image[%d] full: %w", i, statErr)
+			}
+		}
+	}
+
+	return nil
 }

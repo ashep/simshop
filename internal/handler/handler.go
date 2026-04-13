@@ -32,20 +32,23 @@ func (e *NotFoundError) Error() string {
 }
 
 type Handler struct {
-	prod productService
-	resp *openapi.Responder
-	l    zerolog.Logger
+	prod    productService
+	resp    *openapi.Responder
+	dataDir string
+	l       zerolog.Logger
 }
 
 func NewHandler(
 	prod productService,
 	resp *openapi.Responder,
+	dataDir string,
 	l zerolog.Logger,
 ) *Handler {
 	return &Handler{
-		prod: prod,
-		resp: resp,
-		l:    l,
+		prod:    prod,
+		resp:    resp,
+		dataDir: dataDir,
+		l:       l,
 	}
 }
 
