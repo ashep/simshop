@@ -72,9 +72,11 @@ File uploads use `multipart/form-data` with field name `file`. Handler flow:
 1. Set `http.MaxBytesReader(w, r.Body, maxSize+1024)` before `ParseMultipartForm` to enforce the byte limit at the
    network layer (`+1024` accounts for multipart boundary/header overhead).
 2. Call `r.ParseMultipartForm(32 << 20)` — the argument controls the in-memory buffer, not the total size cap.
-3. Detect MIME type from the first 512 bytes using `http.DetectContentType` (ignore the `Content-Type` header and
+3. Get the file with `r.FormFile("file")` and immediately check `fh.Size > maxSize` **before** reading any other
+   fields (e.g., `name`). This ensures size rejection takes priority over field validation.
+4. Detect MIME type from the first 512 bytes using `http.DetectContentType` (ignore the `Content-Type` header and
    filename — both are client-controlled and untrustworthy).
-4. Seek back to start with `f.Seek(0, io.SeekStart)` before reading the full file with `io.ReadAll`.
+5. Seek back to start with `f.Seek(0, io.SeekStart)` before reading the full file with `io.ReadAll`.
 
 ### Circular import: handler ↔ app
 
@@ -258,6 +260,14 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 The OpenAPI validator (`kin-openapi`) operates in OpenAPI 3.0 compatibility mode. Do **not** use OpenAPI 3.1 array type syntax (`type: ["string", "null"]`) — it will cause `unsupported 'type' value "null"` at startup. Use the 3.0 style instead: `type: string` + `nullable: true`.
 
 For path parameters that hold UUID values, always write `type: string` + `format: uuid`, never `type: uuid`. Using `type: uuid` causes an `unsupported 'type' value "uuid"` panic at startup.
+
+### Multipart handler validation order in unit tests
+
+The `UploadFile` handler validates fields in this order: auth → MaxBytesReader → ParseMultipartForm → file field
+present → name field present → explicit size check → MIME type. When writing unit tests for a case that should reach
+the size check (e.g., `FileTooLarge_SizeCheck`), the multipart body must include a valid `name` field — otherwise the
+name-validation branch fires first and the test asserts the wrong error. Only tests that target the `MaxBytesReader`
+path (body too large to even parse) can safely omit `name`.
 
 ### API functional tests (`tests/api/`)
 

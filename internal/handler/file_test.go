@@ -52,7 +52,7 @@ func TestUploadFile(main *testing.T) {
 		}
 	}
 
-	buildMultipart := func(t *testing.T, data []byte, filename string) (*bytes.Buffer, string) {
+	buildMultipart := func(t *testing.T, data []byte, filename string, name string) (*bytes.Buffer, string) {
 		t.Helper()
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
@@ -60,6 +60,9 @@ func TestUploadFile(main *testing.T) {
 		require.NoError(t, err)
 		_, err = fw.Write(data)
 		require.NoError(t, err)
+		if name != "" {
+			require.NoError(t, mw.WriteField("name", name))
+		}
 		require.NoError(t, mw.Close())
 		return &buf, mw.FormDataContentType()
 	}
@@ -83,7 +86,7 @@ func TestUploadFile(main *testing.T) {
 		fileSvc := &fileServiceMock{}
 		defer fileSvc.AssertExpectations(t)
 
-		body, ct := buildMultipart(t, jpegData, "test.jpg")
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
 		w := doRequest(t, makeHandler(fileSvc), body, ct, nil)
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
@@ -95,7 +98,7 @@ func TestUploadFile(main *testing.T) {
 
 		// 3000-byte body → total multipart > maxSize+1024 = 2024, triggers MaxBytesReader.
 		largeData := make([]byte, 3000)
-		body, ct := buildMultipart(t, largeData, "large.bin")
+		body, ct := buildMultipart(t, largeData, "large.bin", "")
 
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
@@ -117,6 +120,17 @@ func TestUploadFile(main *testing.T) {
 		assert.JSONEq(t, `{"error":"file field is required"}`, w.Body.String())
 	})
 
+	main.Run("MissingNameField", func(t *testing.T) {
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "")
+		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"name field is required"}`, w.Body.String())
+	})
+
 	main.Run("FileTooLarge_SizeCheck", func(t *testing.T) {
 		fileSvc := &fileServiceMock{}
 		defer fileSvc.AssertExpectations(t)
@@ -124,7 +138,7 @@ func TestUploadFile(main *testing.T) {
 		// 1100 bytes: total body < maxSize+1024 = 2024 so MaxBytesReader passes,
 		// but fh.Size (1100) > maxSize (1000) so the explicit size check fires.
 		data := make([]byte, 1100)
-		body, ct := buildMultipart(t, data, "medium.bin")
+		body, ct := buildMultipart(t, data, "medium.bin", "my-file")
 
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
@@ -137,7 +151,7 @@ func TestUploadFile(main *testing.T) {
 		defer fileSvc.AssertExpectations(t)
 
 		textData := []byte("hello, plain text")
-		body, ct := buildMultipart(t, textData, "test.txt")
+		body, ct := buildMultipart(t, textData, "test.txt", "my-file")
 
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
@@ -150,7 +164,7 @@ func TestUploadFile(main *testing.T) {
 		defer fileSvc.AssertExpectations(t)
 		fileSvc.On("Upload", mock.Anything, mock.Anything).Return(nil, file.ErrFileLimitReached)
 
-		body, ct := buildMultipart(t, jpegData, "test.jpg")
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
 		w := doRequest(t, makeHandler(fileSvc), body, ct, regularUser)
 
 		assert.Equal(t, http.StatusConflict, w.Code)
@@ -162,7 +176,7 @@ func TestUploadFile(main *testing.T) {
 		defer fileSvc.AssertExpectations(t)
 		fileSvc.On("Upload", mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 
-		body, ct := buildMultipart(t, jpegData, "test.jpg")
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -171,11 +185,11 @@ func TestUploadFile(main *testing.T) {
 	main.Run("Success", func(t *testing.T) {
 		fileSvc := &fileServiceMock{}
 		defer fileSvc.AssertExpectations(t)
-		fileSvc.On("Upload", mock.Anything, mock.Anything).Return(
-			&file.File{ID: "018f4e3a-0000-7000-8000-000000000001"}, nil,
-		)
+		fileSvc.On("Upload", mock.Anything, mock.MatchedBy(func(req file.UploadRequest) bool {
+			return req.Name == "my-file" && req.OwnerID == admin.ID && req.MimeType == "image/jpeg"
+		})).Return(&file.File{ID: "018f4e3a-0000-7000-8000-000000000001"}, nil)
 
-		body, ct := buildMultipart(t, jpegData, "test.jpg")
+		body, ct := buildMultipart(t, jpegData, "test.jpg", "my-file")
 		w := doRequest(t, makeHandler(fileSvc), body, ct, admin)
 
 		assert.Equal(t, http.StatusCreated, w.Code)

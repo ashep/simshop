@@ -258,8 +258,8 @@ func (s *Seeder) CreateFile(t *testing.T, ownerID string) string {
 	t.Helper()
 	var id string
 	err := s.db.QueryRow(t.Context(),
-		"INSERT INTO files (owner_id, mime_type, size_bytes, data) VALUES ($1, $2, $3, $4) RETURNING id",
-		ownerID, "image/jpeg", 0, []byte{},
+		"INSERT INTO files (owner_id, name, mime_type, size_bytes, data) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		ownerID, "seeded-file", "image/jpeg", 0, []byte{},
 	).Scan(&id)
 	require.NoError(t, err)
 	return id

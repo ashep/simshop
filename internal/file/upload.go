@@ -21,8 +21,8 @@ func (s *Service) Upload(ctx context.Context, req UploadRequest) (*File, error) 
 
 	var id string
 	if err := s.db.QueryRow(ctx,
-		"INSERT INTO files (owner_id, mime_type, size_bytes, data) VALUES ($1, $2, $3, $4) RETURNING id",
-		req.OwnerID, req.MimeType, req.Size, req.Data,
+		"INSERT INTO files (owner_id, name, mime_type, size_bytes, data) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		req.OwnerID, req.Name, req.MimeType, req.Size, req.Data,
 	).Scan(&id); err != nil {
 		return nil, fmt.Errorf("insert file: %w", err)
 	}

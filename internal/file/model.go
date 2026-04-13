@@ -10,6 +10,7 @@ type File struct {
 
 type UploadRequest struct {
 	OwnerID  string
+	Name     string
 	MimeType string
 	Size     int
 	Data     []byte

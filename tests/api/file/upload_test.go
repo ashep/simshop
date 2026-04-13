@@ -30,7 +30,7 @@ func TestUploadFile(main *testing.T) {
 	jpegData[2] = 0xFF
 	jpegData[3] = 0xE0
 
-	doUpload := func(t *testing.T, data []byte, filename string, apiKey string) *http.Response {
+	doUpload := func(t *testing.T, data []byte, filename string, name string, apiKey string) *http.Response {
 		t.Helper()
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
@@ -38,6 +38,9 @@ func TestUploadFile(main *testing.T) {
 		require.NoError(t, err)
 		_, err = fw.Write(data)
 		require.NoError(t, err)
+		if name != "" {
+			require.NoError(t, mw.WriteField("name", name))
+		}
 		require.NoError(t, mw.Close())
 
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, app.URL("/files"), &buf)
@@ -53,7 +56,7 @@ func TestUploadFile(main *testing.T) {
 
 	main.Run("Success_Admin", func(t *testing.T) {
 		t.Parallel()
-		resp := doUpload(t, jpegData, "test.jpg", admin.APIKey)
+		resp := doUpload(t, jpegData, "test.jpg", "my-file", admin.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		var body map[string]any
@@ -63,7 +66,7 @@ func TestUploadFile(main *testing.T) {
 
 	main.Run("Success_RegularUser", func(t *testing.T) {
 		t.Parallel()
-		resp := doUpload(t, jpegData, "test.jpg", regularUser.APIKey)
+		resp := doUpload(t, jpegData, "test.jpg", "my-file", regularUser.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		var body map[string]any
@@ -73,7 +76,7 @@ func TestUploadFile(main *testing.T) {
 
 	main.Run("Forbidden_Unauthenticated", func(t *testing.T) {
 		t.Parallel()
-		resp := doUpload(t, jpegData, "test.jpg", "")
+		resp := doUpload(t, jpegData, "test.jpg", "my-file", "")
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
@@ -86,7 +89,7 @@ func TestUploadFile(main *testing.T) {
 		largeData[1] = 0xD8
 		largeData[2] = 0xFF
 		largeData[3] = 0xE0
-		resp := doUpload(t, largeData, "large.jpg", admin.APIKey)
+		resp := doUpload(t, largeData, "large.jpg", "", admin.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		var body map[string]any
@@ -97,7 +100,7 @@ func TestUploadFile(main *testing.T) {
 	main.Run("UnsupportedFileType", func(t *testing.T) {
 		t.Parallel()
 		textData := []byte("hello, this is plain text")
-		resp := doUpload(t, textData, "test.txt", admin.APIKey)
+		resp := doUpload(t, textData, "test.txt", "my-file", admin.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		var body map[string]any
@@ -123,13 +126,23 @@ func TestUploadFile(main *testing.T) {
 		assert.Equal(t, "file field is required", body["error"])
 	})
 
+	main.Run("MissingNameField", func(t *testing.T) {
+		t.Parallel()
+		resp := doUpload(t, jpegData, "test.jpg", "", admin.APIKey)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, "name field is required", body["error"])
+	})
+
 	main.Run("FileLimitReached_RegularUser", func(t *testing.T) {
 		t.Parallel()
 		u := sd.CreateUser(t)
 		for i := 0; i < 50; i++ {
 			sd.CreateFile(t, u.ID)
 		}
-		resp := doUpload(t, jpegData, "test.jpg", u.APIKey)
+		resp := doUpload(t, jpegData, "test.jpg", "my-file", u.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 		var body map[string]any
@@ -143,7 +156,7 @@ func TestUploadFile(main *testing.T) {
 		for i := 0; i < 50; i++ {
 			sd.CreateFile(t, adminUser.ID)
 		}
-		resp := doUpload(t, jpegData, "test.jpg", adminUser.APIKey)
+		resp := doUpload(t, jpegData, "test.jpg", "my-file", adminUser.APIKey)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		var body map[string]any

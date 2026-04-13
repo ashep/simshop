@@ -435,11 +435,13 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
+              required: [file, name]
               properties:
                 file:
                   type: string
                   format: binary
+                name:
+                  type: string
       responses:
         "201":
           description: File uploaded

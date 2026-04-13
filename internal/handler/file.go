@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/file"
@@ -47,6 +48,12 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		h.writeError(w, &BadRequestError{Reason: "name field is required"})
+		return
+	}
+
 	// Read first 512 bytes for MIME sniffing.
 	buf := make([]byte, 512)
 	n, err := f.Read(buf)
@@ -81,6 +88,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.file.Upload(r.Context(), file.UploadRequest{
 		OwnerID:  user.ID,
+		Name:     name,
 		MimeType: mimeType,
 		Size:     len(data),
 		Data:     data,

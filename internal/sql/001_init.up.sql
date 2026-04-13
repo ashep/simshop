@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS files
 (
     id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     owner_id   uuid                        NOT NULL REFERENCES users (id),
+    name       TEXT                        NOT NULL,
     mime_type  TEXT                        NOT NULL,
     size_bytes INT                         NOT NULL,
     data       BYTEA                       NOT NULL,
