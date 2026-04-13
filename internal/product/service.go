@@ -1,18 +1,17 @@
 package product
 
-import (
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
-)
-
 type Service struct {
-	db *pgxpool.Pool
-	l  zerolog.Logger
+	products []*Product
+	index    map[string]*Product
 }
 
-func NewService(db *pgxpool.Pool, l zerolog.Logger) *Service {
-	return &Service{
-		db: db,
-		l:  l,
+func NewService(products []*Product) *Service {
+	if products == nil {
+		products = []*Product{}
 	}
+	index := make(map[string]*Product, len(products))
+	for _, p := range products {
+		index[p.ID] = p
+	}
+	return &Service{products: products, index: index}
 }

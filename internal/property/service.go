@@ -1,18 +1,12 @@
 package property
 
-import (
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
-)
-
 type Service struct {
-	db *pgxpool.Pool
-	l  zerolog.Logger
+	props []Property
 }
 
-func NewService(db *pgxpool.Pool, l zerolog.Logger) *Service {
-	return &Service{
-		db: db,
-		l:  l,
+func NewService(props []Property) *Service {
+	if props == nil {
+		props = []Property{}
 	}
+	return &Service{props: props}
 }

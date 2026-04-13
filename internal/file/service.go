@@ -1,17 +1,12 @@
 package file
 
-import (
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
-)
-
 type Service struct {
-	db            *pgxpool.Pool
-	publicDir     string
-	maxNumPerUser int
-	l             zerolog.Logger
+	files map[string][]FileInfo // product ID → files
 }
 
-func NewService(db *pgxpool.Pool, publicDir string, maxNumPerUser int, l zerolog.Logger) *Service {
-	return &Service{db: db, publicDir: publicDir, maxNumPerUser: maxNumPerUser, l: l}
+func NewService(files map[string][]FileInfo) *Service {
+	if files == nil {
+		files = make(map[string][]FileInfo)
+	}
+	return &Service{files: files}
 }

@@ -4,115 +4,60 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ashep/go-app/dbmigrator"
 	"github.com/ashep/go-app/httpserver"
 	"github.com/ashep/go-app/runner"
 	"github.com/ashep/simshop/api"
-	"github.com/ashep/simshop/internal/auth"
-	"github.com/ashep/simshop/internal/contenttype"
 	"github.com/ashep/simshop/internal/file"
 	"github.com/ashep/simshop/internal/handler"
+	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/product"
 	"github.com/ashep/simshop/internal/property"
-	"github.com/ashep/simshop/internal/shop"
-	appsql "github.com/ashep/simshop/internal/sql"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func Run(rt *runner.Runtime[Config]) error {
-	ctx := rt.Ctx
 	cfg := rt.Cfg
 	l := rt.Log
 
-	// Apply Files config defaults
-	if cfg.Files.MaxSize == 0 {
-		cfg.Files.MaxSize = 10 * 1024 * 1024
-	}
-	if cfg.Files.MaxNumPerUser == 0 {
-		cfg.Files.MaxNumPerUser = 50
-	}
-	if len(cfg.Files.AllowedTypes) == 0 {
-		cfg.Files.AllowedTypes = []string{
-			"image/jpeg",
-			"image/png",
-			"image/gif",
-			"application/pdf",
-			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		}
-	}
-
 	if cfg.Server.PublicDir == "" {
 		cfg.Server.PublicDir = "./public"
+	}
+	if cfg.DataDir == "" {
+		cfg.DataDir = "./data"
 	}
 
 	if err := os.MkdirAll(cfg.Server.PublicDir, 0755); err != nil {
 		return fmt.Errorf("create public dir: %w", err)
 	}
 
-	// Migrate DB
-	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
+	catalog, err := loader.Load(cfg.DataDir, cfg.Server.PublicDir, l)
 	if err != nil {
-		return fmt.Errorf("migrate db: %w", err)
-	}
-	if migRes.PrevVersion != migRes.NewVersion {
-		l.Info().
-			Uint("from", migRes.PrevVersion).
-			Uint("to", migRes.NewVersion).
-			Msg("database migrated")
+		return fmt.Errorf("load catalog: %w", err)
 	}
 
-	db, err := pgxpool.New(rt.Ctx, cfg.Database.DSN)
-	if err != nil {
-		return fmt.Errorf("connect to db: %w", err)
-	}
-	defer db.Close()
-
-	shopSvc := shop.NewService(db, l)
-	prodSvc := product.NewService(db, l)
-	propSvc := property.NewService(db, l)
-	fileSvc := file.NewService(db, cfg.Server.PublicDir, cfg.Files.MaxNumPerUser, l)
+	prodSvc := product.NewService(catalog.Products)
+	propSvc := property.NewService(catalog.Properties)
+	fileSvc := file.NewService(catalog.Files)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	authSvc := auth.NewService(db)
-
-	hdl := handler.NewHandler(shopSvc, prodSvc, propSvc, fileSvc, cfg.Files.MaxSize, cfg.Files.AllowedTypes, openAPI.Responder(), l)
-	authMw := auth.Middleware(authSvc)
-	optionalAuthMw := auth.OptionalMiddleware(authSvc)
-	jsonContentType := contenttype.Middleware("application/json")
-	MultipartContentType := contenttype.Middleware("multipart/form-data")
+	hdl := handler.NewHandler(prodSvc, propSvc, fileSvc, openAPI.Responder(), l)
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
-	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
-	srv.HandleFunc("GET /shops/{id}", optionalAuthMw(openapiMw(hdl.GetShop)))
-	srv.HandleFunc("POST /shops", jsonContentType(authMw(openapiMw(hdl.CreateShop))))
-	srv.HandleFunc("PUT /shops/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateShop))))
-
+	srv.HandleFunc("GET /products", openapiMw(hdl.ListProducts))
+	srv.HandleFunc("GET /products/{id}", openapiMw(hdl.GetProduct))
+	srv.HandleFunc("GET /products/{id}/prices", openapiMw(hdl.GetProductPrice))
+	srv.HandleFunc("GET /products/{id}/files", openapiMw(hdl.GetProductFiles))
 	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
-	srv.HandleFunc("POST /properties", jsonContentType(authMw(openapiMw(hdl.CreateProperty))))
-	srv.HandleFunc("PUT /properties/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProperty))))
-
-	srv.HandleFunc("POST /products", jsonContentType(authMw(openapiMw(hdl.CreateProduct))))
-	srv.HandleFunc("PATCH /products/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProduct))))
-	srv.HandleFunc("PUT /products/{id}/prices", jsonContentType(authMw(openapiMw(hdl.SetProductPrices))))
-	srv.HandleFunc("PUT /products/{id}/files", jsonContentType(authMw(openapiMw(hdl.SetProductFiles))))
-	srv.HandleFunc("GET /products/{id}/prices", optionalAuthMw(openapiMw(hdl.GetProductPrice)))
-	srv.HandleFunc("GET /products/{id}", optionalAuthMw(openapiMw(hdl.GetProduct)))
-	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
-
-	srv.HandleFunc("POST /files", MultipartContentType(authMw(openapiMw(hdl.UploadFile))))
-	srv.HandleFunc("GET /products/{id}/files", optionalAuthMw(openapiMw(hdl.GetProductFiles)))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 
-	if err := srv.Run(ctx); err != nil {
+	if err := srv.Run(rt.Ctx); err != nil {
 		return fmt.Errorf("server run: %w", err)
 	}
 

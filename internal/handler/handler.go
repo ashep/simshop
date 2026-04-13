@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/ashep/simshop/internal/openapi"
@@ -22,23 +20,6 @@ func (e *BadRequestError) Error() string {
 	return "bad request"
 }
 
-type PermissionDeniedError struct{}
-
-func (e *PermissionDeniedError) Error() string {
-	return "permission denied"
-}
-
-type ConflictError struct {
-	Reason string
-}
-
-func (e *ConflictError) Error() string {
-	if e.Reason != "" {
-		return e.Reason
-	}
-	return "conflict"
-}
-
 type NotFoundError struct {
 	Reason string
 }
@@ -51,45 +32,27 @@ func (e *NotFoundError) Error() string {
 }
 
 type Handler struct {
-	shop           shopService
-	prod           productService
-	prop           propertyService
-	file           fileService
-	fileMaxSize    int
-	fileAllowedMTs []string
-	resp           *openapi.Responder
-	l              zerolog.Logger
+	prod productService
+	prop propertyService
+	file fileService
+	resp *openapi.Responder
+	l    zerolog.Logger
 }
 
 func NewHandler(
-	shop shopService,
 	prod productService,
 	prop propertyService,
 	file fileService,
-	fileMaxSize int,
-	fileAllowedMTs []string,
 	resp *openapi.Responder,
 	l zerolog.Logger,
 ) *Handler {
 	return &Handler{
-		shop:           shop,
-		prod:           prod,
-		prop:           prop,
-		file:           file,
-		fileMaxSize:    fileMaxSize,
-		fileAllowedMTs: fileAllowedMTs,
-		resp:           resp,
-		l:              l,
+		prod: prod,
+		prop: prop,
+		file: file,
+		resp: resp,
+		l:    l,
 	}
-}
-
-func (h *Handler) unmarshal(r io.Reader, v any) error {
-	d := json.NewDecoder(r)
-	if err := d.Decode(v); err != nil {
-		h.l.Warn().Err(err).Msg("request body could not be decoded")
-		return &BadRequestError{}
-	}
-	return nil
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
@@ -103,24 +66,8 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	if tErr, ok := errors.AsType[*ConflictError](err); tErr != nil && ok {
-		w.WriteHeader(http.StatusConflict)
-		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
-			h.l.Warn().Err(wErr).Msg("error response write failed")
-		}
-		return
-	}
-
 	if tErr, ok := errors.AsType[*NotFoundError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusNotFound)
-		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
-			h.l.Warn().Err(wErr).Msg("error response write failed")
-		}
-		return
-	}
-
-	if tErr, ok := errors.AsType[*PermissionDeniedError](err); tErr != nil && ok {
-		w.WriteHeader(http.StatusForbidden)
 		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
 			h.l.Warn().Err(wErr).Msg("error response write failed")
 		}
