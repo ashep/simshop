@@ -284,6 +284,9 @@ func (h *Handler) SetProductFiles(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProductPrice(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	country := r.URL.Query().Get("country")
+	if country == "" {
+		country = "DEFAULT"
+	}
 
 	result, err := h.prod.GetPrice(r.Context(), id, country)
 	if errors.Is(err, product.ErrProductNotFound) {

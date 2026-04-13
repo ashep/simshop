@@ -502,6 +502,30 @@ func TestGetProductPrice(main *testing.T) {
 		return w
 	}
 
+	doRequestNoCountry := func(t *testing.T, prodSvc *productServiceMock) *httptest.ResponseRecorder {
+		t.Helper()
+		h := &Handler{prod: prodSvc, resp: buildTestResponder(t), l: zerolog.Nop()}
+		url := "/products/" + productID + "/prices"
+		r := httptest.NewRequest(http.MethodGet, url, nil)
+		r.SetPathValue("id", productID)
+		w := httptest.NewRecorder()
+		h.GetProductPrice(w, r)
+		return w
+	}
+
+	main.Run("MissingCountryDefaultsToDefault", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("GetPrice", mock.Anything, productID, "DEFAULT").Return(
+			&product.PriceResult{CountryID: "DEFAULT", Value: 0}, nil,
+		)
+
+		w := doRequestNoCountry(t, prodSvc)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"country_id":"DEFAULT","value":0}`, w.Body.String())
+	})
+
 	main.Run("ProductNotFound", func(t *testing.T) {
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
