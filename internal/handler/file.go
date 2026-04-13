@@ -99,7 +99,7 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, &BadRequestError{Reason: "file field is required"})
 		return
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	if fh.Size > maxSize {
 		h.writeError(w, &BadRequestError{Reason: "file too large"})

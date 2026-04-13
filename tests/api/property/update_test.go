@@ -84,17 +84,6 @@ func TestUpdateProperty(main *testing.T) {
 		assert.JSONEq(t, `{"error":"property not found"}`, string(body))
 	})
 
-	main.Run("MissingEnTitle", func(t *testing.T) {
-		t.Parallel()
-
-		prop := sd.CreateProperty(t, map[string]string{"EN": "Style"})
-
-		resp := doRequest(t, prop.ID, `{"titles":{"UK":"Стиль"}}`, admin.APIKey)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	})
-
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 

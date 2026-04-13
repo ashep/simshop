@@ -122,19 +122,6 @@ Any create or update operation that accepts language-keyed data (e.g., a `names 
 the case where the caller supplies an unknown language code. In the service layer, a PostgreSQL FK violation on
 `lang_id` (error code `23503`) must be caught and returned as `ErrInvalidLanguage`. The handler must map `ErrInvalidLanguage` to `&BadRequestError{Reason: "invalid language code"}`.
 
-### EN title requirement
-
-Any entity that carries language-keyed titles (e.g., `titles map[string]string`) must always include an `EN` entry on
-creation **and on update**. Enforce this at three layers:
-
-1. **OpenAPI spec** — add `required: [EN]` under the `titles` object in the create request schema.
-2. **Service layer** — check `req.Titles["EN"] == ""` at the top of `Create` and return `ErrMissingEnTitle`.
-3. **Handler** — map `ErrMissingEnTitle` to `&BadRequestError{Reason: "EN title is required"}`.
-
-Language codes are stored and compared as **uppercase** (e.g., `"EN"`, `"UK"`). Use uppercase in all spec `required`
-lists, service checks, and test fixtures. Using lowercase (e.g., `"en"`) will cause response-validation failures
-because the DB always returns uppercase keys.
-
 ### Country price fallback query pattern
 
 When resolving a price with a fallback to `DEFAULT`, use a single query with `ANY($2)` containing
@@ -307,6 +294,8 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 - Before implementing any feature or fix, invoke the `superpowers:test-driven-development` skill.
 - Before claiming any work is done, invoke the `superpowers:verification-before-completion` skill and run **both**
   `task go:test:unit -- ./...` and `task go:test:func -- -v`. Both suites must pass — running only one is not sufficient.
+- After all changes are made and tests pass, run `task go:golangci-lint`. All lint checks must pass before the task is
+  considered complete.
 - Do not consider a task complete until tests pass. Do not respond with a summary of changes before running tests.
 - Group related tests under a single parent function `TestFoo(main *testing.T)` and use `main.Run("CaseName", ...)` for
   sub-tests. Never write separate top-level functions like `TestFoo_CaseName`.

@@ -50,6 +50,53 @@ func buildTestResponder(t *testing.T) *openapi.Responder {
 	return oas.Responder()
 }
 
+func TestCreateProperty(main *testing.T) {
+	main.Run("Forbidden_Unauthenticated", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPost, "/properties", bytes.NewBufferString(`{"titles":{"EN":"Color"}}`))
+		w := httptest.NewRecorder()
+
+		h.CreateProperty(w, r)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("Forbidden_NonAdmin", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		h := &Handler{prop: svc, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPost, "/properties", bytes.NewBufferString(`{"titles":{"EN":"Color"}}`))
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
+		w := httptest.NewRecorder()
+
+		h.CreateProperty(w, r)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("Success", func(t *testing.T) {
+		svc := &propertyServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Create", mock.Anything, mock.Anything).Return(
+			&property.Property{ID: "018f4e3a-0000-7000-8000-000000000001"}, nil,
+		)
+
+		h := &Handler{prop: svc, resp: buildTestResponder(main), l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPost, "/properties", bytes.NewBufferString(`{"titles":{"EN":"Color"}}`))
+		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
+		w := httptest.NewRecorder()
+
+		h.CreateProperty(w, r)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.JSONEq(t, `{"id":"018f4e3a-0000-7000-8000-000000000001"}`, w.Body.String())
+	})
+}
+
 func TestListProperties(main *testing.T) {
 	main.Run("ServiceError", func(t *testing.T) {
 		svc := &propertyServiceMock{}

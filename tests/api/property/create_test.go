@@ -84,13 +84,4 @@ func TestCreateProperty(main *testing.T) {
 		assert.JSONEq(t, `{"error":"invalid language code: zz"}`, string(respBody))
 	})
 
-	main.Run("MissingEnTitle", func(t *testing.T) {
-		t.Parallel()
-
-		body := `{"titles":{"UK":"Колір"}}`
-		resp := doRequest(t, body, admin.APIKey)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	})
 }

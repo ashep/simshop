@@ -113,21 +113,6 @@ func TestUpdateProduct(main *testing.T) {
 		assert.JSONEq(t, `{"error":"product not found"}`, string(respBody))
 	})
 
-	main.Run("MissingEnTitle", func(t *testing.T) {
-		t.Parallel()
-
-		p := sd.CreateProduct(t, sh.ID, map[string]int{"DEFAULT": 1000}, map[string]product.DataItem{
-			"EN": {Title: "Title", Description: "Desc"},
-		})
-
-		// OpenAPI spec enforces required: [EN] — sending without EN key returns 400
-		body := `{"data":{"UK":{"title":"Заголовок","description":"Опис"}}}`
-		resp := doRequest(t, p.ID, body, admin.APIKey)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	})
-
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 
