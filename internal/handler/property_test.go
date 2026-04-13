@@ -155,7 +155,7 @@ func TestUpdateProperty(main *testing.T) {
 		defer svc.AssertExpectations(t)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		w := httptest.NewRecorder()
 
 		h.UpdateProperty(w, r)
@@ -168,7 +168,7 @@ func TestUpdateProperty(main *testing.T) {
 		defer svc.AssertExpectations(t)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: nil}))
 		w := httptest.NewRecorder()
 
@@ -183,7 +183,7 @@ func TestUpdateProperty(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(property.ErrMissingTitle)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
@@ -200,7 +200,7 @@ func TestUpdateProperty(main *testing.T) {
 		svc.On("Update", mock.Anything, "some-id", mock.Anything).Return(property.ErrPropertyNotFound)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
@@ -217,7 +217,7 @@ func TestUpdateProperty(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(&property.InvalidLanguageError{Lang: "zz"})
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"zz":"Bad"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"zz":"Bad"}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
@@ -234,7 +234,7 @@ func TestUpdateProperty(main *testing.T) {
 		svc.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("db failure"))
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()
@@ -250,7 +250,7 @@ func TestUpdateProperty(main *testing.T) {
 		svc.On("Update", mock.Anything, "some-id", property.UpdateRequest{Titles: map[string]string{"EN": "Updated"}}).Return(nil)
 
 		h := &Handler{prop: svc, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodPatch, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
+		r := httptest.NewRequest(http.MethodPut, "/properties/some-id", bytes.NewBufferString(`{"titles":{"EN":"Updated"}}`))
 		r.SetPathValue("id", "some-id")
 		r = r.WithContext(auth.ContextWithUser(r.Context(), &auth.User{ID: "u1", Scopes: []auth.Scope{auth.ScopeAdmin}}))
 		w := httptest.NewRecorder()

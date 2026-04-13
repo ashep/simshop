@@ -119,5 +119,5 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
 | `POST`  | `/properties`      | Create a property                                    | Admin         |
 | `GET`   | `/properties`      | List all properties                                  | No            |
-| `PATCH` | `/properties/{id}` | Update a property's titles                           | Admin         |
+| `PUT` | `/properties/{id}` | Update a property's titles                           | Admin         |
 | `POST`  | `/files`           | Upload a file (`multipart/form-data`, fields `file` + `name`); returns 7 fields including `path` | Yes |

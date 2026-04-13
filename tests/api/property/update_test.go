@@ -24,7 +24,7 @@ func TestUpdateProperty(main *testing.T) {
 
 	doRequest := func(t *testing.T, id string, body string, apiKey string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, app.URL("/properties/"+id),
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, app.URL("/properties/"+id),
 			bytes.NewBufferString(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
