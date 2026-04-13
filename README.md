@@ -108,7 +108,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`   | `/shops`           | List all shops                                       | Admin         |
 | `POST`  | `/shops`           | Create a shop                                        | Admin         |
 | `GET`   | `/shops/{id}`      | Get a shop (public; extra fields for admins)         | No            |
-| `PATCH` | `/shops/{id}`      | Update a shop's names/descriptions                   | Owner/Admin   |
+| `PUT`   | `/shops/{id}`      | Fully replace a shop's titles (and descriptions)     | Owner/Admin   |
 | `POST`  | `/products`               | Create a product in a shop                                    | Admin       |
 | `GET`   | `/products/{id}`          | Get a product (public; extra fields for admin/owner)          | No          |
 | `PATCH` | `/products/{id}`          | Fully replace a product's content (EN title required)         | Owner/Admin |

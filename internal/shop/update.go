@@ -34,48 +34,37 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) erro
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Pass 1: upsert titles; include description for same lang if provided.
+	// Atomic existence check: touch updated_at; zero rows means shop doesn't exist.
+	tag, err := tx.Exec(ctx,
+		"UPDATE shops SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL",
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("check shop existence: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrShopNotFound
+	}
+
+	// Full replace: delete all existing language rows, then insert the new set.
+	if _, err = tx.Exec(ctx, "DELETE FROM shop_data WHERE shop_id = $1", id); err != nil {
+		return fmt.Errorf("delete shop data: %w", err)
+	}
+
 	for lang, title := range req.Titles {
 		var desc *string
 		if d, ok := req.Descriptions[lang]; ok {
 			desc = &d
 		}
 		if _, err = tx.Exec(ctx,
-			`INSERT INTO shop_data (shop_id, lang_id, title, description)
-			 VALUES ($1, $2, $3, $4)
-			 ON CONFLICT (shop_id, lang_id) DO UPDATE
-			 SET title = excluded.title,
-			     description = COALESCE(excluded.description, shop_data.description)`,
+			"INSERT INTO shop_data (shop_id, lang_id, title, description) VALUES ($1, $2, $3, $4)",
 			id, lang, title, desc,
 		); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-				switch pgErr.ConstraintName {
-				case "shop_data_shop_id_fkey":
-					return ErrShopNotFound
-				case "shop_data_lang_id_fkey":
-					return &InvalidLanguageError{Lang: lang}
-				}
+				return &InvalidLanguageError{Lang: lang}
 			}
-			return fmt.Errorf("upsert shop metadata: %w", err)
-		}
-	}
-
-	// Pass 2: update description only for langs not handled in pass 1.
-	for lang, desc := range req.Descriptions {
-		if _, inNames := req.Titles[lang]; inNames {
-			continue
-		}
-		d := desc
-		var tag pgconn.CommandTag
-		if tag, err = tx.Exec(ctx,
-			`UPDATE shop_data SET description = $1 WHERE shop_id = $2 AND lang_id = $3`,
-			&d, id, lang,
-		); err != nil {
-			return fmt.Errorf("update shop description: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return &InvalidLanguageError{Lang: lang}
+			return fmt.Errorf("insert shop data: %w", err)
 		}
 	}
 

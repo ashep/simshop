@@ -93,7 +93,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
 	srv.HandleFunc("GET /shops/{id}", optionalAuthMw(openapiMw(hdl.GetShop)))
 	srv.HandleFunc("POST /shops", jsonContentType(authMw(openapiMw(hdl.CreateShop))))
-	srv.HandleFunc("PATCH /shops/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateShop))))
+	srv.HandleFunc("PUT /shops/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateShop))))
 
 	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
 	srv.HandleFunc("POST /properties", jsonContentType(authMw(openapiMw(hdl.CreateProperty))))

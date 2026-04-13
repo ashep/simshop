@@ -71,8 +71,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-    patch:
-      operationId: updateShop
+    put:
+      operationId: putShop
       security:
         - ApiKeyAuth: [ ]
       parameters:
@@ -86,10 +86,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateShopRequest'
+              $ref: '#/components/schemas/PutShopRequest'
       responses:
         "200":
-          description: Shop updated
+          description: Shop titles replaced
         "400":
           description: Bad request
           content:
@@ -579,11 +579,14 @@ components:
         owner_id:
           type: string
 
-    UpdateShopRequest:
+    PutShopRequest:
       type: object
+      required:
+        - titles
       properties:
         titles:
           type: object
+          minProperties: 1
           additionalProperties:
             type: string
             minLength: 3

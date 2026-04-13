@@ -42,21 +42,20 @@ func TestUpdate(main *testing.T) {
 		assert.Equal(t, "Оновлено", got.Titles["UK"])
 	})
 
-	main.Run("PartialUpsert", func(t *testing.T) {
+	main.Run("ReplacesExistingTitles", func(t *testing.T) {
 		t.Parallel()
 
-		sd.CreateShop(t, "updshop2", admin.ID, map[string]string{"EN": "Original EN", "UK": "Original UK"}, nil)
+		sd.CreateShop(t, "updshop2", admin.ID, map[string]string{"EN": "English", "UK": "Українська"}, nil)
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop2", shop.UpdateRequest{
-			Titles: map[string]string{"EN": "Updated EN"},
+			Titles: map[string]string{"EN": "Only English"},
 		})
 
 		require.NoError(t, err)
 
 		got := sd.GetShop(t, "updshop2")
-		assert.Equal(t, "Updated EN", got.Titles["EN"])
-		assert.Equal(t, "Original UK", got.Titles["UK"])
+		assert.Equal(t, map[string]string{"EN": "Only English"}, got.Titles)
 	})
 
 	main.Run("WithDescriptions", func(t *testing.T) {
@@ -66,7 +65,7 @@ func TestUpdate(main *testing.T) {
 
 		svc := shop.NewService(db, zerolog.Nop())
 		err := svc.Update(t.Context(), "updshop4", shop.UpdateRequest{
-			Titles:        map[string]string{"EN": "Desc Shop"},
+			Titles:       map[string]string{"EN": "Desc Shop"},
 			Descriptions: map[string]string{"EN": "A description"},
 		})
 
@@ -74,36 +73,6 @@ func TestUpdate(main *testing.T) {
 
 		got := sd.GetShop(t, "updshop4")
 		assert.Equal(t, "A description", got.Descriptions["EN"])
-	})
-
-	main.Run("DescriptionOnlyPreservesName", func(t *testing.T) {
-		t.Parallel()
-
-		sd.CreateShop(t, "updshop5", admin.ID, map[string]string{"EN": "Keep Name"}, nil)
-
-		svc := shop.NewService(db, zerolog.Nop())
-		err := svc.Update(t.Context(), "updshop5", shop.UpdateRequest{
-			Descriptions: map[string]string{"EN": "New desc"},
-		})
-
-		require.NoError(t, err)
-
-		got := sd.GetShop(t, "updshop5")
-		assert.Equal(t, "Keep Name", got.Titles["EN"])
-		assert.Equal(t, "New desc", got.Descriptions["EN"])
-	})
-
-	main.Run("DescriptionOnlyForUnknownLangFails", func(t *testing.T) {
-		t.Parallel()
-
-		sd.CreateShop(t, "updshop6", admin.ID, map[string]string{"EN": "Only EN"}, nil)
-
-		svc := shop.NewService(db, zerolog.Nop())
-		err := svc.Update(t.Context(), "updshop6", shop.UpdateRequest{
-			Descriptions: map[string]string{"UK": "No name for uk"},
-		})
-
-		require.ErrorAs(t, err, new(*shop.InvalidLanguageError))
 	})
 
 	main.Run("ShopNotFound", func(t *testing.T) {
