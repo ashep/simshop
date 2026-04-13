@@ -343,6 +343,49 @@ the size check (e.g., `FileTooLarge_SizeCheck`), the multipart body must include
 name-validation branch fires first and the test asserts the wrong error. Only tests that target the `MaxBytesReader`
 path (body too large to even parse) can safely omit `name`.
 
+### Filesystem-catalog refactor: service constructor signatures
+
+After removing the PostgreSQL backend, service constructors take in-memory data instead of a `*pgxpool.Pool`:
+- `product.NewService(products []*Product)` — nil is normalized to `[]*Product{}` inside the constructor (required so
+  `List` returns an empty JSON array `[]` rather than `null`, which would fail OpenAPI response validation).
+- `property.NewService(props []Property)` — same; nil is normalized to `[]Property{}` inside the constructor.
+- `file.NewService(files map[string][]FileInfo)` — keyed by product ID; nil is normalized to an empty map.
+
+### Filesystem-catalog refactor: handler reduction
+
+The read-only refactor removes `ConflictError`, `PermissionDeniedError`, the `shopService` interface, and all write
+handlers (`CreateProduct`, `UpdateProduct`, `SetProductPrices`, `SetProductFiles`, `CreateProperty`, `UpdateProperty`,
+`CreateShop`, `UpdateShop`, `UploadFile`). The `Handler` struct no longer holds `fileMaxSize`, `fileAllowedMTs`, or
+`shop` fields. When rewriting handler_test.go, remove the `Conflict` and `PermissionDenied` test cases that referenced
+deleted error types.
+
+### Filesystem-catalog refactor: loader package
+
+The `internal/loader` package is responsible for reading YAML files from `data_dir` at startup and producing a
+`Catalog` struct consumed by service constructors. Key design decisions:
+- A missing `products/` subdirectory or `properties.yaml` file is not an error — results in an empty slice/map.
+- A malformed YAML file is a fatal error (returned as `error` from `Load`).
+- A binary file referenced in a product YAML but absent on disk is silently skipped with a `zerolog.Warn` log entry.
+- MIME type is detected via `http.DetectContentType` on the first 512 bytes — never trust the filename extension.
+- `app.go` must call `loader.Load` before constructing services; the catalog's slices/maps are passed directly
+  to `product.NewService`, `property.NewService`, and `file.NewService`.
+
+### Filesystem-catalog refactor: Write tool prerequisite
+
+The Write tool requires that the file has been Read at least once in the session before overwriting. When writing many
+files in a single pass, Read each target file before calling Write — even for files that will be completely replaced.
+
+### Filesystem-catalog refactor: functional test pattern (no DB)
+
+After removing PostgreSQL, functional tests use YAML fixture files instead of a seeder. Pattern:
+- `makeDataDir(t, map[string]string{id: yaml})` creates a temp dir with a `products/` subdirectory populated
+  with per-ID YAML files. Tests that need binary files (e.g. `TestGetProductFiles`) use `testapp.NewWithPublicDir`
+  and pre-populate the public dir before starting the app.
+- `testapp.New(t, dataDir)` replaces `testapp.New(t)` — always takes a `dataDir` argument.
+- No seeder, no DB pool, no `testpostgres`. The `docker-compose.tests.yaml` postgres service is removed.
+- Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body
+  (not a separate top-level function) — this is safe because each app binds to a random port.
+
 ### API functional tests (`tests/api/`)
 
 - All API subtests within a `TestFoo` share one `testapp` instance started in the parent function. Starting a separate
@@ -361,3 +404,17 @@ path (body too large to even parse) can safely omit `name`.
   rather than just checking non-emptiness. Type-assert dependent values first (e.g., `id, ok := body["id"].(string)`)
   to avoid malformed data slipping through tests.
 
+
+### Filesystem-catalog refactor: cleanup after backend removal
+
+After removing a database backend (e.g., pgx/v5), run `go mod tidy && go mod vendor` to strip all dead direct and
+indirect dependencies in one step. `go mod tidy` removes unused entries from `go.mod`/`go.sum`; `go mod vendor` syncs
+`vendor/`. Packages that were only indirect dependencies of the removed direct dep (e.g., pgpassfile, puddle, pgerrcode)
+disappear automatically — no manual editing of `go.mod` is needed.
+
+When removing write endpoints from a handler, also delete any helper methods that only served those endpoints (e.g.,
+`unmarshal` is only needed for request-body decoding; a read-only handler has no request bodies and should not keep
+it). The linter (`unused`) will catch stragglers.
+
+Functional tests that no longer require a database can be run directly with `go test -tags=functest ./tests/...`
+without Docker or task infrastructure — useful in worktrees where `.ci/` is not initialized.

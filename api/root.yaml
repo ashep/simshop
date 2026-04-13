@@ -1,259 +1,20 @@
-openapi: "3.1.0"
+openapi: "3.0.0"
 
 info:
   title: SimShop API
-  version: "0.1.0"
+  version: "0.2.0"
 
 paths:
-  /shops:
-    get:
-      operationId: listShops
-      security:
-        - ApiKeyAuth: [ ]
-      responses:
-        "200":
-          description: List request successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListShopsResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    post:
-      operationId: createShop
-      security:
-        - ApiKeyAuth: [ ]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateShopRequest'
-      responses:
-        "201":
-          description: Shop created
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /shops/{id}:
-    get:
-      operationId: getShop
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Get request successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetShopResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    put:
-      operationId: putShop
-      security:
-        - ApiKeyAuth: [ ]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PutShopRequest'
-      responses:
-        "200":
-          description: Shop titles replaced
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /properties:
-    post:
-      operationId: createProperty
-      security:
-        - ApiKeyAuth: [ ]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreatePropertyRequest'
-      responses:
-        "201":
-          description: Property created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreatePropertyResponse'
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "409":
-          description: Conflict
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    get:
-      operationId: listProperties
-      responses:
-        "200":
-          description: List request successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListPropertiesResponse'
-
-  /properties/{id}:
-    put:
-      operationId: updateProperty
-      security:
-        - ApiKeyAuth: [ ]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdatePropertyRequest'
-      responses:
-        "200":
-          description: Property updated
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /products:
-    post:
-      operationId: createProduct
-      security:
-        - ApiKeyAuth: [ ]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateProductRequest'
-      responses:
-        "201":
-          description: Product created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreateProductResponse'
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /shops/{id}/products:
     get:
-      operationId: listShopProducts
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      operationId: listProducts
       responses:
         "200":
-          description: List request successful
+          description: List of all products
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListShopProductsResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ListProductsResponse'
 
   /products/{id}:
     get:
@@ -278,84 +39,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-    patch:
-      operationId: updateProduct
-      security:
-        - ApiKeyAuth: [ ]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProductRequest'
-      responses:
-        "200":
-          description: Product updated
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
   /products/{id}/prices:
-    put:
-      operationId: setProductPrices
-      security:
-        - ApiKeyAuth: [ ]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetProductPricesRequest'
-      responses:
-        "200":
-          description: Prices updated
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
     get:
       operationId: getProductPrice
       parameters:
@@ -407,127 +92,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-    put:
-      operationId: setProductFiles
-      security:
-        - ApiKeyAuth: [ ]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetProductFilesRequest'
+
+  /properties:
+    get:
+      operationId: listProperties
       responses:
         "200":
-          description: Files updated
-        "400":
-          description: Bad request
+          description: List request successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /files:
-    post:
-      operationId: uploadFile
-      security:
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file, name]
-              properties:
-                file:
-                  type: string
-                  format: binary
-                name:
-                  type: string
-      responses:
-        "201":
-          description: File uploaded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadFileResponse'
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "409":
-          description: Conflict
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ListPropertiesResponse'
 
 components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-
   schemas:
-    Shop:
+    ProductDataItem:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+
+    GetProductResponse:
       type: object
       required:
         - id
-        - titles
+        - data
       properties:
         id:
           type: string
-          minLength: 3
-          maxLength: 16
-        titles:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: string
-            minLength: 3
-            maxLength: 100
-        descriptions:
+          format: uuid
+        data:
           type: object
           additionalProperties:
-            type: string
-        owner_id:
+            $ref: '#/components/schemas/ProductDataItem'
+
+    ListProductsResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/GetProductResponse'
+
+    GetProductPriceResponse:
+      type: object
+      required:
+        - country_id
+        - value
+      properties:
+        country_id:
           type: string
-          nullable: true
-        created_at:
+        value:
+          type: integer
+          minimum: 0
+
+    ProductFileItem:
+      type: object
+      required:
+        - name
+        - mime_type
+        - size_bytes
+        - path
+      properties:
+        name:
           type: string
-          format: date-time
-        updated_at:
+        mime_type:
           type: string
-          format: date-time
+        size_bytes:
+          type: integer
+          minimum: 0
+        path:
+          type: string
+
+    GetProductFilesResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/ProductFileItem'
 
     Property:
       type: object
@@ -546,208 +190,10 @@ components:
             minLength: 1
             maxLength: 100
 
-    ListShopsResponse:
-      type: array
-      items:
-        $ref: "#/components/schemas/Shop"
-
-    GetShopResponse:
-      $ref: "#/components/schemas/Shop"
-
-    CreateShopRequest:
-      type: object
-      required:
-        - id
-        - titles
-        - owner_id
-      properties:
-        id:
-          type: string
-          minLength: 3
-          maxLength: 16
-        titles:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: string
-            minLength: 3
-            maxLength: 100
-        descriptions:
-          type: object
-          additionalProperties:
-            type: string
-        owner_id:
-          type: string
-
-    PutShopRequest:
-      type: object
-      required:
-        - titles
-      properties:
-        titles:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: string
-            minLength: 3
-            maxLength: 100
-        descriptions:
-          type: object
-          additionalProperties:
-            type: string
-
-    CreatePropertyRequest:
-      type: object
-      required:
-        - titles
-      properties:
-        titles:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: string
-            minLength: 1
-            maxLength: 100
-
-    CreatePropertyResponse:
-      type: object
-      required:
-        - id
-      properties:
-        id:
-          type: string
-          format: uuid
-
     ListPropertiesResponse:
       type: array
       items:
-        $ref: "#/components/schemas/Property"
-
-    UpdatePropertyRequest:
-      type: object
-      properties:
-        titles:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            type: string
-            minLength: 1
-            maxLength: 100
-
-    ProductDataItem:
-      type: object
-      required:
-        - title
-        - description
-      properties:
-        title:
-          type: string
-          minLength: 1
-        description:
-          type: string
-          minLength: 1
-
-    CreateProductRequest:
-      type: object
-      required:
-        - shop_id
-        - data
-      properties:
-        shop_id:
-          type: string
-          minLength: 3
-        data:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/ProductDataItem'
-
-    CreateProductResponse:
-      type: object
-      required:
-        - id
-      properties:
-        id:
-          type: string
-          format: uuid
-
-    UpdateProductRequest:
-      type: object
-      required:
-        - data
-      properties:
-        data:
-          type: object
-          minProperties: 1
-          additionalProperties:
-            $ref: '#/components/schemas/ProductDataItem'
-
-    GetProductResponse:
-      type: object
-      required:
-        - id
-        - data
-      properties:
-        id:
-          type: string
-          format: uuid
-        data:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/ProductDataItem'
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    ShopProductItem:
-      type: object
-      required:
-        - id
-        - data
-      properties:
-        id:
-          type: string
-          format: uuid
-        data:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/ProductDataItem'
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    ListShopProductsResponse:
-      type: array
-      items:
-        $ref: '#/components/schemas/ShopProductItem'
-
-    SetProductPricesRequest:
-      type: object
-      required:
-        - prices
-      properties:
-        prices:
-          type: object
-          additionalProperties:
-            type: integer
-            minimum: 0
-
-    GetProductPriceResponse:
-      type: object
-      required:
-        - country_id
-        - value
-      properties:
-        country_id:
-          type: string
-        value:
-          type: integer
-          minimum: 0
+        $ref: '#/components/schemas/Property'
 
     ErrorResponse:
       type: object
@@ -756,79 +202,3 @@ components:
       properties:
         error:
           type: string
-
-    SetProductFilesRequest:
-      type: object
-      required:
-        - file_ids
-      properties:
-        file_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-
-    UploadFileResponse:
-      type: object
-      required:
-        - id
-        - name
-        - mime_type
-        - size_bytes
-        - path
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        mime_type:
-          type: string
-        size_bytes:
-          type: integer
-          minimum: 0
-        path:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    ProductFileItem:
-      type: object
-      required:
-        - id
-        - name
-        - mime_type
-        - size_bytes
-        - path
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        mime_type:
-          type: string
-        size_bytes:
-          type: integer
-          minimum: 0
-        path:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          nullable: true
-        updated_at:
-          type: string
-          format: date-time
-          nullable: true
-
-    GetProductFilesResponse:
-      type: array
-      items:
-        $ref: '#/components/schemas/ProductFileItem'
