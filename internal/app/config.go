@@ -1,8 +1,7 @@
 package app
 
 type Server struct {
-	Addr      string `yaml:"addr"`
-	PublicDir string `yaml:"public_dir"`
+	Addr string `yaml:"addr"`
 }
 
 type Config struct {

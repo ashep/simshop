@@ -16,83 +16,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListProductsResponse'
 
-  /products/{id}:
-    get:
-      operationId: getProduct
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Get request successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetProductResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /products/{id}/prices:
-    get:
-      operationId: getProductPrice
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: country
-          in: query
-          required: false
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Resolved price
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetProductPriceResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /products/{id}/files:
-    get:
-      operationId: getProductFiles
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: List of product files
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetProductFilesResponse'
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   schemas:
     ProductDataItem:
@@ -126,41 +49,6 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/GetProductResponse'
-
-    GetProductPriceResponse:
-      type: object
-      required:
-        - country_id
-        - value
-      properties:
-        country_id:
-          type: string
-        value:
-          type: integer
-          minimum: 0
-
-    ProductFileItem:
-      type: object
-      required:
-        - name
-        - mime_type
-        - size_bytes
-        - path
-      properties:
-        name:
-          type: string
-        mime_type:
-          type: string
-        size_bytes:
-          type: integer
-          minimum: 0
-        path:
-          type: string
-
-    GetProductFilesResponse:
-      type: array
-      items:
-        $ref: '#/components/schemas/ProductFileItem'
 
     ErrorResponse:
       type: object

@@ -18,14 +18,8 @@ type App struct {
 	addr string
 }
 
-// New creates a test app with a temporary public dir.
+// New creates a test app instance.
 func New(t *testing.T, dataDir string) *App {
-	return NewWithPublicDir(t, dataDir, t.TempDir())
-}
-
-// NewWithPublicDir creates a test app with explicit public and data dirs.
-// Use this when you need to pre-populate the public dir with binary files.
-func NewWithPublicDir(t *testing.T, dataDir, publicDir string) *App {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -40,8 +34,7 @@ func NewWithPublicDir(t *testing.T, dataDir, publicDir string) *App {
 
 	cfg := app.Config{
 		Server: app.Server{
-			Addr:      addr,
-			PublicDir: publicDir,
+			Addr: addr,
 		},
 		DataDir: dataDir,
 	}

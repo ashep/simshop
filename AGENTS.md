@@ -20,14 +20,14 @@ Never run `git commit` or `git push` unless the user explicitly asks. When dispa
 
 `simshop` is a Go HTTP API service (`github.com/ashep/simshop`). It uses:
 
-- **Filesystem catalog** — products, files, and prices are loaded from YAML files at startup (no database)
+- **Filesystem catalog** — products are loaded from YAML files at startup (no database)
 - **zerolog** for structured logging
 - **go-app** framework (`github.com/ashep/go-app`) for app lifecycle/config
 - **OpenAPI** spec in `api/` for request validation
 
 Key directories:
 
-- `internal/` — application code (app, handler, product, file, loader, openapi)
+- `internal/` — application code (app, handler, product, loader, openapi)
 - `api/` — OpenAPI spec files
 - `tests/` — functional tests (build tag: `functest`)
 - `vendor/` — vendored dependencies
@@ -354,7 +354,6 @@ path (body too large to even parse) can safely omit `name`.
 After removing the PostgreSQL backend, service constructors take in-memory data instead of a `*pgxpool.Pool`:
 - `product.NewService(products []*Product)` — nil is normalized to `[]*Product{}` inside the constructor (required so
   `List` returns an empty JSON array `[]` rather than `null`, which would fail OpenAPI response validation).
-- `file.NewService(files map[string][]FileInfo)` — keyed by product ID; nil is normalized to an empty map.
 
 ### Filesystem-catalog refactor: handler reduction
 
@@ -363,6 +362,12 @@ handlers (`CreateProduct`, `UpdateProduct`, `SetProductPrices`, `SetProductFiles
 `CreateShop`, `UpdateShop`, `UploadFile`). The `Handler` struct no longer holds `fileMaxSize`, `fileAllowedMTs`, or
 `shop` fields. When rewriting handler_test.go, remove the `Conflict` and `PermissionDenied` test cases that referenced
 deleted error types.
+
+The subsequent removal of `/products/{id}`, `/products/{id}/prices`, and `/products/{id}/files` routes further reduced
+the handler to only `ListProducts`. This also removed: the `file` package entirely, `product.PriceResult`,
+`product.Product.Prices` and `product.Product.Files` fields, price/file loading from the loader, `PublicDir` from the
+`Server` config, and the `index` map from `product.Service`. The `loader.Load` signature lost its `zerolog.Logger` and
+`publicDir` parameters since no warnings are issued and no disk reads are needed after file loading was removed.
 
 ### Filesystem-catalog refactor: loader package
 
