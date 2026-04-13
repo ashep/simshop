@@ -55,6 +55,10 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, product.ErrShopNotFound):
 			h.writeError(w, &NotFoundError{Reason: "shop not found"})
+		case errors.As(err, new(*product.MissingTitleError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
+		case errors.As(err, new(*product.MissingDescriptionError)):
+			h.writeError(w, &BadRequestError{Reason: err.Error()})
 		case errors.As(err, &mce):
 			h.writeError(w, &BadRequestError{Reason: mce.Error()})
 		case errors.As(err, new(*product.InvalidLanguageError)):

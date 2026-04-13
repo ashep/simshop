@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS product_data
     PRIMARY KEY (product_id, lang_id)
 );
 
-CREATE TABLE IF NOT EXISTS property_values
+CREATE TABLE IF NOT EXISTS product_properties
 (
     product_id  uuid NOT NULL REFERENCES products (id),
     property_id uuid NOT NULL REFERENCES properties (id),
@@ -262,7 +262,7 @@ CREATE TABLE IF NOT EXISTS property_values
     PRIMARY KEY (product_id, property_id)
 );
 
-CREATE TABLE IF NOT EXISTS property_prices
+CREATE TABLE IF NOT EXISTS product_property_prices
 (
     product_id  uuid NOT NULL REFERENCES products (id),
     property_id uuid NOT NULL REFERENCES properties (id),

@@ -138,6 +138,32 @@ func TestCreateProduct(main *testing.T) {
 		assert.JSONEq(t, `{"error":"shop product limit reached"}`, string(respBody))
 	})
 
+	main.Run("WhitespaceOnlyTitle", func(t *testing.T) {
+		t.Parallel()
+
+		body := `{"shop_id":"` + sh.ID + `","data":{"EN":{"title":" ","description":"A fine widget"},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
+		resp := doRequest(t, body, admin.APIKey)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error":"title is required for the language EN"}`, string(respBody))
+	})
+
+	main.Run("WhitespaceOnlyDescription", func(t *testing.T) {
+		t.Parallel()
+
+		body := `{"shop_id":"` + sh.ID + `","data":{"EN":{"title":"Widget","description":" "},"UK":{"title":"Віджет","description":"Гарний віджет"}}}`
+		resp := doRequest(t, body, admin.APIKey)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error":"description is required for the language EN"}`, string(respBody))
+	})
+
 	main.Run("InvalidLanguage", func(t *testing.T) {
 		t.Parallel()
 

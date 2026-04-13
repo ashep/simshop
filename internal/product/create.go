@@ -58,10 +58,17 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Product, erro
 		return nil, ErrShopProductLimitReached
 	}
 
-	// Validate content covers every shop language.
+	// Validate content covers every shop language and that title/description are non-empty.
 	for lang := range shopLangs {
-		if _, ok := req.Data[lang]; !ok {
+		c, ok := req.Data[lang]
+		if !ok {
 			return nil, &MissingContentError{Lang: lang}
+		}
+		if c.Title == "" {
+			return nil, &MissingTitleError{Lang: lang}
+		}
+		if c.Description == "" {
+			return nil, &MissingDescriptionError{Lang: lang}
 		}
 	}
 

@@ -70,6 +70,201 @@ func (m *productServiceMock) SetFiles(ctx context.Context, id string, req produc
 	return args.Error(0)
 }
 
+func TestCreateProduct(main *testing.T) {
+	shopID := "018f4e3a-0000-7000-8000-000000000001"
+	ownerID := "owner-1"
+	resp := buildTestResponder(main)
+
+	makeShop := func() *shop.AdminShop {
+		return &shop.AdminShop{
+			Shop:    shop.Shop{ID: shopID},
+			OwnerID: ownerID,
+		}
+	}
+
+	doRequest := func(t *testing.T, shopSvc *shopServiceMock, prodSvc *productServiceMock, user *auth.User, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		h := &Handler{shop: shopSvc, prod: prodSvc, resp: resp, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodPost, "/products", strings.NewReader(body))
+		if user != nil {
+			r = r.WithContext(auth.ContextWithUser(r.Context(), user))
+		}
+		w := httptest.NewRecorder()
+		h.CreateProduct(w, r)
+		return w
+	}
+
+	admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+	owner := &auth.User{ID: ownerID, Scopes: nil}
+
+	main.Run("Unauthenticated", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, nil, body)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("NonOwnerForbidden", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+		shopSvc.On("Get", mock.Anything, shopID).Return(makeShop(), nil)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+
+		other := &auth.User{ID: "other-user", Scopes: nil}
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, other, body)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	main.Run("ShopNotFound", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+		shopSvc.On("Get", mock.Anything, shopID).Return(nil, shop.ErrShopNotFound)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, owner, body)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"shop not found"}`, w.Body.String())
+	})
+
+	main.Run("EmptyTitle", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(nil, &product.MissingTitleError{Lang: "EN"})
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"title is required for the language EN"}`, w.Body.String())
+	})
+
+	main.Run("EmptyDescription", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(nil, &product.MissingDescriptionError{Lang: "EN"})
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":""}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"description is required for the language EN"}`, w.Body.String())
+	})
+
+	main.Run("MissingContent", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(nil, &product.MissingContentError{Lang: "UK"})
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"content missing for language: UK"}`, w.Body.String())
+	})
+
+	main.Run("InvalidLanguage", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(nil, &product.InvalidLanguageError{Lang: "zz"})
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid language code: zz"}`, w.Body.String())
+	})
+
+	main.Run("ShopProductLimitReached", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(nil, product.ErrShopProductLimitReached)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusConflict, w.Code)
+		assert.JSONEq(t, `{"error":"shop product limit reached"}`, w.Body.String())
+	})
+
+	main.Run("AdminSuccess", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(&product.Product{ID: "018f4e3a-0000-7000-8000-000000000099"}, nil)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.JSONEq(t, `{"id":"018f4e3a-0000-7000-8000-000000000099"}`, w.Body.String())
+	})
+
+	main.Run("ShopOwnerSuccess", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+		shopSvc.On("Get", mock.Anything, shopID).Return(makeShop(), nil)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, mock.Anything).Return(&product.Product{ID: "018f4e3a-0000-7000-8000-000000000099"}, nil)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":"Widget","description":"A fine widget"}}}`
+		w := doRequest(t, shopSvc, prodSvc, owner, body)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("TrimsTitleAndDescription", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Create", mock.Anything, product.CreateRequest{
+			ShopID: shopID,
+			Data: map[string]product.DataItem{
+				"EN": {Title: "Widget", Description: "A fine widget"},
+			},
+		}).Return(&product.Product{ID: "018f4e3a-0000-7000-8000-000000000099"}, nil)
+
+		body := `{"shop_id":"` + shopID + `","data":{"EN":{"title":" Widget ","description":" A fine widget "}}}`
+		w := doRequest(t, shopSvc, prodSvc, admin, body)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+}
+
 func TestListShopProducts(main *testing.T) {
 	shopID := "myshop"
 	ownerID := "owner-1"

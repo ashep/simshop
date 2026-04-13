@@ -108,6 +108,14 @@ Whenever an `xxx-up` migration is created or modified, always update the corresp
 all objects added by the up migration, in reverse dependency order (child tables before parent tables). Never leave the
 down migration out of sync with the up migration.
 
+### Empty title/description validation in Create
+
+In `product.Create`, after verifying that every shop language has a corresponding entry in `req.Data`, also check
+`c.Title == ""` → return `&MissingTitleError{Lang: lang}` and `c.Description == ""` → return
+`&MissingDescriptionError{Lang: lang}`. These typed errors carry the offending language code so the response message
+can be specific: `"title is required for the language EN"`. The handler maps both with `errors.As` → `BadRequestError`
+(HTTP 400). Use typed errors (not a sentinel like `ErrMissingTitle`) whenever the error must carry context data.
+
 ### Partial upsert with nullable columns
 
 When a table has a NOT NULL column (e.g., `name`) and an optional column (e.g., `description`), and the update API allows updating each independently, use a two-pass approach:
@@ -319,6 +327,13 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 The OpenAPI validator (`kin-openapi`) operates in OpenAPI 3.0 compatibility mode. Do **not** use OpenAPI 3.1 array type syntax (`type: ["string", "null"]`) — it will cause `unsupported 'type' value "null"` at startup. Use the 3.0 style instead: `type: string` + `nullable: true`.
 
 For path parameters that hold UUID values, always write `type: string` + `format: uuid`, never `type: uuid`. Using `type: uuid` causes an `unsupported 'type' value "uuid"` panic at startup.
+
+### Handler unit tests: response ID must be a valid UUID
+
+When a handler response schema declares `id` with `format: uuid` (e.g., `CreateProductResponse`, `CreatePropertyResponse`),
+mock return values in handler unit tests must use valid UUID strings (e.g., `"018f4e3a-0000-7000-8000-000000000099"`).
+The OpenAPI response validator (`resp.Write`) rejects non-UUID strings and the handler returns HTTP 500, masking the
+actual assertion under test.
 
 ### Multipart handler validation order in unit tests
 

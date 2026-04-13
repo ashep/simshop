@@ -15,6 +15,18 @@ type InvalidLanguageError struct{ Lang string }
 
 func (e *InvalidLanguageError) Error() string { return "invalid language code: " + e.Lang }
 
+type MissingTitleError struct{ Lang string }
+
+func (e *MissingTitleError) Error() string {
+	return "title is required for the language " + e.Lang
+}
+
+type MissingDescriptionError struct{ Lang string }
+
+func (e *MissingDescriptionError) Error() string {
+	return "description is required for the language " + e.Lang
+}
+
 // MissingContentError is returned when the request content map is missing an
 // entry for a language that the target shop has.
 type MissingContentError struct {
