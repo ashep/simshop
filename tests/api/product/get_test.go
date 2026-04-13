@@ -16,20 +16,31 @@ import (
 
 const (
 	testProductID   = "018f4e3a-0000-7000-8000-000000000099"
-	testProductYAML = `data:
-  EN:
-    title: Widget
-    description: A fine widget
+	testProductYAML = `
+name:
+  en: Widget
+description:
+  en: A fine widget
+price:
+  default:
+    currency: USD
+    value: 9.99
+images:
+  - preview: thumb.jpg
+    full: full.jpg
 `
 )
 
 func makeDataDir(t *testing.T, products map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
-	prodsDir := filepath.Join(dataDir, "products")
-	require.NoError(t, os.MkdirAll(prodsDir, 0755))
 	for id, yaml := range products {
-		require.NoError(t, os.WriteFile(filepath.Join(prodsDir, id+".yaml"), []byte(yaml), 0644))
+		prodDir := filepath.Join(dataDir, "products", id)
+		imgDir := filepath.Join(prodDir, "images")
+		require.NoError(t, os.MkdirAll(imgDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(prodDir, "product.yaml"), []byte(yaml), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(imgDir, "thumb.jpg"), []byte("fake"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(imgDir, "full.jpg"), []byte("fake"), 0644))
 	}
 	return dataDir
 }
@@ -54,7 +65,14 @@ func TestListProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Equal(t, testProductID, body[0]["id"])
-		assert.Contains(t, body[0], "data")
+		assert.Contains(t, body[0], "name")
+
+		images, ok := body[0]["images"].([]any)
+		require.True(t, ok, "images must be a list")
+		require.Len(t, images, 1)
+		img := images[0].(map[string]any)
+		assert.Equal(t, "/images/"+testProductID+"/thumb.jpg", img["preview"])
+		assert.Equal(t, "/images/"+testProductID+"/full.jpg", img["full"])
 	})
 
 	main.Run("EmptyWhenNoProducts", func(t *testing.T) {

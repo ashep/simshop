@@ -38,11 +38,9 @@ Do not run `docker compose` directly — the `task` commands manage containers a
 
 ## Architecture
 
-Request processing middleware chain (innermost to outermost): `content-type → auth → openapi validation → handler`.
+Request processing middleware chain (innermost to outermost): `content-type → openapi validation → handler`.
 
 Each request struct exposes a `Trim()` method that strips leading/trailing whitespace from all string fields (including map keys and values). Handlers call `req.Trim()` immediately after `h.unmarshal()`, before any validation or service call.
-
-Endpoints that are public but return extra fields for authenticated admins use `optionalAuthMw` (from `auth.OptionalMiddleware`). This middleware sets the user in context if a valid API key is present, but does not reject unauthenticated requests. Example: `GET /shops/{id}` uses `optionalAuthMw(openapiMw(hdl.GetShop))`.
 
 Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g., `"POST /shops"`).
 
@@ -185,24 +183,6 @@ validation.
 
 When an `owner_id` FK insert fails with PostgreSQL error code `23503`, the service must return `ErrInvalidOwner`. The handler maps it to `&BadRequestError{Reason: "invalid owner id"}`. Unlike language FK violations (which appear in a separate loop on `shop_names`), the owner FK violation occurs on the `shops` INSERT itself, so the check is on the first `tx.Exec` call.
 
-### Admin vs public response shaping
-
-When an endpoint is publicly accessible but returns additional fields for admin callers (or also shop owners), use
-`auth.GetUserFromContext` to check for admin status in the handler, then encode either the admin struct (e.g.,
-`*shop.AdminShop`) or just the public embedded struct (e.g., `sh.Shop`). Declare the local variable as `any` so both
-types satisfy it without a cast. The service always returns the full admin struct; the handler decides what to
-serialise.
-
-When shop-owner access must also be checked (e.g., `GET /products/{id}`), include the owner_id in the admin struct
-with `json:"-"` (so it is never serialised) and compare `user.ID == p.ShopOwnerID` alongside `user.IsAdmin()`. The
-service fetches owner_id from the DB in the same query that fetches the resource.
-
-### File-ownership check for non-admins
-
-When an endpoint attaches files to a resource, non-admin callers may only attach files whose `owner_id` matches the
-resource owner (e.g. the shop owner for a product). Admins skip this check. Pass `IsAdmin bool` in the service request
-struct (following the `file.UploadRequest.IsAdmin` pattern) so the service can branch on it without depending on
-`internal/auth`.
 
 ### File materialization in service layer
 
@@ -343,7 +323,7 @@ actual assertion under test.
 
 ### Multipart handler validation order in unit tests
 
-The `UploadFile` handler validates fields in this order: auth → MaxBytesReader → ParseMultipartForm → file field
+The `UploadFile` handler validates fields in this order: MaxBytesReader → ParseMultipartForm → file field
 present → name field present → explicit size check → MIME type. When writing unit tests for a case that should reach
 the size check (e.g., `FileTooLarge_SizeCheck`), the multipart body must include a valid `name` field — otherwise the
 name-validation branch fires first and the test asserts the wrong error. Only tests that target the `MaxBytesReader`
@@ -371,14 +351,37 @@ the handler to only `ListProducts`. This also removed: the `file` package entire
 
 ### Filesystem-catalog refactor: loader package
 
-The `internal/loader` package is responsible for reading YAML files from `data_dir` at startup and producing a
-`Catalog` struct consumed by service constructors. Key design decisions:
-- A missing `products/` subdirectory is not an error — results in an empty slice/map.
-- A malformed YAML file is a fatal error (returned as `error` from `Load`).
-- A binary file referenced in a product YAML but absent on disk is silently skipped with a `zerolog.Warn` log entry.
-- MIME type is detected via `http.DetectContentType` on the first 512 bytes — never trust the filename extension.
+The `internal/loader` package is responsible for reading product directories from `data_dir` at startup and producing
+a `Catalog` struct consumed by service constructors. Key design decisions:
+- Each product lives in its own subdirectory under `{data_dir}/products/{id}/`. The directory name is the product ID.
+  The product is described by `product.yaml` inside that directory.
+- A missing `products/` subdirectory is not an error — results in an empty catalog.
+- A malformed YAML file or a validation error is fatal (returned as `error` from `Load`).
+- Validation runs inside `loadProduct` immediately after YAML parsing; no separate validation step.
 - `app.go` must call `loader.Load` before constructing services; the catalog's slices/maps are passed directly
-  to `product.NewService` and `file.NewService`.
+  to `product.NewService`.
+
+### Product data model
+
+The `product.Product` struct mirrors the `product.yaml` schema:
+- `Name map[string]string` — lang → display name.
+- `Description map[string]string` — lang → long-form description.
+- `Specs map[string]map[string]SpecItem` — specKey → lang → `{Title, Value}`.
+- `Price map[string]PriceItem` — country code or `"default"` → `{Currency, Value}`.
+- `Attrs map[string]map[string]AttrLang` — attrKey → lang → `{Title, Values map[string]AttrValue}`.
+  Each `AttrValue` has `{Title, AddPrice}`.
+- `Images []ImageItem` — list of `{Preview, Full}` paths relative to the product's `images/` subdirectory.
+
+### Product validation rules (enforced at startup)
+
+Validation lives in `internal/loader/loader.go:validate`. Rules are fatal at startup:
+1. `name` must be non-empty.
+2. `description` must be non-empty.
+3. Language sets of `name` and `description` must be identical.
+4. Every spec entry must cover exactly the languages in `name`.
+5. `price` must contain a `"default"` key.
+6. Every attr entry must cover exactly the languages in `name`, and each language entry must have ≥ 1 value.
+7. Every image `preview` and `full` path must exist on disk relative to `{productDir}/images/` (checked with `os.Stat`; uses `errors.Is(err, fs.ErrNotExist)`).
 
 ### Filesystem-catalog refactor: Write tool prerequisite
 
@@ -388,9 +391,8 @@ files in a single pass, Read each target file before calling Write — even for 
 ### Filesystem-catalog refactor: functional test pattern (no DB)
 
 After removing PostgreSQL, functional tests use YAML fixture files instead of a seeder. Pattern:
-- `makeDataDir(t, map[string]string{id: yaml})` creates a temp dir with a `products/` subdirectory populated
-  with per-ID YAML files. Tests that need binary files (e.g. `TestGetProductFiles`) use `testapp.NewWithPublicDir`
-  and pre-populate the public dir before starting the app.
+- `makeProductDir(t, dataDir, id, yaml, extraFiles)` creates `{dataDir}/products/{id}/product.yaml` and any
+  extra files (e.g. images) specified as a `map[string][]byte` of relative path → content pairs.
 - `testapp.New(t, dataDir)` replaces `testapp.New(t)` — always takes a `dataDir` argument.
 - No seeder, no DB pool, no `testpostgres`. The `docker-compose.tests.yaml` postgres service is removed.
 - Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body
@@ -428,3 +430,22 @@ it). The linter (`unused`) will catch stragglers.
 
 Functional tests that no longer require a database can be run directly with `go test -tags=functest ./tests/...`
 without Docker or task infrastructure — useful in worktrees where `.ci/` is not initialized.
+
+### Image path transformation in loader
+
+After `validate`, `loadProduct` rewrites each non-empty `Images[i].Preview` and `Images[i].Full` from a bare filename
+(e.g. `"thumb.jpg"`) to a URL-ready path (e.g. `"/images/{id}/thumb.jpg"`). Validation runs against the bare
+filenames first (so `os.Stat` works), then the transformation happens so the JSON response contains downloadable
+paths without any handler-level mapping.
+
+### Image serving route
+
+`GET /images/{product_id}/{file_name}` is served by `handler.ServeImage`. It reads from
+`{data_dir}/products/{product_id}/images/{file_name}` using `http.ServeFile`. The handler applies `filepath.Base`
+to both path values before joining to prevent path-value injection traversal. `handler.NewHandler` takes `dataDir
+string` as its third parameter (before `zerolog.Logger`) so the handler can resolve image paths without importing
+`internal/app`.
+
+Functional tests for image serving live in `tests/api/image/` and must create a complete valid product directory
+(including `product.yaml`) alongside the `images/` subdirectory, because the loader rejects product directories
+missing `product.yaml` at startup.

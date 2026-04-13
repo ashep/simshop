@@ -32,12 +32,13 @@ func Run(rt *runner.Runtime[Config]) error {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, openAPI.Responder(), l)
+	hdl := handler.NewHandler(prodSvc, openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
 	srv.HandleFunc("GET /products", openapiMw(hdl.ListProducts))
+	srv.HandleFunc("GET /images/{product_id}/{file_name}", hdl.ServeImage)
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 
