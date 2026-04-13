@@ -19,7 +19,6 @@ func TestLoad(main *testing.T) {
 		cat, err := loader.Load(dataDir, publicDir, zerolog.Nop())
 		require.NoError(t, err)
 		assert.Empty(t, cat.Products)
-		assert.Empty(t, cat.Properties)
 		assert.Empty(t, cat.Files)
 	})
 
@@ -46,26 +45,6 @@ prices:
 		assert.Equal(t, "Widget", cat.Products[0].Data["EN"].Title)
 		assert.Equal(t, 1000, cat.Products[0].Prices["DEFAULT"])
 		assert.Equal(t, 1200, cat.Products[0].Prices["US"])
-	})
-
-	main.Run("LoadsProperties", func(t *testing.T) {
-		dataDir := t.TempDir()
-		publicDir := t.TempDir()
-
-		require.NoError(t, os.WriteFile(
-			filepath.Join(dataDir, "properties.yaml"),
-			[]byte(`- id: "018f4e3a-0000-7000-8000-000000000001"
-  titles:
-    EN: Color
-    UK: Колір
-`), 0644))
-
-		cat, err := loader.Load(dataDir, publicDir, zerolog.Nop())
-		require.NoError(t, err)
-		require.Len(t, cat.Properties, 1)
-		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000001", cat.Properties[0].ID)
-		assert.Equal(t, "Color", cat.Properties[0].Titles["EN"])
-		assert.Equal(t, "Колір", cat.Properties[0].Titles["UK"])
 	})
 
 	main.Run("LoadsProductFiles", func(t *testing.T) {

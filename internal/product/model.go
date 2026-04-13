@@ -5,14 +5,14 @@ import "errors"
 var ErrProductNotFound = errors.New("product not found")
 
 type Product struct {
-	ID     string              `json:"id"   yaml:"-"`
+	ID     string              `json:"id" yaml:"id"`
 	Data   map[string]DataItem `json:"data" yaml:"data"`
-	Prices map[string]int      `json:"-"    yaml:"prices"`
-	Files  []string            `json:"-"    yaml:"files"`
+	Prices map[string]int      `json:"prices" yaml:"prices"`
+	Files  []string            `json:"files" yaml:"files"`
 }
 
 type DataItem struct {
-	Title       string `json:"title"       yaml:"title"`
+	Title       string `json:"title" yaml:"title"`
 	Description string `json:"description" yaml:"description"`
 }
 

@@ -4,6 +4,7 @@
 .worktrees
 
 config.yml
+/data
 /docs
 /public
 /tmp

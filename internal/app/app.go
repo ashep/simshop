@@ -12,7 +12,6 @@ import (
 	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/product"
-	"github.com/ashep/simshop/internal/property"
 )
 
 func Run(rt *runner.Runtime[Config]) error {
@@ -36,7 +35,6 @@ func Run(rt *runner.Runtime[Config]) error {
 	}
 
 	prodSvc := product.NewService(catalog.Products)
-	propSvc := property.NewService(catalog.Properties)
 	fileSvc := file.NewService(catalog.Files)
 
 	openAPI, err := openapi.New(api.Spec)
@@ -44,7 +42,7 @@ func Run(rt *runner.Runtime[Config]) error {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, propSvc, fileSvc, openAPI.Responder(), l)
+	hdl := handler.NewHandler(prodSvc, fileSvc, openAPI.Responder(), l)
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
@@ -53,7 +51,6 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("GET /products/{id}", openapiMw(hdl.GetProduct))
 	srv.HandleFunc("GET /products/{id}/prices", openapiMw(hdl.GetProductPrice))
 	srv.HandleFunc("GET /products/{id}/files", openapiMw(hdl.GetProductFiles))
-	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

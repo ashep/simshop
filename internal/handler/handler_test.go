@@ -5,8 +5,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ashep/simshop/api"
+	"github.com/ashep/simshop/internal/openapi"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 )
+
+func buildTestResponder(t *testing.T) *openapi.Responder {
+	t.Helper()
+	oas, err := openapi.New(api.Spec)
+	require.NoError(t, err)
+	return oas.Responder()
+}
 
 func newTestHandler() *Handler {
 	return &Handler{l: zerolog.Nop()}

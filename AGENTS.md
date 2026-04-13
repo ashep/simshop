@@ -20,19 +20,19 @@ Never run `git commit` or `git push` unless the user explicitly asks. When dispa
 
 `simshop` is a Go HTTP API service (`github.com/ashep/simshop`). It uses:
 
-- **PostgreSQL** as the database (via `pgx/v5`)
+- **Filesystem catalog** — products, files, and prices are loaded from YAML files at startup (no database)
 - **zerolog** for structured logging
 - **go-app** framework (`github.com/ashep/go-app`) for app lifecycle/config
 - **OpenAPI** spec in `api/` for request validation
 
 Key directories:
 
-- `internal/` — application code (app, auth, handler, product, shop, sql, etc.)
+- `internal/` — application code (app, handler, product, file, loader, openapi)
 - `api/` — OpenAPI spec files
 - `tests/` — functional tests (build tag: `functest`)
 - `vendor/` — vendored dependencies
 
-Config is loaded from `config.yml` and environment variables. The database DSN is set under `database.dsn`.
+Config is loaded from `config.yml` and environment variables. Data is read from `data_dir` (default `./data`).
 
 Do not run `docker compose` directly — the `task` commands manage containers automatically.
 
@@ -328,6 +328,12 @@ The OpenAPI validator (`kin-openapi`) operates in OpenAPI 3.0 compatibility mode
 
 For path parameters that hold UUID values, always write `type: string` + `format: uuid`, never `type: uuid`. Using `type: uuid` causes an `unsupported 'type' value "uuid"` panic at startup.
 
+### Shared test helpers in handler package
+
+When a test file in `internal/handler/` is deleted, any helpers it defined (e.g., `buildTestResponder`) become
+undefined for other test files in the same package. Keep shared test helpers in `handler_test.go`, not in
+per-feature test files, so they survive feature removal.
+
 ### Handler unit tests: response ID must be a valid UUID
 
 When a handler response schema declares `id` with `format: uuid` (e.g., `CreateProductResponse`, `CreatePropertyResponse`),
@@ -348,7 +354,6 @@ path (body too large to even parse) can safely omit `name`.
 After removing the PostgreSQL backend, service constructors take in-memory data instead of a `*pgxpool.Pool`:
 - `product.NewService(products []*Product)` — nil is normalized to `[]*Product{}` inside the constructor (required so
   `List` returns an empty JSON array `[]` rather than `null`, which would fail OpenAPI response validation).
-- `property.NewService(props []Property)` — same; nil is normalized to `[]Property{}` inside the constructor.
 - `file.NewService(files map[string][]FileInfo)` — keyed by product ID; nil is normalized to an empty map.
 
 ### Filesystem-catalog refactor: handler reduction
@@ -363,12 +368,12 @@ deleted error types.
 
 The `internal/loader` package is responsible for reading YAML files from `data_dir` at startup and producing a
 `Catalog` struct consumed by service constructors. Key design decisions:
-- A missing `products/` subdirectory or `properties.yaml` file is not an error — results in an empty slice/map.
+- A missing `products/` subdirectory is not an error — results in an empty slice/map.
 - A malformed YAML file is a fatal error (returned as `error` from `Load`).
 - A binary file referenced in a product YAML but absent on disk is silently skipped with a `zerolog.Warn` log entry.
 - MIME type is detected via `http.DetectContentType` on the first 512 bytes — never trust the filename extension.
 - `app.go` must call `loader.Load` before constructing services; the catalog's slices/maps are passed directly
-  to `product.NewService`, `property.NewService`, and `file.NewService`.
+  to `product.NewService` and `file.NewService`.
 
 ### Filesystem-catalog refactor: Write tool prerequisite
 

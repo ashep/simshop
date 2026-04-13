@@ -1,7 +1,7 @@
 # SimShop
 
-SimShop is a read-only HTTP API service that serves catalog data (products, properties, and product files) loaded from
-YAML files at startup.
+SimShop is a read-only HTTP API service that serves catalog data (products and product files) loaded from YAML files
+at startup.
 
 ## Purpose
 
@@ -9,7 +9,6 @@ SimShop is designed as a lightweight catalog backend where:
 
 - Products are defined in YAML files on disk and served via a JSON REST API.
 - Prices are resolved per country with a `DEFAULT` fallback.
-- Catalog attributes are defined as reusable properties.
 - File metadata (MIME type, size, path) is served alongside products.
 
 ## Key Concepts
@@ -37,13 +36,6 @@ Each product has:
 - **Prices** — per-country integer prices (smallest currency unit), with a `DEFAULT` fallback key.
 - **Files** — list of file names attached to the product (resolved to `FileInfo` from the file catalog).
 
-### Property
-
-A property is a reusable catalog attribute (e.g. "Color", "Size"). Each property has:
-
-- **ID** — a UUID.
-- **Titles** — a map of language code → human-readable title.
-
 ### File
 
 A file record describes a binary asset associated with a product:
@@ -63,7 +55,6 @@ The service exposes a read-only JSON REST API validated against an OpenAPI speci
 | `GET`  | `/products/{id}`          | Get a single product by ID                           | No            |
 | `GET`  | `/products/{id}/prices`   | Get the resolved price for a country (`?country=XX`) | No            |
 | `GET`  | `/products/{id}/files`    | List files attached to a product                     | No            |
-| `GET`  | `/properties`             | List all properties                                  | No            |
 
 ## Configuration
 
@@ -84,7 +75,6 @@ data_dir: "./data"
 
 ```
 {data_dir}/
-  properties.yaml
   products/
     {product-id}.yaml
 
@@ -94,7 +84,7 @@ data_dir: "./data"
     manual.pdf
 ```
 
-The `properties.yaml` file defines reusable catalog attributes. Each `{product-id}.yaml` file in `products/` defines
-one product including its multilingual data, prices, and the list of file names attached to it. Binary assets (images,
-PDFs, etc.) are placed under `{public_dir}/{product-id}/` and are served as static files. A binary asset referenced
-in a product YAML but absent on disk is silently skipped at load time.
+Each `{product-id}.yaml` file in `products/` defines one product including its multilingual data, prices, and the list
+of file names attached to it. Binary assets (images, PDFs, etc.) are placed under `{public_dir}/{product-id}/` and are
+served as static files. A binary asset referenced in a product YAML but absent on disk is silently skipped at load
+time.

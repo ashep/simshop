@@ -11,16 +11,14 @@ import (
 
 	"github.com/ashep/simshop/internal/file"
 	"github.com/ashep/simshop/internal/product"
-	"github.com/ashep/simshop/internal/property"
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
 )
 
 // Catalog holds all content loaded from the data directory at startup.
 type Catalog struct {
-	Products   []*product.Product
-	Properties []property.Property
-	Files      map[string][]file.FileInfo // product ID → files
+	Products []*product.Product
+	Files    map[string][]file.FileInfo // product ID → files
 }
 
 // Load reads data_dir and public_dir, returning a populated Catalog.
@@ -29,35 +27,13 @@ type Catalog struct {
 // A missing binary file logs a warning and is skipped.
 func Load(dataDir, publicDir string, l zerolog.Logger) (*Catalog, error) {
 	c := &Catalog{
-		Properties: []property.Property{},
-		Files:      make(map[string][]file.FileInfo),
+		Files: make(map[string][]file.FileInfo),
 	}
 
-	if err := loadProperties(dataDir, c); err != nil {
-		return nil, err
-	}
 	if err := loadProducts(dataDir, publicDir, c, l); err != nil {
 		return nil, err
 	}
 	return c, nil
-}
-
-func loadProperties(dataDir string, c *Catalog) error {
-	path := filepath.Join(dataDir, "properties.yaml")
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read properties.yaml: %w", err)
-	}
-	if err := yaml.Unmarshal(data, &c.Properties); err != nil {
-		return fmt.Errorf("parse properties.yaml: %w", err)
-	}
-	if c.Properties == nil {
-		c.Properties = []property.Property{}
-	}
-	return nil
 }
 
 func loadProducts(dataDir, publicDir string, c *Catalog, l zerolog.Logger) error {
