@@ -129,6 +129,13 @@ When resolving a price with a fallback to `DEFAULT`, use a single query with `AN
 exact-country match. `pgx.ErrNoRows` (no price rows at all, or no DEFAULT) returns a zero-value result struct
 `&PriceResult{CountryID: "DEFAULT", Value: 0}` — never a domain error, since zero price is a valid state.
 
+### Price response country_id always echoes the request
+
+The `GetProductPrice` handler sets `result.CountryID = country` after receiving the service result. This means the
+response always returns the caller's requested country code, even when the price was sourced from the `DEFAULT` fallback
+row. The service layer is intentionally left unchanged — it returns the actual DB `country_id` — and the handler is
+responsible for this response-shaping concern.
+
 ### Country FK validation on prices
 
 The `product_prices` table has a FK on `country_id`. On INSERT, a PostgreSQL FK violation (error code `23503`) means

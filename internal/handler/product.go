@@ -297,6 +297,8 @@ func (h *Handler) GetProductPrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result.CountryID = country
+
 	if err := h.resp.Write(w, r, http.StatusOK, result); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}

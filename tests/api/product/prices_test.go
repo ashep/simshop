@@ -198,7 +198,7 @@ func TestGetProductPrice(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "DEFAULT", body["country_id"])
+		assert.Equal(t, "DE", body["country_id"])
 		assert.Equal(t, float64(500), body["value"])
 	})
 
@@ -215,7 +215,7 @@ func TestGetProductPrice(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "DEFAULT", body["country_id"])
+		assert.Equal(t, "US", body["country_id"])
 		assert.Equal(t, float64(0), body["value"])
 	})
 
@@ -232,7 +232,7 @@ func TestGetProductPrice(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "DEFAULT", body["country_id"])
+		assert.Equal(t, "DE", body["country_id"])
 		assert.Equal(t, float64(0), body["value"])
 	})
 

@@ -26,6 +26,10 @@ any entity.
 Product prices are defined per country. A `DEFAULT` country price serves as the fallback, with country-specific
 overrides (e.g. `UA`) layered on top. Pricing is managed separately from product creation.
 
+`GET /products/{id}/prices?country=XX` resolves the price for the requested country. The response always echoes back
+the requested country code in `country_id`, even when the resolved price comes from the `DEFAULT` fallback. This lets
+callers treat the response as authoritative for the country they asked about without inspecting which bucket was used.
+
 ### Authentication and authorization
 
 Access to write operations is controlled by API keys passed in the `X-API-Key` request header. Each user holds a set of

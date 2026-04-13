@@ -550,6 +550,19 @@ func TestGetProductPrice(main *testing.T) {
 		assert.JSONEq(t, `{"country_id":"US","value":999}`, w.Body.String())
 	})
 
+	main.Run("FallbackToDefault_ReturnsRequestedCountry", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("GetPrice", mock.Anything, productID, "DE").Return(
+			&product.PriceResult{CountryID: "DEFAULT", Value: 500}, nil,
+		)
+
+		w := doRequest(t, prodSvc, "DE")
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"country_id":"DE","value":500}`, w.Body.String())
+	})
+
 	main.Run("ServiceError", func(t *testing.T) {
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
