@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/ashep/go-app/dbmigrator"
 	"github.com/ashep/go-app/httpserver"
@@ -42,6 +43,14 @@ func Run(rt *runner.Runtime[Config]) error {
 		}
 	}
 
+	if cfg.Server.PublicDir == "" {
+		cfg.Server.PublicDir = "./public"
+	}
+
+	if err := os.MkdirAll(cfg.Server.PublicDir, 0755); err != nil {
+		return fmt.Errorf("create public dir: %w", err)
+	}
+
 	// Migrate DB
 	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
 	if err != nil {
@@ -63,7 +72,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	shopSvc := shop.NewService(db, l)
 	prodSvc := product.NewService(db, l)
 	propSvc := property.NewService(db, l)
-	fileSvc := file.NewService(db, cfg.Files.MaxNumPerUser, l)
+	fileSvc := file.NewService(db, cfg.Server.PublicDir, cfg.Files.MaxNumPerUser, l)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
@@ -99,6 +108,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
 
 	srv.HandleFunc("POST /files", MultipartContentType(authMw(openapiMw(hdl.UploadFile))))
+	srv.HandleFunc("GET /products/{id}/files", optionalAuthMw(openapiMw(hdl.GetProductFiles)))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

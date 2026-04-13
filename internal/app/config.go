@@ -5,7 +5,8 @@ type Database struct {
 }
 
 type Server struct {
-	Addr string `yaml:"addr"`
+	Addr      string `yaml:"addr"`
+	PublicDir string `yaml:"public_dir"`
 }
 
 type Files struct {

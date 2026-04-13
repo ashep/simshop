@@ -9,10 +9,67 @@ import (
 
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/file"
+	"github.com/ashep/simshop/internal/product"
 )
 
 type fileService interface {
 	Upload(ctx context.Context, req file.UploadRequest) (*file.File, error)
+	GetForProduct(ctx context.Context, productID string) ([]file.FileInfo, error)
+}
+
+func (h *Handler) GetProductFiles(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	p, err := h.prod.Get(r.Context(), id)
+	if errors.Is(err, product.ErrProductNotFound) {
+		h.writeError(w, &NotFoundError{Reason: "product not found"})
+		return
+	} else if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	files, err := h.file.GetForProduct(r.Context(), id)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	user := auth.GetUserFromContext(r.Context())
+	var body any
+	if user != nil && (user.IsAdmin() || user.ID == p.ShopOwnerID) {
+		items := make([]file.AdminFileItem, len(files))
+		for i, f := range files {
+			items[i] = file.AdminFileItem{
+				PublicFileItem: file.PublicFileItem{
+					ID:        f.ID,
+					Name:      f.Name,
+					MimeType:  f.MimeType,
+					SizeBytes: f.SizeBytes,
+					Path:      f.Path,
+				},
+				CreatedAt: f.CreatedAt,
+				UpdatedAt: f.UpdatedAt,
+			}
+		}
+		body = items
+	} else {
+		items := make([]file.PublicFileItem, len(files))
+		for i, f := range files {
+			items[i] = file.PublicFileItem{
+				ID:        f.ID,
+				Name:      f.Name,
+				MimeType:  f.MimeType,
+				SizeBytes: f.SizeBytes,
+				Path:      f.Path,
+			}
+		}
+		body = items
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, body); err != nil {
+		h.l.Error().Err(err).Msg("response validation failed")
+	}
 }
 
 func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {

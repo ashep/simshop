@@ -17,8 +17,9 @@ import (
 
 type App struct {
 	*testrunner.Runner[func(*runner.Runtime[app.Config]) error, app.Config]
-	pg   *testpostgres.Postgres
-	addr string
+	pg        *testpostgres.Postgres
+	addr      string
+	publicDir string
 }
 
 func New(t *testing.T) *App {
@@ -32,6 +33,7 @@ func New(t *testing.T) *App {
 		panic(fmt.Sprintf("close listener: %s", err))
 	}
 
+	publicDir := t.TempDir()
 	pg := testpostgres.New(t)
 	cfg := app.Config{
 		Debug: false,
@@ -39,13 +41,14 @@ func New(t *testing.T) *App {
 			DSN: pg.DSN(),
 		},
 		Server: app.Server{
-			Addr: addr,
+			Addr:      addr,
+			PublicDir: publicDir,
 		},
 	}
 
 	r := testrunner.New(t, app.Run, cfg).SetHTTPReadyStartWaiter("http://"+addr, time.Second)
 
-	return &App{Runner: r, pg: pg, addr: addr}
+	return &App{Runner: r, pg: pg, addr: addr, publicDir: publicDir}
 }
 
 func (a *App) URL(path string) string {
@@ -54,4 +57,8 @@ func (a *App) URL(path string) string {
 
 func (a *App) DB() *pgxpool.Pool {
 	return a.pg.DB()
+}
+
+func (a *App) PublicDir() string {
+	return a.publicDir
 }

@@ -108,6 +108,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `PATCH` | `/products/{id}`          | Fully replace a product's content (EN title required)         | Owner/Admin |
 | `PUT`   | `/products/{id}/prices`   | Fully replace all prices for a product                        | Owner/Admin |
 | `GET`   | `/products/{id}/prices`   | Get the resolved price for a country (`?country=XX`)          | No          |
+| `GET`   | `/products/{id}/files`    | List files attached to a product (public; timestamps for admin/owner) | No |
 | `PUT`   | `/products/{id}/files`    | Fully replace all file attachments for a product              | Owner/Admin |
 | `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
 | `POST`  | `/properties`      | Create a property                                    | Admin         |

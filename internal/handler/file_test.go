@@ -3,14 +3,17 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ashep/simshop/internal/auth"
 	"github.com/ashep/simshop/internal/file"
+	"github.com/ashep/simshop/internal/product"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -27,6 +30,14 @@ func (m *fileServiceMock) Upload(ctx context.Context, req file.UploadRequest) (*
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*file.File), args.Error(1)
+}
+
+func (m *fileServiceMock) GetForProduct(ctx context.Context, productID string) ([]file.FileInfo, error) {
+	args := m.Called(ctx, productID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]file.FileInfo), args.Error(1)
 }
 
 func TestUploadFile(main *testing.T) {
@@ -194,5 +205,179 @@ func TestUploadFile(main *testing.T) {
 
 		assert.Equal(t, http.StatusCreated, w.Code)
 		assert.JSONEq(t, `{"id":"018f4e3a-0000-7000-8000-000000000001"}`, w.Body.String())
+	})
+}
+
+func TestGetProductFiles(main *testing.T) {
+	productID := "018f4e3a-0000-7000-8000-000000000099"
+	ownerID := "owner-1"
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	makeProduct := func() *product.AdminProduct {
+		return &product.AdminProduct{
+			PublicProduct: product.PublicProduct{ID: productID},
+			ShopOwnerID:   ownerID,
+		}
+	}
+
+	makeFiles := func() []file.FileInfo {
+		return []file.FileInfo{
+			{
+				ID:        "018f4e3a-0000-7000-8000-000000000001",
+				Name:      "photo.jpg",
+				MimeType:  "image/jpeg",
+				SizeBytes: 1024,
+				Path:      "/files/018f4e3a-0000-7000-8000-000000000001/photo.jpg",
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+		}
+	}
+
+	resp := buildTestResponder(main)
+
+	doRequest := func(t *testing.T, prodSvc *productServiceMock, fileSvc *fileServiceMock, user *auth.User) *httptest.ResponseRecorder {
+		t.Helper()
+		h := &Handler{prod: prodSvc, file: fileSvc, resp: resp, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/"+productID+"/files", nil)
+		r.SetPathValue("id", productID)
+		if user != nil {
+			r = r.WithContext(auth.ContextWithUser(r.Context(), user))
+		}
+		w := httptest.NewRecorder()
+		h.GetProductFiles(w, r)
+		return w
+	}
+
+	main.Run("ProductNotFound", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(nil, product.ErrProductNotFound)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+
+		w := doRequest(t, prodSvc, fileSvc, nil)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.JSONEq(t, `{"error":"product not found"}`, w.Body.String())
+	})
+
+	main.Run("FileServiceError", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return(nil, errors.New("db error"))
+
+		w := doRequest(t, prodSvc, fileSvc, nil)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("EmptyList", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return([]file.FileInfo{}, nil)
+
+		w := doRequest(t, prodSvc, fileSvc, nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `[]`, w.Body.String())
+	})
+
+	main.Run("PublicFields_Unauthenticated", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return(makeFiles(), nil)
+
+		w := doRequest(t, prodSvc, fileSvc, nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body []map[string]any
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+		assert.Len(t, body, 1)
+		assert.Contains(t, body[0], "id")
+		assert.Contains(t, body[0], "name")
+		assert.Contains(t, body[0], "mime_type")
+		assert.Contains(t, body[0], "size_bytes")
+		assert.Contains(t, body[0], "path")
+		assert.NotContains(t, body[0], "created_at")
+		assert.NotContains(t, body[0], "updated_at")
+	})
+
+	main.Run("PublicFields_NonOwner", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return(makeFiles(), nil)
+
+		other := &auth.User{ID: "other-user", Scopes: nil}
+		w := doRequest(t, prodSvc, fileSvc, other)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body []map[string]any
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+		assert.Len(t, body, 1)
+		assert.NotContains(t, body[0], "created_at")
+		assert.NotContains(t, body[0], "updated_at")
+	})
+
+	main.Run("AdminFields", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return(makeFiles(), nil)
+
+		admin := &auth.User{ID: "admin-1", Scopes: []auth.Scope{auth.ScopeAdmin}}
+		w := doRequest(t, prodSvc, fileSvc, admin)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body []map[string]any
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+		assert.Len(t, body, 1)
+		assert.Contains(t, body[0], "created_at")
+		assert.NotNil(t, body[0]["created_at"])
+		assert.Contains(t, body[0], "updated_at")
+		assert.NotNil(t, body[0]["updated_at"])
+	})
+
+	main.Run("OwnerFields", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("Get", mock.Anything, productID).Return(makeProduct(), nil)
+
+		fileSvc := &fileServiceMock{}
+		defer fileSvc.AssertExpectations(t)
+		fileSvc.On("GetForProduct", mock.Anything, productID).Return(makeFiles(), nil)
+
+		owner := &auth.User{ID: ownerID, Scopes: nil}
+		w := doRequest(t, prodSvc, fileSvc, owner)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body []map[string]any
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+		assert.Len(t, body, 1)
+		assert.Contains(t, body[0], "created_at")
+		assert.NotNil(t, body[0]["created_at"])
+		assert.Contains(t, body[0], "updated_at")
+		assert.NotNil(t, body[0]["updated_at"])
 	})
 }

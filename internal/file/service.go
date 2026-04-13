@@ -6,11 +6,12 @@ import (
 )
 
 type Service struct {
-	db             *pgxpool.Pool
-	maxNumPerUser  int
-	l              zerolog.Logger
+	db            *pgxpool.Pool
+	publicDir     string
+	maxNumPerUser int
+	l             zerolog.Logger
 }
 
-func NewService(db *pgxpool.Pool, maxNumPerUser int, l zerolog.Logger) *Service {
-	return &Service{db: db, maxNumPerUser: maxNumPerUser, l: l}
+func NewService(db *pgxpool.Pool, publicDir string, maxNumPerUser int, l zerolog.Logger) *Service {
+	return &Service{db: db, publicDir: publicDir, maxNumPerUser: maxNumPerUser, l: l}
 }

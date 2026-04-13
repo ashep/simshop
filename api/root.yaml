@@ -385,6 +385,28 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /products/{id}/files:
+    get:
+      operationId: getProductFiles
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of product files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProductFilesResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       operationId: setProductFiles
       security:
@@ -751,3 +773,38 @@ components:
         id:
           type: string
           format: uuid
+
+    ProductFileItem:
+      type: object
+      required:
+        - id
+        - name
+        - mime_type
+        - size_bytes
+        - path
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+        path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    GetProductFilesResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/ProductFileItem'
