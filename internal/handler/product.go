@@ -17,6 +17,7 @@ type productService interface {
 	Update(ctx context.Context, id string, req product.UpdateRequest) error
 	SetPrices(ctx context.Context, id string, prices map[string]int) error
 	GetPrice(ctx context.Context, id string, countryID string) (*product.PriceResult, error)
+	SetFiles(ctx context.Context, id string, req product.SetFilesRequest) error
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +228,56 @@ func (h *Handler) SetProductPrices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.l.Info().Str("product_id", id).Str("user_id", user.ID).Msg("product prices updated")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) SetProductFiles(w http.ResponseWriter, r *http.Request) {
+	req := product.SetFilesRequest{}
+	if err := h.unmarshal(r.Body, &req); err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	user := auth.GetUserFromContext(r.Context())
+	if user == nil {
+		h.writeError(w, &PermissionDeniedError{})
+		return
+	}
+
+	id := r.PathValue("id")
+
+	if !user.IsAdmin() {
+		p, err := h.prod.Get(r.Context(), id)
+		if errors.Is(err, product.ErrProductNotFound) {
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+			return
+		} else if err != nil {
+			h.writeError(w, err)
+			return
+		}
+		if p.ShopOwnerID != user.ID {
+			h.writeError(w, &PermissionDeniedError{})
+			return
+		}
+	}
+
+	req.IsAdmin = user.IsAdmin()
+
+	if err := h.prod.SetFiles(r.Context(), id, req); err != nil {
+		switch {
+		case errors.Is(err, product.ErrProductNotFound):
+			h.writeError(w, &NotFoundError{Reason: "product not found"})
+		case errors.Is(err, product.ErrFileNotFound):
+			h.writeError(w, &NotFoundError{Reason: "file not found"})
+		case errors.Is(err, product.ErrFileOwnerMismatch):
+			h.writeError(w, &PermissionDeniedError{})
+		default:
+			h.writeError(w, err)
+		}
+		return
+	}
+
+	h.l.Info().Str("product_id", id).Str("user_id", user.ID).Msg("product files updated")
 	w.WriteHeader(http.StatusOK)
 }
 

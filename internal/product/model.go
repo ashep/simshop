@@ -82,6 +82,14 @@ func (r *UpdateRequest) Trim() {
 	r.Data = trimmed
 }
 
+var ErrFileNotFound = errors.New("file not found")
+var ErrFileOwnerMismatch = errors.New("file owner mismatch")
+
+type SetFilesRequest struct {
+	FileIDs []string `json:"file_ids"`
+	IsAdmin bool     `json:"-"`
+}
+
 type InvalidCountryError struct{ Country string }
 
 func (e *InvalidCountryError) Error() string { return "invalid country code: " + e.Country }

@@ -227,6 +227,33 @@ func (s *Seeder) GetProductPrices(t *testing.T, productID string) map[string]int
 	return prices
 }
 
+func (s *Seeder) SetProductFiles(t *testing.T, productID string, fileIDs []string) {
+	t.Helper()
+	_, err := s.db.Exec(t.Context(), "DELETE FROM product_files WHERE product_id = $1", productID)
+	require.NoError(t, err)
+	for _, fileID := range fileIDs {
+		_, err = s.db.Exec(t.Context(),
+			"INSERT INTO product_files (product_id, file_id) VALUES ($1, $2)", productID, fileID)
+		require.NoError(t, err)
+	}
+}
+
+func (s *Seeder) GetProductFiles(t *testing.T, productID string) []string {
+	t.Helper()
+	rows, err := s.db.Query(t.Context(),
+		"SELECT file_id FROM product_files WHERE product_id = $1 ORDER BY file_id", productID)
+	require.NoError(t, err)
+	defer rows.Close()
+	var fileIDs []string
+	for rows.Next() {
+		var fileID string
+		require.NoError(t, rows.Scan(&fileID))
+		fileIDs = append(fileIDs, fileID)
+	}
+	require.NoError(t, rows.Err())
+	return fileIDs
+}
+
 func (s *Seeder) CreateFile(t *testing.T, ownerID string) string {
 	t.Helper()
 	var id string

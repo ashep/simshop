@@ -199,6 +199,33 @@ CREATE TABLE IF NOT EXISTS shop_data
     PRIMARY KEY (shop_id, lang_id)
 );
 
+CREATE TABLE IF NOT EXISTS properties
+(
+    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7()
+);
+
+CREATE TABLE IF NOT EXISTS property_titles
+(
+    property_id uuid NOT NULL REFERENCES properties (id),
+    lang_id     TEXT NOT NULL REFERENCES languages (id),
+    title       TEXT NOT NULL CHECK ( length(title) > 0 ),
+    PRIMARY KEY (lang_id, title)
+);
+
+
+CREATE TABLE IF NOT EXISTS files
+(
+    id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
+    owner_id   uuid                        NOT NULL REFERENCES users (id),
+    mime_type  TEXT                        NOT NULL,
+    size_bytes INT                         NOT NULL,
+    data       BYTEA                       NOT NULL,
+    metadata   jsonb,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITHOUT TIME ZONE
+);
+
 CREATE TABLE IF NOT EXISTS products
 (
     id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
@@ -225,20 +252,6 @@ CREATE TABLE IF NOT EXISTS product_data
     PRIMARY KEY (product_id, lang_id)
 );
 
-CREATE TABLE IF NOT EXISTS properties
-(
-    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7()
-);
-
-CREATE TABLE IF NOT EXISTS property_titles
-(
-    property_id uuid NOT NULL REFERENCES properties (id),
-    lang_id     TEXT NOT NULL REFERENCES languages (id),
-    title       TEXT NOT NULL CHECK ( length(title) > 0 ),
-    PRIMARY KEY (lang_id, title)
-);
-
-
 CREATE TABLE IF NOT EXISTS property_values
 (
     product_id  uuid NOT NULL REFERENCES products (id),
@@ -257,15 +270,9 @@ CREATE TABLE IF NOT EXISTS property_prices
     PRIMARY KEY (product_id, property_id, country_id)
 );
 
-CREATE TABLE IF NOT EXISTS files
+CREATE TABLE IF NOT EXISTS product_files
 (
-    id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
-    owner_id   uuid                        NOT NULL REFERENCES users (id),
-    mime_type  TEXT                        NOT NULL,
-    size_bytes INT                         NOT NULL,
-    data       BYTEA                       NOT NULL,
-    metadata   jsonb,
-    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITHOUT TIME ZONE
+    product_id uuid NOT NULL REFERENCES products (id),
+    file_id    uuid NOT NULL REFERENCES files (id),
+    PRIMARY KEY (product_id, file_id)
 );

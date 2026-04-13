@@ -81,6 +81,10 @@ A binary object (image, document) uploaded by an authenticated user and stored i
 File uploads are subject to per-user quota enforcement. Admins bypass the quota but are still subject to the size
 limit. Allowed MIME types are configured at startup; unsupported types are rejected with `400 Bad Request`.
 
+Files can be attached to products via `PUT /products/{id}/files`. The operation fully replaces the current set of
+attachments. Non-admin callers (shop owners) may only attach files whose `owner_id` matches the product's shop owner.
+Admins may attach any file to any product.
+
 ### Supporting entities
 
 | Entity   | Purpose                                                     |
@@ -104,6 +108,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `PATCH` | `/products/{id}`          | Fully replace a product's content (EN title required)         | Owner/Admin |
 | `PUT`   | `/products/{id}/prices`   | Fully replace all prices for a product                        | Owner/Admin |
 | `GET`   | `/products/{id}/prices`   | Get the resolved price for a country (`?country=XX`)          | No          |
+| `PUT`   | `/products/{id}/files`    | Fully replace all file attachments for a product              | Owner/Admin |
 | `GET`   | `/shops/{id}/products`    | List all products in a shop (public; extra fields for admin/owner) | No     |
 | `POST`  | `/properties`      | Create a property                                    | Admin         |
 | `GET`   | `/properties`      | List all properties                                  | No            |

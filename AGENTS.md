@@ -182,6 +182,19 @@ When shop-owner access must also be checked (e.g., `GET /products/{id}`), includ
 with `json:"-"` (so it is never serialised) and compare `user.ID == p.ShopOwnerID` alongside `user.IsAdmin()`. The
 service fetches owner_id from the DB in the same query that fetches the resource.
 
+### File-ownership check for non-admins
+
+When an endpoint attaches files to a resource, non-admin callers may only attach files whose `owner_id` matches the
+resource owner (e.g. the shop owner for a product). Admins skip this check. Pass `IsAdmin bool` in the service request
+struct (following the `file.UploadRequest.IsAdmin` pattern) so the service can branch on it without depending on
+`internal/auth`.
+
+### SQL migration table ordering
+
+Tables must be defined in dependency order: a table referencing another must come after it. When adding or reordering
+tables in `001_init.up.sql`, verify that every `REFERENCES <table>` points to a table declared earlier in the file.
+The corresponding `001_init.down.sql` must drop tables in reverse dependency order (children before parents).
+
 ## Tests
 
 ### Unit tests

@@ -1,10 +1,12 @@
-DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS product_files;
+DROP TABLE IF EXISTS property_prices;
 DROP TABLE IF EXISTS property_values;
-DROP TABLE IF EXISTS property_titles;
-DROP TABLE IF EXISTS properties;
 DROP TABLE IF EXISTS product_data;
 DROP TABLE IF EXISTS product_prices;
 DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS property_titles;
+DROP TABLE IF EXISTS properties;
 DROP TABLE IF EXISTS shop_data;
 DROP TABLE IF EXISTS shops;
 DROP TABLE IF EXISTS ext_users;

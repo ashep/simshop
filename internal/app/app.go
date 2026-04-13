@@ -24,7 +24,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	cfg := rt.Cfg
 	l := rt.Log
 
-	// Apply Files config defaults.
+	// Apply Files config defaults
 	if cfg.Files.MaxSize == 0 {
 		cfg.Files.MaxSize = 10 * 1024 * 1024
 	}
@@ -86,15 +86,17 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("POST /shops", jsonContentType(authMw(openapiMw(hdl.CreateShop))))
 	srv.HandleFunc("PATCH /shops/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateShop))))
 
-	srv.HandleFunc("POST /products", jsonContentType(authMw(openapiMw(hdl.CreateProduct))))
-	srv.HandleFunc("PATCH /products/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProduct))))
-	srv.HandleFunc("PUT /products/{id}/prices", jsonContentType(authMw(openapiMw(hdl.SetProductPrices))))
-	srv.HandleFunc("GET /products/{id}/prices", optionalAuthMw(openapiMw(hdl.GetProductPrice)))
-	srv.HandleFunc("GET /products/{id}", optionalAuthMw(openapiMw(hdl.GetProduct)))
-	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
 	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
 	srv.HandleFunc("POST /properties", jsonContentType(authMw(openapiMw(hdl.CreateProperty))))
 	srv.HandleFunc("PATCH /properties/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProperty))))
+
+	srv.HandleFunc("POST /products", jsonContentType(authMw(openapiMw(hdl.CreateProduct))))
+	srv.HandleFunc("PATCH /products/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProduct))))
+	srv.HandleFunc("PUT /products/{id}/prices", jsonContentType(authMw(openapiMw(hdl.SetProductPrices))))
+	srv.HandleFunc("PUT /products/{id}/files", jsonContentType(authMw(openapiMw(hdl.SetProductFiles))))
+	srv.HandleFunc("GET /products/{id}/prices", optionalAuthMw(openapiMw(hdl.GetProductPrice)))
+	srv.HandleFunc("GET /products/{id}", optionalAuthMw(openapiMw(hdl.GetProduct)))
+	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
 
 	srv.HandleFunc("POST /files", MultipartContentType(authMw(openapiMw(hdl.UploadFile))))
 

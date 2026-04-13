@@ -384,6 +384,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /products/{id}/files:
+    put:
+      operationId: setProductFiles
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProductFilesRequest'
+      responses:
+        "200":
+          description: Files updated
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /files:
     post:
       operationId: uploadFile
@@ -689,6 +729,17 @@ components:
       properties:
         error:
           type: string
+
+    SetProductFilesRequest:
+      type: object
+      required:
+        - file_ids
+      properties:
+        file_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
 
     UploadFileResponse:
       type: object
