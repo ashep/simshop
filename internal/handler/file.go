@@ -22,8 +22,16 @@ func (h *Handler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	maxSize := int64(h.fileMaxSize)
-	if err := r.ParseMultipartForm(maxSize); err != nil {
-		h.writeError(w, &BadRequestError{Reason: "failed to parse multipart form"})
+	// Limit the total request body. The +1024 accounts for multipart boundary/header overhead
+	// so a file at exactly maxSize bytes is not rejected by the reader limit.
+	r.Body = http.MaxBytesReader(w, r.Body, maxSize+1024)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			h.writeError(w, &BadRequestError{Reason: "file too large"})
+		} else {
+			h.writeError(w, &BadRequestError{Reason: "failed to parse multipart form"})
+		}
 		return
 	}
 
