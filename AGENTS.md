@@ -59,6 +59,29 @@ appropriate HTTP error type using `errors.Is`.
 Always use the most semantically appropriate HTTP status code. Examples: 409 Conflict for duplicate resource, 404 Not
 Found for missing resource — not a generic 400 Bad Request.
 
+### OpenAPI middleware and multipart/form-data
+
+The OpenAPI middleware (`internal/openapi/middleware.go`) reads and buffers the request body (up to 1 MiB) to restore
+it for the handler after validation. For `multipart/form-data` requests it skips body reading and sets
+`ExcludeRequestBody: true` — this is intentional: binary file content cannot be meaningfully validated by kin-openapi,
+and the 1 MiB cap is too small for file upload endpoints. The handler applies its own `http.MaxBytesReader` limit.
+
+### File upload handler pattern
+
+File uploads use `multipart/form-data` with field name `file`. Handler flow:
+1. Set `http.MaxBytesReader(w, r.Body, maxSize+1024)` before `ParseMultipartForm` to enforce the byte limit at the
+   network layer (`+1024` accounts for multipart boundary/header overhead).
+2. Call `r.ParseMultipartForm(32 << 20)` — the argument controls the in-memory buffer, not the total size cap.
+3. Detect MIME type from the first 512 bytes using `http.DetectContentType` (ignore the `Content-Type` header and
+   filename — both are client-controlled and untrustworthy).
+4. Seek back to start with `f.Seek(0, io.SeekStart)` before reading the full file with `io.ReadAll`.
+
+### Circular import: handler ↔ app
+
+`internal/app` imports `internal/handler`; therefore `internal/handler` must never import `internal/app`. When the
+handler or service needs config values from the `app.Config` struct, pass the scalar values (e.g., `maxSize int`,
+`allowedTypes []string`) at construction time instead of passing the config struct.
+
 ## Implementing features
 
 When asked to implement a new feature, use `api/` and `internal/sql/` package content as additional context to
@@ -209,6 +232,8 @@ Requires PostgreSQL. Use `task go:test:func` — it starts the necessary contain
 - Do not consider a task complete until tests pass. Do not respond with a summary of changes before running tests.
 - Group related tests under a single parent function `TestFoo(main *testing.T)` and use `main.Run("CaseName", ...)` for
   sub-tests. Never write separate top-level functions like `TestFoo_CaseName`.
+- When adding a new file to a package that already has `_test.go` companions alongside source files (e.g.
+  `internal/handler/`), write the unit test file as part of the same task. Do not wait to be reminded.
 
 ### Seeder (`tests/pkg/seeder`)
 

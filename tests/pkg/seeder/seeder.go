@@ -226,3 +226,14 @@ func (s *Seeder) GetProductPrices(t *testing.T, productID string) map[string]int
 
 	return prices
 }
+
+func (s *Seeder) CreateFile(t *testing.T, ownerID string) string {
+	t.Helper()
+	var id string
+	err := s.db.QueryRow(t.Context(),
+		"INSERT INTO files (owner_id, mime_type, size_bytes, data) VALUES ($1, $2, $3, $4) RETURNING id",
+		ownerID, "image/jpeg", 0, []byte{},
+	).Scan(&id)
+	require.NoError(t, err)
+	return id
+}

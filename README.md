@@ -69,6 +69,18 @@ Each property has:
 
 Properties can be associated with products to capture variant-specific values and optional price adjustments.
 
+### File
+
+A binary object (image, document) uploaded by an authenticated user and stored in the database. Each file has:
+
+- **MIME type** — detected from the first 512 bytes of the upload (not from the filename or header).
+- **Size** — byte count of the file content.
+- **Data** — the raw bytes stored as `BYTEA`.
+- **Owner** — the user who uploaded the file.
+
+File uploads are subject to per-user quota enforcement. Admins bypass the quota but are still subject to the size
+limit. Allowed MIME types are configured at startup; unsupported types are rejected with `400 Bad Request`.
+
 ### Supporting entities
 
 | Entity   | Purpose                                                     |
@@ -96,3 +108,4 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `POST`  | `/properties`      | Create a property                                    | Admin         |
 | `GET`   | `/properties`      | List all properties                                  | No            |
 | `PATCH` | `/properties/{id}` | Update a property's titles                           | Admin         |
+| `POST`  | `/files`           | Upload a file (`multipart/form-data`, field `file`)  | Yes           |

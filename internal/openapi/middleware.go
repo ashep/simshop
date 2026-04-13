@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"io"
+	"mime"
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -20,9 +21,12 @@ func (o *OpenAPI) Middleware() func(http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			isMultipart := mt == "multipart/form-data"
+
 			const maxBodyBytes = 1 << 20 // 1 MiB
 			var body []byte
-			if r.Body != nil {
+			if r.Body != nil && !isMultipart {
 				r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 				body, err = io.ReadAll(r.Body)
 				if err != nil {
@@ -38,6 +42,7 @@ func (o *OpenAPI) Middleware() func(http.HandlerFunc) http.HandlerFunc {
 				Route:      route,
 				Options: &openapi3filter.Options{
 					AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,
+					ExcludeRequestBody: isMultipart,
 				},
 			}
 

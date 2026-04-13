@@ -75,28 +75,28 @@ func Run(rt *runner.Runtime[Config]) error {
 	hdl := handler.NewHandler(shopSvc, prodSvc, propSvc, fileSvc, cfg.Files.MaxSize, cfg.Files.AllowedTypes, openAPI.Responder(), l)
 	authMw := auth.Middleware(authSvc)
 	optionalAuthMw := auth.OptionalMiddleware(authSvc)
-	ctypeMw := contenttype.Middleware("application/json")
-	ctypeMultipartMw := contenttype.Middleware("multipart/form-data")
+	jsonContentType := contenttype.Middleware("application/json")
+	MultipartContentType := contenttype.Middleware("multipart/form-data")
 	openapiMw := openAPI.Middleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
 	srv.HandleFunc("GET /shops", authMw(openapiMw(hdl.ListShops)))
 	srv.HandleFunc("GET /shops/{id}", optionalAuthMw(openapiMw(hdl.GetShop)))
-	srv.HandleFunc("POST /shops", ctypeMw(authMw(openapiMw(hdl.CreateShop))))
-	srv.HandleFunc("PATCH /shops/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateShop))))
+	srv.HandleFunc("POST /shops", jsonContentType(authMw(openapiMw(hdl.CreateShop))))
+	srv.HandleFunc("PATCH /shops/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateShop))))
 
-	srv.HandleFunc("POST /products", ctypeMw(authMw(openapiMw(hdl.CreateProduct))))
-	srv.HandleFunc("PATCH /products/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateProduct))))
-	srv.HandleFunc("PUT /products/{id}/prices", ctypeMw(authMw(openapiMw(hdl.SetProductPrices))))
+	srv.HandleFunc("POST /products", jsonContentType(authMw(openapiMw(hdl.CreateProduct))))
+	srv.HandleFunc("PATCH /products/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProduct))))
+	srv.HandleFunc("PUT /products/{id}/prices", jsonContentType(authMw(openapiMw(hdl.SetProductPrices))))
 	srv.HandleFunc("GET /products/{id}/prices", optionalAuthMw(openapiMw(hdl.GetProductPrice)))
 	srv.HandleFunc("GET /products/{id}", optionalAuthMw(openapiMw(hdl.GetProduct)))
 	srv.HandleFunc("GET /shops/{id}/products", optionalAuthMw(openapiMw(hdl.ListShopProducts)))
 	srv.HandleFunc("GET /properties", openapiMw(hdl.ListProperties))
-	srv.HandleFunc("POST /properties", ctypeMw(authMw(openapiMw(hdl.CreateProperty))))
-	srv.HandleFunc("PATCH /properties/{id}", ctypeMw(authMw(openapiMw(hdl.UpdateProperty))))
+	srv.HandleFunc("POST /properties", jsonContentType(authMw(openapiMw(hdl.CreateProperty))))
+	srv.HandleFunc("PATCH /properties/{id}", jsonContentType(authMw(openapiMw(hdl.UpdateProperty))))
 
-	srv.HandleFunc("POST /files", ctypeMultipartMw(authMw(openapiMw(hdl.UploadFile))))
+	srv.HandleFunc("POST /files", MultipartContentType(authMw(openapiMw(hdl.UploadFile))))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 
