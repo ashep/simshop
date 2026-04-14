@@ -5,6 +5,17 @@ info:
   version: "0.5.0"
 
 paths:
+  /shop:
+    get:
+      operationId: getShop
+      responses:
+        "200":
+          description: Shop metadata (all language variants)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopResponse'
+
   /products:
     get:
       operationId: listProducts
@@ -197,6 +208,9 @@ components:
           type: object
           additionalProperties:
             type: string
+        image:
+          type: string
+          nullable: true
 
     PageItem:
       type: object
@@ -218,3 +232,19 @@ components:
       properties:
         error:
           type: string
+
+    ShopResponse:
+      type: object
+      properties:
+        name:
+          type: object
+          additionalProperties:
+            type: string
+        title:
+          type: object
+          additionalProperties:
+            type: string
+        description:
+          type: object
+          additionalProperties:
+            type: string

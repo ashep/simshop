@@ -35,6 +35,10 @@ The product listing served by `GET /products` comes from `{data_dir}/products/pr
 file containing lightweight product entries: an `id`, a multilingual `title`, and a multilingual `description`. A
 missing `products.yaml` results in an empty list — it is not an error.
 
+Each entry in the listing response also includes an optional `image` field — the URL path of the first preview image
+from the product's `product.yaml` (e.g. `/images/cronus/thumb.png`). The field is omitted when the product has no
+images or when the product subdirectory has no `product.yaml`.
+
 Example `products.yaml`:
 
 ```yaml
@@ -121,6 +125,28 @@ images:
     full: 01.png
 ```
 
+### Shop
+
+Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing
+multilingual maps for `name`, `title`, and `description`.
+
+`GET /shop` returns the shop object as JSON. A missing `shop.yaml` returns an empty JSON object `{}`.
+
+Example `shop.yaml`:
+
+```yaml
+shop:
+  name:
+    en: My Shop
+    uk: Мій магазин
+  title:
+    en: Handcrafted goods
+    uk: Товари ручної роботи
+  description:
+    en: Designed and made by hand.
+    uk: Спроєктовано та виготовлено вручну.
+```
+
 ### Page
 
 Page metadata is defined in `{data_dir}/pages/pages.yaml` and loaded at startup. Each entry has an `id`
@@ -148,6 +174,7 @@ The service exposes a read-only JSON REST API validated against an OpenAPI speci
 
 | Method | Path                                | Description                             |
 |--------|-------------------------------------|-----------------------------------------|
+| `GET`  | `/shop`                             | Get shop metadata (name, title, desc)   |
 | `GET`  | `/products`                         | List all products (id, title, desc)     |
 | `GET`  | `/products/{id}/{lang}`             | Get product content in a language       |
 | `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by name        |
@@ -174,6 +201,7 @@ data_dir: "./data"
 
 ```
 {data_dir}/
+  shop.yaml                # shop metadata (name, title, description)
   products/
     products.yaml          # flat product listing (id, title, description)
     {product-id}/

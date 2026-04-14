@@ -9,6 +9,7 @@ import (
 
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/shop"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,6 +18,7 @@ type Catalog struct {
 	Products     []*product.Product
 	ProductItems []*product.Item
 	Pages        []*page.Page
+	Shop         *shop.Shop
 }
 
 // Load reads data_dir, returning a populated Catalog.
@@ -31,7 +33,11 @@ func Load(dataDir string) (*Catalog, error) {
 	if err := loadProductsList(dataDir, c); err != nil {
 		return nil, err
 	}
+	joinProductImages(c)
 	if err := loadPages(dataDir, c); err != nil {
+		return nil, err
+	}
+	if err := loadShop(dataDir, c); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -39,6 +45,26 @@ func Load(dataDir string) (*Catalog, error) {
 
 type pagesFile struct {
 	Pages []*page.Page `yaml:"pages"`
+}
+
+// joinProductImages sets Item.Image to the first preview path from the
+// corresponding full Product, if one exists.
+func joinProductImages(c *Catalog) {
+	if len(c.ProductItems) == 0 || len(c.Products) == 0 {
+		return
+	}
+	byID := make(map[string]*product.Product, len(c.Products))
+	for _, p := range c.Products {
+		byID[p.ID] = p
+	}
+	for _, item := range c.ProductItems {
+		p, ok := byID[item.ID]
+		if !ok || len(p.Images) == 0 || p.Images[0].Preview == "" {
+			continue
+		}
+		preview := p.Images[0].Preview
+		item.Image = &preview
+	}
 }
 
 func loadPages(dataDir string, c *Catalog) error {
@@ -57,6 +83,34 @@ func loadPages(dataDir string, c *Catalog) error {
 		return fmt.Errorf("parse pages.yaml: %w", err)
 	}
 	c.Pages = f.Pages
+	return nil
+}
+
+type shopFile struct {
+	Shop *shop.Shop `yaml:"shop"`
+}
+
+func loadShop(dataDir string, c *Catalog) error {
+	path := filepath.Join(dataDir, "shop.yaml")
+
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		c.Shop = &shop.Shop{}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read shop.yaml: %w", err)
+	}
+
+	var f shopFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return fmt.Errorf("parse shop.yaml: %w", err)
+	}
+	if f.Shop == nil {
+		c.Shop = &shop.Shop{}
+	} else {
+		c.Shop = f.Shop
+	}
 	return nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/shop"
 )
 
 func Run(rt *runner.Runtime[Config]) error {
@@ -29,13 +30,14 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	prodSvc := product.NewService(catalog.ProductItems)
 	pageSvc := page.NewService(catalog.Pages)
+	shopSvc := shop.NewService(catalog.Shop)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware(cfg.Server.CORSOrigins)
 
@@ -53,6 +55,8 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("OPTIONS /pages", corsMw(nop))
 	srv.HandleFunc("GET /pages/{id}/{lang}", corsMw(hdl.ServePage))
 	srv.HandleFunc("OPTIONS /pages/{id}/{lang}", corsMw(nop))
+	srv.HandleFunc("GET /shop", corsMw(openapiMw(hdl.ServeShop)))
+	srv.HandleFunc("OPTIONS /shop", corsMw(nop))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

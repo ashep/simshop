@@ -94,7 +94,11 @@ silently skips directories that lack one.
 `GET /products` is served by `handler.ListProducts`. Product metadata is loaded at startup from
 `{data_dir}/products/products.yaml` (via `loader.loadProductsList`) into `catalog.ProductItems` and wrapped in
 `product.NewService`. The handler delegates to `h.products.List()` and returns a JSON array of
-`[{id, title, description}]` objects. A missing `products.yaml` returns an empty array — not an error. The route
+`[{id, title, description, image?}]` objects. The optional `image` field is the URL path of the first preview image
+from the product's `product.yaml` (`product.Item.Image *string`). It is populated by `joinProductImages` in `Load()`
+after both `loadProducts` and `loadProductsList` have run — it looks up the matching `Product` by ID in `Catalog.Products`
+and copies the first `Images[0].Preview` path (already rewritten to `/images/{id}/{file}`). `image` is omitted from the
+JSON when nil (`json:"image,omitempty"`). A missing `products.yaml` returns an empty array — not an error. The route
 goes through the OpenAPI response middleware.
 
 `GET /products/{id}/{lang}` is served by `handler.ServeProductContent`. It reads
@@ -128,6 +132,20 @@ spec for documentation. Missing file → 404.
 by `loadProductsList` into `catalog.ProductItems`. A missing file returns an empty slice — not an error. This is a
 separate concept from the per-product directory loading done by `loadProducts`; `ProductItems` and `Products` coexist
 in `Catalog`.
+
+### Shop route
+
+`GET /shop` is served by `handler.ServeShop`. It delegates to `h.shop.Get(ctx)` and returns the `*shop.Shop` struct as
+JSON via `h.resp.Write`. The `shopService` interface is defined in `internal/handler/shop.go`. The route goes through
+the OpenAPI response middleware. `NewHandler` accepts `shopSvc shopService` as its third parameter (after `pages`,
+before `resp`).
+
+### Loader: `shop.yaml` shop settings
+
+`{data_dir}/shop.yaml` holds a single `shop:` key mapping to `shop.Shop` (name, title, description — each a
+`map[string]string`). It is loaded by `loadShop` into `catalog.Shop`. A missing file results in an empty `&shop.Shop{}`
+— not an error. A malformed YAML file is fatal. The wrapper struct `shopFile` is needed because the YAML root key is
+`shop:`, not the struct fields directly.
 
 ### Loader: missing products directory is not an error
 

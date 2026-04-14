@@ -75,6 +75,29 @@ func TestListProducts(main *testing.T) {
 		title, ok := body[0]["title"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "Cronus", title["en"])
+		assert.Nil(t, body[0]["image"])
+	})
+
+	main.Run("WithProductsWithImage", func(t *testing.T) {
+		imageURL := "/images/cronus/thumb.png"
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{
+				ID:          "cronus",
+				Title:       map[string]string{"en": "Cronus"},
+				Description: map[string]string{"en": "A wooden desktop clock"},
+				Image:       &imageURL,
+			},
+		}, nil)
+
+		w := doRequest(t, prodSvc)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body, 1)
+		assert.Equal(t, "/images/cronus/thumb.png", body[0]["image"])
 	})
 }
 
