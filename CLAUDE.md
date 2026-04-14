@@ -98,10 +98,11 @@ silently skips directories that lack one.
 goes through the OpenAPI response middleware.
 
 `GET /products/{id}/{lang}` is served by `handler.ServeProductContent`. It reads
-`{data_dir}/products/{id}/{lang}.md` and returns the file content as `text/plain; charset=utf-8`. Both path
-values are validated with the reject pattern: `if value != filepath.Base(value) || value == "" || value == "."`.
-The route does NOT go through the OpenAPI response middleware (plain text, not JSON), but is declared in the
-spec for documentation. Missing file → 404.
+`{data_dir}/products/{id}/product.yaml`, parses the full `product.Product` struct, checks that the requested
+language exists in `p.Name`, then builds a lang-filtered `product.ProductDetail` (multilingual maps collapsed to
+single strings for the requested language) and returns it as JSON. Both path values are validated with the reject
+pattern: `if value != filepath.Base(value) || value == "" || value == "."`. The route goes through the OpenAPI
+response middleware. Missing product directory or `product.yaml` → 404. Missing language key → 404.
 
 The existing `loadProducts` (per-directory loader) continues to run at startup for validation purposes; its output
 (`Catalog.Products`) is no longer wired to any handler — it exists solely to enforce product YAML integrity at
@@ -133,9 +134,8 @@ in `Catalog`.
 A missing `products/` subdirectory under `data_dir` is not an error — results in an empty catalog. A malformed YAML
 file or a validation error is fatal. Validation runs inside `loadProduct` immediately after YAML parsing.
 
-Product subdirectories that do not contain a `product.yaml` file are silently skipped by `loadProducts` — they are
-treated as content-only directories (e.g., housing `{lang}.md` files for `ServeProductContent`). This allows product
-listing (`products.yaml`) and product content (`{id}/{lang}.md`) to coexist in the same `products/` tree.
+Product subdirectories that do not contain a `product.yaml` file are silently skipped by `loadProducts`. This allows
+extra directories to coexist in the `products/` tree without causing a startup failure.
 
 ### Product validation rules (enforced at startup)
 
@@ -214,7 +214,7 @@ rejects non-UUID strings and the handler returns HTTP 500, masking the actual as
 
 ### service constructor: nil slice normalization
 
-`product.NewService(products []*Product)` normalizes nil to `[]*Product{}` inside the constructor — required so `List`
+`product.NewService(items []*Item)` normalizes nil to `[]*Item{}` inside the constructor — required so `List`
 returns an empty JSON array `[]` rather than `null`, which would fail OpenAPI response validation.
 
 ### Functional test pattern
@@ -227,8 +227,8 @@ Functional tests use YAML fixture files:
 - `makeProductsFile(t, dataDir, content)` creates `{dataDir}/products/products.yaml` with the given content.
 
 **API functional tests (`tests/api/product/`):**
-- `makeDataDir(t, productsYAML, markdownFiles)` creates a temp data dir, writes `products/products.yaml` (if non-empty
-  string), and writes per-product markdown files given as `map[string]map[string]string` of `{id: {lang: content}}`.
+- `makeDataDir(t, productsYAML, productYAMLs)` creates a temp data dir, writes `products/products.yaml` (if non-empty
+  string), and writes per-product `product.yaml` files given as `map[string]string` of `{id: yaml-content}`.
 - `testapp.New(t, dataDir)` always takes a `dataDir` argument.
 - Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body — safe
   because each app binds to a random port.

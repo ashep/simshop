@@ -78,15 +78,29 @@ func TestListProducts(main *testing.T) {
 	})
 }
 
+const testProductYAML = `
+name:
+  en: Cronus
+  uk: Кронос
+description:
+  en: A wooden desktop clock
+  uk: Настільний годинник
+price:
+  default:
+    currency: USD
+    value: 49.99
+`
+
 func TestServeProductContent(main *testing.T) {
+	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
-	contentDir := filepath.Join(dataDir, "products", "cronus")
-	require.NoError(main, os.MkdirAll(contentDir, 0755))
-	require.NoError(main, os.WriteFile(filepath.Join(contentDir, "en.md"), []byte("# Cronus"), 0644))
+	productDir := filepath.Join(dataDir, "products", "cronus")
+	require.NoError(main, os.MkdirAll(productDir, 0755))
+	require.NoError(main, os.WriteFile(filepath.Join(productDir, "product.yaml"), []byte(testProductYAML), 0644))
 
 	doRequest := func(t *testing.T, id, lang string) *httptest.ResponseRecorder {
 		t.Helper()
-		h := &Handler{dataDir: dataDir, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/"+id+"/"+lang, nil)
 		r.SetPathValue("id", id)
 		r.SetPathValue("lang", lang)
@@ -95,11 +109,25 @@ func TestServeProductContent(main *testing.T) {
 		return w
 	}
 
-	main.Run("ReturnsContent", func(t *testing.T) {
+	main.Run("ReturnsProductDetail", func(t *testing.T) {
 		w := doRequest(t, "cronus", "en")
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
-		assert.Equal(t, "# Cronus", w.Body.String())
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, "cronus", body["id"])
+		assert.Equal(t, "Cronus", body["name"])
+		assert.Equal(t, "A wooden desktop clock", body["description"])
+	})
+
+	main.Run("ReturnsCorrectLanguage", func(t *testing.T) {
+		w := doRequest(t, "cronus", "uk")
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, "Кронос", body["name"])
+		assert.Equal(t, "Настільний годинник", body["description"])
 	})
 
 	main.Run("NotFoundWhenIDMissing", func(t *testing.T) {
@@ -108,12 +136,12 @@ func TestServeProductContent(main *testing.T) {
 	})
 
 	main.Run("NotFoundWhenLangMissing", func(t *testing.T) {
-		w := doRequest(t, "cronus", "uk")
+		w := doRequest(t, "cronus", "fr")
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	main.Run("NotFoundOnIDPathTraversal", func(t *testing.T) {
-		h := &Handler{dataDir: dataDir, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
 		r.SetPathValue("id", "../cronus")
 		r.SetPathValue("lang", "en")
@@ -123,7 +151,7 @@ func TestServeProductContent(main *testing.T) {
 	})
 
 	main.Run("NotFoundOnLangPathTraversal", func(t *testing.T) {
-		h := &Handler{dataDir: dataDir, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
 		r.SetPathValue("id", "cronus")
 		r.SetPathValue("lang", "../en")

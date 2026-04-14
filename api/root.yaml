@@ -2,7 +2,7 @@ openapi: "3.0.0"
 
 info:
   title: SimShop API
-  version: "0.4.0"
+  version: "0.5.0"
 
 paths:
   /products:
@@ -34,11 +34,11 @@ paths:
             type: string
       responses:
         "200":
-          description: Product content in the requested language
+          description: Product detail in the requested language
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/GetProductResponse'
         "404":
           description: Product or language not found
           content:
@@ -89,6 +89,97 @@ paths:
 
 components:
   schemas:
+    SpecItem:
+      type: object
+      required:
+        - title
+        - value
+      properties:
+        title:
+          type: string
+        value:
+          type: string
+
+    PriceItem:
+      type: object
+      required:
+        - currency
+        - value
+      properties:
+        currency:
+          type: string
+        value:
+          type: number
+
+    AttrValue:
+      type: object
+      required:
+        - title
+        - add_price
+      properties:
+        title:
+          type: string
+        add_price:
+          type: number
+
+    AttrLang:
+      type: object
+      required:
+        - title
+        - values
+      properties:
+        title:
+          type: string
+        values:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AttrValue'
+
+    ImageItem:
+      type: object
+      required:
+        - preview
+        - full
+      properties:
+        preview:
+          type: string
+        full:
+          type: string
+
+    GetProductResponse:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - price
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        specs:
+          type: object
+          nullable: true
+          additionalProperties:
+            $ref: '#/components/schemas/SpecItem'
+        price:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PriceItem'
+        attrs:
+          type: object
+          nullable: true
+          additionalProperties:
+            $ref: '#/components/schemas/AttrLang'
+        images:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ImageItem'
+
     ProductItem:
       type: object
       required:

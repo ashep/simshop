@@ -35,6 +35,17 @@ type Product struct {
 	Images      []ImageItem                    `json:"images"      yaml:"images"`
 }
 
+// ProductDetail holds the lang-filtered product data returned by GET /products/{id}/{lang}.
+type ProductDetail struct {
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Specs       map[string]SpecItem  `json:"specs,omitempty"`
+	Price       map[string]PriceItem `json:"price"`
+	Attrs       map[string]AttrLang  `json:"attrs,omitempty"`
+	Images      []ImageItem          `json:"images,omitempty"`
+}
+
 // Item holds the lightweight product metadata loaded from products.yaml.
 type Item struct {
 	ID          string            `json:"id"          yaml:"id"`

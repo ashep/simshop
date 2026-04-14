@@ -4,7 +4,6 @@ package product_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,9 +25,22 @@ products:
       uk: Настільний годинник у деревʼяному корпусі
 `
 
-// makeDataDir creates a data directory with a products.yaml listing and per-language
-// markdown files for each product.
-func makeDataDir(t *testing.T, productsYAML string, markdownFiles map[string]map[string]string) string {
+const testCronusProductYAML = `
+name:
+  en: Cronus
+  uk: Кронос
+description:
+  en: A wooden desktop clock
+  uk: Настільний годинник у деревʼяному корпусі
+price:
+  default:
+    currency: USD
+    value: 49.99
+`
+
+// makeDataDir creates a data directory with a products.yaml listing and per-product
+// product.yaml detail files.
+func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
 
@@ -38,20 +50,18 @@ func makeDataDir(t *testing.T, productsYAML string, markdownFiles map[string]map
 		require.NoError(t, os.WriteFile(filepath.Join(productsDir, "products.yaml"), []byte(productsYAML), 0644))
 	}
 
-	for id, langs := range markdownFiles {
+	for id, yaml := range productYAMLs {
 		productDir := filepath.Join(dataDir, "products", id)
 		require.NoError(t, os.MkdirAll(productDir, 0755))
-		for lang, content := range langs {
-			require.NoError(t, os.WriteFile(filepath.Join(productDir, lang+".md"), []byte(content), 0644))
-		}
+		require.NoError(t, os.WriteFile(filepath.Join(productDir, "product.yaml"), []byte(yaml), 0644))
 	}
 
 	return dataDir
 }
 
 func TestListProducts(main *testing.T) {
-	dataDir := makeDataDir(main, testProductsYAML, map[string]map[string]string{
-		"cronus": {"en": "# Cronus", "uk": "# Кронос"},
+	dataDir := makeDataDir(main, testProductsYAML, map[string]string{
+		"cronus": testCronusProductYAML,
 	})
 	app := testapp.New(main, dataDir)
 	app.Start()
@@ -96,7 +106,7 @@ func TestListProducts(main *testing.T) {
 		assert.Len(t, body, 0)
 	})
 
-	main.Run("GetReturnsContent", func(t *testing.T) {
+	main.Run("GetReturnsProductDetail", func(t *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
 		require.NoError(t, err)
@@ -105,9 +115,29 @@ func TestListProducts(main *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := io.ReadAll(resp.Body)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, "cronus", body["id"])
+		assert.Equal(t, "Cronus", body["name"])
+		assert.Equal(t, "A wooden desktop clock", body["description"])
+		price, ok := body["price"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, price, "default")
+	})
+
+	main.Run("GetReturnsCorrectLanguage", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/uk"), nil)
 		require.NoError(t, err)
-		assert.Equal(t, "# Cronus", string(body))
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, "Кронос", body["name"])
+		assert.Equal(t, "Настільний годинник у деревʼяному корпусі", body["description"])
 	})
 
 	main.Run("GetNotFoundWhenIDMissing", func(t *testing.T) {
