@@ -1,8 +1,7 @@
 package app
 
 type Server struct {
-	Addr           string   `yaml:"addr"`
-	CORSOrigins    []string `yaml:"cors_origins"`
+	Addr string `yaml:"addr"`
 }
 
 type Config struct {

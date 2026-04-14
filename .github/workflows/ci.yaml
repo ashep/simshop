@@ -13,5 +13,6 @@ jobs:
     uses: ashep/ci/.github/workflows/go-build.yaml@v1
     with:
       registry_user: ${{ vars.REGISTRY_USER }}
+      arm64_enabled: true
     secrets:
       registry_password: ${{ secrets.REGISTRY_PASSWORD }}

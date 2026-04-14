@@ -40,7 +40,7 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
-	corsMw := handler.CORSMiddleware(cfg.Server.CORSOrigins)
+	corsMw := handler.CORSMiddleware()
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
