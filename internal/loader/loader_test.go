@@ -215,7 +215,6 @@ attrs:
       values:
         red:
           title: Red
-          add_price: 0
 `, nil)
 
 		_, err := loader.Load(dataDir)
@@ -323,21 +322,21 @@ pages:
 		dataDir := t.TempDir()
 		makeProductsFile(t, dataDir, `
 products:
-  - id: cronus
+  - id: widget
     title:
-      en: Cronus
-      uk: Cronus
+      en: Widget
+      uk: Widget
     description:
-      en: A wooden desktop clock
+      en: A test product
       uk: Настільний годинник
 `)
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
 		require.Len(t, cat.ProductItems, 1)
-		assert.Equal(t, "cronus", cat.ProductItems[0].ID)
-		assert.Equal(t, "Cronus", cat.ProductItems[0].Title["en"])
-		assert.Equal(t, "A wooden desktop clock", cat.ProductItems[0].Description["en"])
+		assert.Equal(t, "widget", cat.ProductItems[0].ID)
+		assert.Equal(t, "Widget", cat.ProductItems[0].Title["en"])
+		assert.Equal(t, "A test product", cat.ProductItems[0].Description["en"])
 	})
 
 	main.Run("MissingShopYAML_EmptyShop", func(t *testing.T) {
@@ -383,11 +382,11 @@ shop:
 
 	main.Run("ProductItemGetsImageFromProduct", func(t *testing.T) {
 		dataDir := t.TempDir()
-		makeProductDir(t, dataDir, "cronus", `
+		makeProductDir(t, dataDir, "widget", `
 name:
-  en: Cronus
+  en: Widget
 description:
-  en: A wooden desktop clock
+  en: A test product
 price:
   default:
     currency: EUR
@@ -401,28 +400,28 @@ images:
 		})
 		makeProductsFile(t, dataDir, `
 products:
-  - id: cronus
+  - id: widget
     title:
-      en: Cronus
+      en: Widget
     description:
-      en: A wooden desktop clock
+      en: A test product
 `)
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
 		require.Len(t, cat.ProductItems, 1)
 		require.NotNil(t, cat.ProductItems[0].Image)
-		assert.Equal(t, "/images/cronus/thumb.png", *cat.ProductItems[0].Image)
+		assert.Equal(t, "/images/widget/thumb.png", *cat.ProductItems[0].Image)
 	})
 
 	main.Run("ProductItemImageAbsentWhenProductHasNoImages", func(t *testing.T) {
 		dataDir := t.TempDir()
-		makeProductDir(t, dataDir, "cronus", minimalValidYAML, nil)
+		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
 		makeProductsFile(t, dataDir, `
 products:
-  - id: cronus
+  - id: widget
     title:
-      en: Cronus
+      en: Widget
     description:
       en: A test product
 `)

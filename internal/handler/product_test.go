@@ -59,9 +59,9 @@ func TestListProducts(main *testing.T) {
 		defer prodSvc.AssertExpectations(t)
 		prodSvc.On("List", mock.Anything).Return([]*product.Item{
 			{
-				ID:          "cronus",
-				Title:       map[string]string{"en": "Cronus"},
-				Description: map[string]string{"en": "A wooden desktop clock"},
+				ID:          "widget",
+				Title:       map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A test product"},
 			},
 		}, nil)
 
@@ -71,22 +71,22 @@ func TestListProducts(main *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		require.Len(t, body, 1)
-		assert.Equal(t, "cronus", body[0]["id"])
+		assert.Equal(t, "widget", body[0]["id"])
 		title, ok := body[0]["title"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "Cronus", title["en"])
+		assert.Equal(t, "Widget", title["en"])
 		assert.Nil(t, body[0]["image"])
 	})
 
 	main.Run("WithProductsWithImage", func(t *testing.T) {
-		imageURL := "/images/cronus/thumb.png"
+		imageURL := "/images/widget/thumb.png"
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
 		prodSvc.On("List", mock.Anything).Return([]*product.Item{
 			{
-				ID:          "cronus",
-				Title:       map[string]string{"en": "Cronus"},
-				Description: map[string]string{"en": "A wooden desktop clock"},
+				ID:          "widget",
+				Title:       map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A test product"},
 				Image:       &imageURL,
 			},
 		}, nil)
@@ -97,17 +97,17 @@ func TestListProducts(main *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		require.Len(t, body, 1)
-		assert.Equal(t, "/images/cronus/thumb.png", body[0]["image"])
+		assert.Equal(t, "/images/widget/thumb.png", body[0]["image"])
 	})
 }
 
 const testProductYAML = `
 name:
-  en: Cronus
-  uk: Кронос
+  en: Widget
+  uk: Віджет
 description:
-  en: A wooden desktop clock
-  uk: Настільний годинник
+  en: A test product
+  uk: Тестовий продукт
 price:
   default:
     currency: USD
@@ -116,11 +116,11 @@ price:
 
 const testProductWithImagesYAML = `
 name:
-  en: Cronus
-  uk: Кронос
+  en: Widget
+  uk: Віджет
 description:
-  en: A wooden desktop clock
-  uk: Настільний годинник
+  en: A test product
+  uk: Тестовий продукт
 price:
   default:
     currency: USD
@@ -132,11 +132,11 @@ images:
 
 const testProductWithCountryPriceYAML = `
 name:
-  en: Cronus
-  uk: Кронос
+  en: Widget
+  uk: Віджет
 description:
-  en: A wooden desktop clock
-  uk: Настільний годинник
+  en: A test product
+  uk: Тестовий продукт
 price:
   default:
     currency: USD
@@ -146,10 +146,47 @@ price:
     value: 1999.99
 `
 
+const testProductWithAttrPricesYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+price:
+  default:
+    currency: USD
+    value: 49.99
+attrs:
+  display_color:
+    en:
+      title: Display color
+      values:
+        red:
+          title: Red
+        green:
+          title: Green
+    uk:
+      title: Колір дисплея
+      values:
+        red:
+          title: Червоний
+        green:
+          title: Зелений
+attr_prices:
+  display_color:
+    red:
+      default: 10
+      ua: 5
+    green:
+      default: 8
+      ua: 3
+`
+
 func TestServeProductContent(main *testing.T) {
 	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
-	productDir := filepath.Join(dataDir, "products", "cronus")
+	productDir := filepath.Join(dataDir, "products", "widget")
 	require.NoError(main, os.MkdirAll(productDir, 0755))
 	require.NoError(main, os.WriteFile(filepath.Join(productDir, "product.yaml"), []byte(testProductYAML), 0644))
 
@@ -165,24 +202,24 @@ func TestServeProductContent(main *testing.T) {
 	}
 
 	main.Run("ReturnsProductDetail", func(t *testing.T) {
-		w := doRequest(t, "cronus", "en")
+		w := doRequest(t, "widget", "en")
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var body map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-		assert.Equal(t, "cronus", body["id"])
-		assert.Equal(t, "Cronus", body["name"])
-		assert.Equal(t, "A wooden desktop clock", body["description"])
+		assert.Equal(t, "widget", body["id"])
+		assert.Equal(t, "Widget", body["name"])
+		assert.Equal(t, "A test product", body["description"])
 	})
 
 	main.Run("ReturnsCorrectLanguage", func(t *testing.T) {
-		w := doRequest(t, "cronus", "uk")
+		w := doRequest(t, "widget", "uk")
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var body map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-		assert.Equal(t, "Кронос", body["name"])
-		assert.Equal(t, "Настільний годинник", body["description"])
+		assert.Equal(t, "Віджет", body["name"])
+		assert.Equal(t, "Тестовий продукт", body["description"])
 	})
 
 	main.Run("NotFoundWhenIDMissing", func(t *testing.T) {
@@ -191,14 +228,14 @@ func TestServeProductContent(main *testing.T) {
 	})
 
 	main.Run("NotFoundWhenLangMissing", func(t *testing.T) {
-		w := doRequest(t, "cronus", "fr")
+		w := doRequest(t, "widget", "fr")
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	main.Run("NotFoundOnIDPathTraversal", func(t *testing.T) {
 		h := &Handler{dataDir: dataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
-		r.SetPathValue("id", "../cronus")
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "../widget")
 		r.SetPathValue("lang", "en")
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
@@ -207,8 +244,8 @@ func TestServeProductContent(main *testing.T) {
 
 	main.Run("NotFoundOnLangPathTraversal", func(t *testing.T) {
 		h := &Handler{dataDir: dataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
-		r.SetPathValue("id", "cronus")
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
 		r.SetPathValue("lang", "../en")
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
@@ -217,13 +254,13 @@ func TestServeProductContent(main *testing.T) {
 
 	main.Run("ImagePathsAreTransformed", func(t *testing.T) {
 		imgDataDir := t.TempDir()
-		imgProductDir := filepath.Join(imgDataDir, "products", "cronus")
+		imgProductDir := filepath.Join(imgDataDir, "products", "widget")
 		require.NoError(t, os.MkdirAll(imgProductDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(imgProductDir, "product.yaml"), []byte(testProductWithImagesYAML), 0644))
 
 		h := &Handler{dataDir: imgDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
-		r.SetPathValue("id", "cronus")
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
 		r.SetPathValue("lang", "en")
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
@@ -237,19 +274,19 @@ func TestServeProductContent(main *testing.T) {
 		require.Len(t, images, 1)
 		img, ok := images[0].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "/images/cronus/thumb.jpg", img["preview"])
-		assert.Equal(t, "/images/cronus/full.jpg", img["full"])
+		assert.Equal(t, "/images/widget/thumb.jpg", img["preview"])
+		assert.Equal(t, "/images/widget/full.jpg", img["full"])
 	})
 
 	main.Run("ReturnsCountryPrice", func(t *testing.T) {
 		cpDataDir := t.TempDir()
-		cpProductDir := filepath.Join(cpDataDir, "products", "cronus")
+		cpProductDir := filepath.Join(cpDataDir, "products", "widget")
 		require.NoError(t, os.MkdirAll(cpProductDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(cpProductDir, "product.yaml"), []byte(testProductWithCountryPriceYAML), 0644))
 
 		h := &Handler{dataDir: cpDataDir, resp: resp, geo: &geoDetectorStub{country: "ua"}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
-		r.SetPathValue("id", "cronus")
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
 		r.SetPathValue("lang", "en")
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
@@ -265,13 +302,13 @@ func TestServeProductContent(main *testing.T) {
 
 	main.Run("FallsBackToDefaultPrice", func(t *testing.T) {
 		cpDataDir := t.TempDir()
-		cpProductDir := filepath.Join(cpDataDir, "products", "cronus")
+		cpProductDir := filepath.Join(cpDataDir, "products", "widget")
 		require.NoError(t, os.MkdirAll(cpProductDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(cpProductDir, "product.yaml"), []byte(testProductWithCountryPriceYAML), 0644))
 
 		h := &Handler{dataDir: cpDataDir, resp: resp, geo: &geoDetectorStub{country: "xx"}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
-		r.SetPathValue("id", "cronus")
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
 		r.SetPathValue("lang", "en")
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
@@ -283,5 +320,53 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "USD", price["currency"])
 		assert.Equal(t, 49.99, price["value"])
+	})
+
+	main.Run("ReturnsAttrPricesResolvedByCountry", func(t *testing.T) {
+		apDataDir := t.TempDir()
+		apProductDir := filepath.Join(apDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(apProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(apProductDir, "product.yaml"), []byte(testProductWithAttrPricesYAML), 0644))
+
+		h := &Handler{dataDir: apDataDir, resp: resp, geo: &geoDetectorStub{country: "ua"}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		attrPrices, ok := body["attr_prices"].(map[string]any)
+		require.True(t, ok, "attr_prices should be present")
+		displayColor, ok := attrPrices["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, 5.0, displayColor["red"])
+		assert.Equal(t, 3.0, displayColor["green"])
+	})
+
+	main.Run("ReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {
+		apDataDir := t.TempDir()
+		apProductDir := filepath.Join(apDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(apProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(apProductDir, "product.yaml"), []byte(testProductWithAttrPricesYAML), 0644))
+
+		h := &Handler{dataDir: apDataDir, resp: resp, geo: &geoDetectorStub{country: "xx"}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		attrPrices, ok := body["attr_prices"].(map[string]any)
+		require.True(t, ok, "attr_prices should be present")
+		displayColor, ok := attrPrices["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, 10.0, displayColor["red"])
+		assert.Equal(t, 8.0, displayColor["green"])
 	})
 }

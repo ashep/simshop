@@ -118,9 +118,11 @@ Fields in `product.yaml`:
   a `default` key. The API resolves this map to a single `{currency, value}` object per request: the country is
   detected from the `CF-IPCountry` request header (sent by Cloudflare) or via an ipinfo.io lookup on the client IP.
   If no matching country key exists the `default` entry is used.
-- **attrs** — optional map of attribute keys (e.g. `material`). Each attribute is translated into every language in
-  `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`
-  and an `add_price` surcharge.
+- **attrs** — optional map of attribute keys (e.g. `display_color`). Each attribute is translated into every language
+  in `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`.
+- **attr_prices** — optional map of add-on prices per attribute value, keyed by country (same structure as `price`).
+  Shape: `attr_key → value_key → country_key → float64`. Must contain a `default` country key for each value.
+  The API resolves this to `attr_key → value_key → float64` using the same country detection logic as `price`.
 - **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's `images/`
   subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that can be appended to
   the server's base URL to download the file.
@@ -160,19 +162,23 @@ attrs:
       values:
         natural:
           title: Natural
-          add_price: 0
         dark:
           title: Dark
-          add_price: 10
     uk:
       title: Покриття
       values:
         natural:
           title: Натуральне
-          add_price: 0
         dark:
           title: Темне
-          add_price: 10
+
+attr_prices:
+  finish:
+    natural:
+      default: 0
+    dark:
+      default: 10
+      ua: 400
 
 images:
   - preview: 01-preview.png

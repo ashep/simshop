@@ -16,22 +16,22 @@ import (
 
 const testProductsYAML = `
 products:
-  - id: cronus
+  - id: widget
     title:
-      en: Cronus
-      uk: Cronus
+      en: Widget
+      uk: Віджет
     description:
-      en: A wooden desktop clock
-      uk: Настільний годинник у деревʼяному корпусі
+      en: A test product
+      uk: Тестовий продукт
 `
 
-const testCronusProductYAML = `
+const testProductYAML = `
 name:
-  en: Cronus
-  uk: Кронос
+  en: Widget
+  uk: Віджет
 description:
-  en: A wooden desktop clock
-  uk: Настільний годинник у деревʼяному корпусі
+  en: A test product
+  uk: Тестовий продукт
 price:
   default:
     currency: USD
@@ -39,6 +39,46 @@ price:
   ua:
     currency: UAH
     value: 1999.99
+`
+
+const testProductWithAttrPricesYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+price:
+  default:
+    currency: USD
+    value: 49.99
+  ua:
+    currency: UAH
+    value: 1999.99
+attrs:
+  display_color:
+    en:
+      title: Display color
+      values:
+        red:
+          title: Red
+        green:
+          title: Green
+    uk:
+      title: Колір дисплея
+      values:
+        red:
+          title: Червоний
+        green:
+          title: Зелений
+attr_prices:
+  display_color:
+    red:
+      default: 10
+      ua: 5
+    green:
+      default: 8
+      ua: 3
 `
 
 // makeDataDir creates a data directory with a products.yaml listing and per-product
@@ -64,7 +104,7 @@ func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]stri
 
 func TestListProducts(main *testing.T) {
 	dataDir := makeDataDir(main, testProductsYAML, map[string]string{
-		"cronus": testCronusProductYAML,
+		"widget": testProductYAML,
 	})
 	app := testapp.New(main, dataDir)
 	app.Start()
@@ -81,14 +121,14 @@ func TestListProducts(main *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
-		assert.Equal(t, "cronus", body[0]["id"])
+		assert.Equal(t, "widget", body[0]["id"])
 		title, ok := body[0]["title"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "Cronus", title["en"])
-		assert.Equal(t, "Cronus", title["uk"])
+		assert.Equal(t, "Widget", title["en"])
+		assert.Equal(t, "Віджет", title["uk"])
 		description, ok := body[0]["description"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "A wooden desktop clock", description["en"])
+		assert.Equal(t, "A test product", description["en"])
 	})
 
 	main.Run("EmptyListWhenNoProductsYAML", func(t *testing.T) {
@@ -112,7 +152,7 @@ func TestListProducts(main *testing.T) {
 	main.Run("GetReturnsProductDetail", func(t *testing.T) {
 		t.Parallel()
 		// CF-IPCountry: XX has no price entry → falls back to default. Avoids live ipinfo.io call.
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/widget/en"), nil)
 		require.NoError(t, err)
 		req.Header.Set("CF-IPCountry", "XX")
 		resp, err := http.DefaultClient.Do(req)
@@ -122,9 +162,9 @@ func TestListProducts(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "cronus", body["id"])
-		assert.Equal(t, "Cronus", body["name"])
-		assert.Equal(t, "A wooden desktop clock", body["description"])
+		assert.Equal(t, "widget", body["id"])
+		assert.Equal(t, "Widget", body["name"])
+		assert.Equal(t, "A test product", body["description"])
 		price, ok := body["price"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "USD", price["currency"])
@@ -133,7 +173,7 @@ func TestListProducts(main *testing.T) {
 
 	main.Run("GetReturnsCorrectLanguage", func(t *testing.T) {
 		t.Parallel()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/uk"), nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/widget/uk"), nil)
 		require.NoError(t, err)
 		req.Header.Set("CF-IPCountry", "XX")
 		resp, err := http.DefaultClient.Do(req)
@@ -143,13 +183,13 @@ func TestListProducts(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "Кронос", body["name"])
-		assert.Equal(t, "Настільний годинник у деревʼяному корпусі", body["description"])
+		assert.Equal(t, "Віджет", body["name"])
+		assert.Equal(t, "Тестовий продукт", body["description"])
 	})
 
 	main.Run("GetReturnsCountryPrice", func(t *testing.T) {
 		t.Parallel()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/widget/en"), nil)
 		require.NoError(t, err)
 		req.Header.Set("CF-IPCountry", "UA")
 		resp, err := http.DefaultClient.Do(req)
@@ -167,7 +207,7 @@ func TestListProducts(main *testing.T) {
 
 	main.Run("GetReturnsDefaultPriceForUnknownCountry", func(t *testing.T) {
 		t.Parallel()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/widget/en"), nil)
 		require.NoError(t, err)
 		req.Header.Set("CF-IPCountry", "ZZ")
 		resp, err := http.DefaultClient.Do(req)
@@ -196,12 +236,58 @@ func TestListProducts(main *testing.T) {
 
 	main.Run("GetNotFoundWhenLangMissing", func(t *testing.T) {
 		t.Parallel()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/fr"), nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/widget/fr"), nil)
 		require.NoError(t, err)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	main.Run("GetReturnsAttrPricesResolvedByCountry", func(t *testing.T) {
+		apDir := makeDataDir(t, "", map[string]string{"widget": testProductWithAttrPricesYAML})
+		apApp := testapp.New(t, apDir)
+		apApp.Start()
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, apApp.URL("/products/widget/en"), nil)
+		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "UA")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		attrPrices, ok := body["attr_prices"].(map[string]any)
+		require.True(t, ok, "attr_prices should be present")
+		displayColor, ok := attrPrices["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, 5.0, displayColor["red"])
+		assert.Equal(t, 3.0, displayColor["green"])
+	})
+
+	main.Run("GetReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {
+		apDir := makeDataDir(t, "", map[string]string{"widget": testProductWithAttrPricesYAML})
+		apApp := testapp.New(t, apDir)
+		apApp.Start()
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, apApp.URL("/products/widget/en"), nil)
+		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "ZZ")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		attrPrices, ok := body["attr_prices"].(map[string]any)
+		require.True(t, ok, "attr_prices should be present")
+		displayColor, ok := attrPrices["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, 10.0, displayColor["red"])
+		assert.Equal(t, 8.0, displayColor["green"])
 	})
 }
