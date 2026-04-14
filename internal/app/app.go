@@ -10,6 +10,7 @@ import (
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/openapi"
+	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
 )
 
@@ -26,14 +27,15 @@ func Run(rt *runner.Runtime[Config]) error {
 		return fmt.Errorf("load catalog: %w", err)
 	}
 
-	prodSvc := product.NewService(catalog.Products)
+	prodSvc := product.NewService(catalog.ProductItems)
+	pageSvc := page.NewService(catalog.Pages)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware(cfg.Server.CORSOrigins)
 
@@ -43,6 +45,8 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
 	srv.HandleFunc("OPTIONS /products", corsMw(nop))
+	srv.HandleFunc("GET /products/{id}/{lang}", corsMw(hdl.ServeProductContent))
+	srv.HandleFunc("OPTIONS /products/{id}/{lang}", corsMw(nop))
 	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
 	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
 	srv.HandleFunc("GET /pages", corsMw(openapiMw(hdl.ListPages)))

@@ -1,12 +1,12 @@
 package product
 
 type Service struct {
-	products []*Product
+	items []*Item
 }
 
-func NewService(products []*Product) *Service {
-	if products == nil {
-		products = []*Product{}
+func NewService(items []*Item) *Service {
+	if items == nil {
+		items = []*Item{}
 	}
-	return &Service{products: products}
+	return &Service{items: items}
 }

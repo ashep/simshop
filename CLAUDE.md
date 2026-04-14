@@ -85,24 +85,57 @@ to both path values before joining to prevent path traversal. `handler.NewHandle
 parameter (before `zerolog.Logger`) so the handler can resolve image paths without importing `internal/app`.
 
 Functional tests for image serving must create a complete valid product directory (including `product.yaml`) alongside
-the `images/` subdirectory, because the loader rejects product directories missing `product.yaml` at startup.
+the `images/` subdirectory if the test needs the product to appear in `catalog.Products`. If only the image file itself
+is needed (e.g., the file is in `{data_dir}/products/{id}/images/`), no `product.yaml` is required — the loader
+silently skips directories that lack one.
+
+### Products routes
+
+`GET /products` is served by `handler.ListProducts`. Product metadata is loaded at startup from
+`{data_dir}/products/products.yaml` (via `loader.loadProductsList`) into `catalog.ProductItems` and wrapped in
+`product.NewService`. The handler delegates to `h.products.List()` and returns a JSON array of
+`[{id, title, description}]` objects. A missing `products.yaml` returns an empty array — not an error. The route
+goes through the OpenAPI response middleware.
+
+`GET /products/{id}/{lang}` is served by `handler.ServeProductContent`. It reads
+`{data_dir}/products/{id}/{lang}.md` and returns the file content as `text/plain; charset=utf-8`. Both path
+values are validated with the reject pattern: `if value != filepath.Base(value) || value == "" || value == "."`.
+The route does NOT go through the OpenAPI response middleware (plain text, not JSON), but is declared in the
+spec for documentation. Missing file → 404.
+
+The existing `loadProducts` (per-directory loader) continues to run at startup for validation purposes; its output
+(`Catalog.Products`) is no longer wired to any handler — it exists solely to enforce product YAML integrity at
+startup. Product subdirectories without `product.yaml` are silently skipped by `loadProducts`.
 
 ### Pages routes
 
-`GET /pages` is served by `handler.ListPages`. It reads `{data_dir}/pages/` with `os.ReadDir`, filters to
-subdirectories, and returns a JSON array of their names. A missing `pages/` directory returns an empty array —
-not an error. The route goes through the OpenAPI response middleware (validated against the spec).
+`GET /pages` is served by `handler.ListPages`. Page metadata is loaded at startup from
+`{data_dir}/pages/pages.yaml` (via `loader.loadPages`) into `catalog.Pages` and wrapped in
+`page.NewService`. The handler delegates to `h.pages.List()` and returns a JSON array of
+`[{id, title}]` objects. A missing `pages.yaml` returns an empty array — not an error. The route
+goes through the OpenAPI response middleware.
 
 `GET /pages/{id}/{lang}` is served by `handler.ServePage`. It reads
 `{data_dir}/pages/{id}/{lang}.md` and returns the file content as `text/plain; charset=utf-8`. Both path
-values are validated with the reject pattern: `if value != filepath.Base(value) || value == ""  || value == "."`.
+values are validated with the reject pattern: `if value != filepath.Base(value) || value == "" || value == "."`.
 The route does NOT go through the OpenAPI response middleware (plain text, not JSON), but is declared in the
 spec for documentation. Missing file → 404.
+
+### Loader: `products.yaml` product list
+
+`{data_dir}/products/products.yaml` holds a flat list of `product.Item` entries (id, title, description). It is loaded
+by `loadProductsList` into `catalog.ProductItems`. A missing file returns an empty slice — not an error. This is a
+separate concept from the per-product directory loading done by `loadProducts`; `ProductItems` and `Products` coexist
+in `Catalog`.
 
 ### Loader: missing products directory is not an error
 
 A missing `products/` subdirectory under `data_dir` is not an error — results in an empty catalog. A malformed YAML
 file or a validation error is fatal. Validation runs inside `loadProduct` immediately after YAML parsing.
+
+Product subdirectories that do not contain a `product.yaml` file are silently skipped by `loadProducts` — they are
+treated as content-only directories (e.g., housing `{lang}.md` files for `ServeProductContent`). This allows product
+listing (`products.yaml`) and product content (`{id}/{lang}.md`) to coexist in the same `products/` tree.
 
 ### Product validation rules (enforced at startup)
 
@@ -187,8 +220,15 @@ returns an empty JSON array `[]` rather than `null`, which would fail OpenAPI re
 ### Functional test pattern
 
 Functional tests use YAML fixture files:
+
+**Loader unit tests (`internal/loader/`):**
 - `makeProductDir(t, dataDir, id, yaml, extraFiles)` creates `{dataDir}/products/{id}/product.yaml` and any extra
   files specified as a `map[string][]byte` of relative path → content pairs.
+- `makeProductsFile(t, dataDir, content)` creates `{dataDir}/products/products.yaml` with the given content.
+
+**API functional tests (`tests/api/product/`):**
+- `makeDataDir(t, productsYAML, markdownFiles)` creates a temp data dir, writes `products/products.yaml` (if non-empty
+  string), and writes per-product markdown files given as `map[string]map[string]string` of `{id: {lang: content}}`.
 - `testapp.New(t, dataDir)` always takes a `dataDir` argument.
 - Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body — safe
   because each app binds to a random port.

@@ -15,27 +15,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeDataDir(t *testing.T, pages map[string]map[string]string) string {
+// makeDataDir creates a data directory with a pages.yaml listing the given pages
+// and per-language markdown files for each page.
+func makeDataDir(t *testing.T, pagesYAML string, markdownFiles map[string]map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
-	for id, langs := range pages {
+
+	if pagesYAML != "" {
+		pagesDir := filepath.Join(dataDir, "pages")
+		require.NoError(t, os.MkdirAll(pagesDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pagesDir, "pages.yaml"), []byte(pagesYAML), 0644))
+	}
+
+	for id, langs := range markdownFiles {
 		pageDir := filepath.Join(dataDir, "pages", id)
 		require.NoError(t, os.MkdirAll(pageDir, 0755))
 		for lang, content := range langs {
 			require.NoError(t, os.WriteFile(filepath.Join(pageDir, lang+".md"), []byte(content), 0644))
 		}
 	}
+
 	return dataDir
 }
 
+const testPagesYAML = `
+pages:
+  - id: about
+    title:
+      en: About
+      uk: Про нас
+`
+
 func TestGetPages(main *testing.T) {
-	dataDir := makeDataDir(main, map[string]map[string]string{
+	dataDir := makeDataDir(main, testPagesYAML, map[string]map[string]string{
 		"about": {"en": "# About", "uk": "# Про нас"},
 	})
 	app := testapp.New(main, dataDir)
 	app.Start()
 
-	main.Run("ListReturnsPageIDs", func(t *testing.T) {
+	main.Run("ListReturnsPagesWithTitles", func(t *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/pages"), nil)
 		require.NoError(t, err)
@@ -44,13 +62,18 @@ func TestGetPages(main *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		var body []string
+		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, []string{"about"}, body)
+		require.Len(t, body, 1)
+		assert.Equal(t, "about", body[0]["id"])
+		title, ok := body[0]["title"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "About", title["en"])
+		assert.Equal(t, "Про нас", title["uk"])
 	})
 
-	main.Run("ListEmptyWhenNoPagesDir", func(t *testing.T) {
-		emptyDir := t.TempDir()
+	main.Run("ListEmptyWhenNoPagesYAML", func(t *testing.T) {
+		emptyDir := makeDataDir(t, "", nil)
 		emptyApp := testapp.New(t, emptyDir)
 		emptyApp.Start()
 
@@ -61,7 +84,7 @@ func TestGetPages(main *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		var body []string
+		var body []any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		assert.NotNil(t, body)
 		assert.Len(t, body, 0)
