@@ -50,6 +50,16 @@ Domain errors are defined in the service package. The handler maps them to HTTP 
 Always use the most semantically appropriate HTTP status code. Examples: 404 Not Found for missing resource — not a
 generic 400 Bad Request.
 
+### CORS middleware
+
+`handler.CORSMiddleware(allowedOrigins []string)` returns a middleware that sets `Access-Control-Allow-Origin` when the
+request `Origin` matches an entry in `allowedOrigins`. A `"*"` entry allows all origins (echoes `*` back). OPTIONS
+preflight requests (detected by `Access-Control-Request-Method` header) are intercepted and responded to with 204
+before calling `next`. Configure via `server.cors_origins` in `config.yml`.
+
+Explicit `OPTIONS` routes must be registered alongside each `GET` route in `app.go` because Go 1.22+ stdlib mux does
+not implicitly handle OPTIONS for registered methods.
+
 ### Circular import: handler ↔ app
 
 `internal/app` imports `internal/handler`; therefore `internal/handler` must never import `internal/app`. When the
@@ -76,6 +86,18 @@ parameter (before `zerolog.Logger`) so the handler can resolve image paths witho
 
 Functional tests for image serving must create a complete valid product directory (including `product.yaml`) alongside
 the `images/` subdirectory, because the loader rejects product directories missing `product.yaml` at startup.
+
+### Pages routes
+
+`GET /pages` is served by `handler.ListPages`. It reads `{data_dir}/pages/` with `os.ReadDir`, filters to
+subdirectories, and returns a JSON array of their names. A missing `pages/` directory returns an empty array —
+not an error. The route goes through the OpenAPI response middleware (validated against the spec).
+
+`GET /pages/{id}/{lang}` is served by `handler.ServePage`. It reads
+`{data_dir}/pages/{id}/{lang}.md` and returns the file content as `text/plain; charset=utf-8`. Both path
+values are validated with the reject pattern: `if value != filepath.Base(value) || value == ""  || value == "."`.
+The route does NOT go through the OpenAPI response middleware (plain text, not JSON), but is declared in the
+spec for documentation. Missing file → 404.
 
 ### Loader: missing products directory is not an error
 

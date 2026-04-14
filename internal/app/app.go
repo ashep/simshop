@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ashep/go-app/httpserver"
 	"github.com/ashep/go-app/runner"
@@ -34,11 +35,20 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	hdl := handler.NewHandler(prodSvc, openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
+	corsMw := handler.CORSMiddleware(cfg.Server.CORSOrigins)
 
 	srv := httpserver.New(httpserver.WithAddr(cfg.Server.Addr))
 
-	srv.HandleFunc("GET /products", openapiMw(hdl.ListProducts))
-	srv.HandleFunc("GET /images/{product_id}/{file_name}", hdl.ServeImage)
+	nop := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusMethodNotAllowed) }
+
+	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
+	srv.HandleFunc("OPTIONS /products", corsMw(nop))
+	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
+	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
+	srv.HandleFunc("GET /pages", corsMw(openapiMw(hdl.ListPages)))
+	srv.HandleFunc("OPTIONS /pages", corsMw(nop))
+	srv.HandleFunc("GET /pages/{id}/{lang}", corsMw(hdl.ServePage))
+	srv.HandleFunc("OPTIONS /pages/{id}/{lang}", corsMw(nop))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

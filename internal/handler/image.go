@@ -6,10 +6,11 @@ import (
 )
 
 func (h *Handler) ServeImage(w http.ResponseWriter, r *http.Request) {
-	productID := filepath.Base(r.PathValue("product_id"))
-	fileName := filepath.Base(r.PathValue("file_name"))
+	productID := r.PathValue("product_id")
+	fileName := r.PathValue("file_name")
 
-	if productID == "" || productID == "." || fileName == "" || fileName == "." {
+	if productID != filepath.Base(productID) || productID == "" || productID == "." ||
+		fileName != filepath.Base(fileName) || fileName == "" || fileName == "." {
 		http.NotFound(w, r)
 		return
 	}
