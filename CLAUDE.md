@@ -69,10 +69,9 @@ generic 400 Bad Request.
 
 ### CORS middleware
 
-`handler.CORSMiddleware(allowedOrigins []string)` returns a middleware that sets `Access-Control-Allow-Origin` when the
-request `Origin` matches an entry in `allowedOrigins`. A `"*"` entry allows all origins (echoes `*` back). OPTIONS
-preflight requests (detected by `Access-Control-Request-Method` header) are intercepted and responded to with 204
-before calling `next`. Configure via `server.cors_origins` in `config.yml`.
+`handler.CORSMiddleware()` returns a middleware that unconditionally sets `Access-Control-Allow-Origin: *` for all
+requests. OPTIONS preflight requests (detected by `Access-Control-Request-Method` header) are intercepted and responded
+to with 204 before calling `next`. There is no per-origin configuration — all origins are always allowed.
 
 Explicit `OPTIONS` routes must be registered alongside each `GET` route in `app.go` because Go 1.22+ stdlib mux does
 not implicitly handle OPTIONS for registered methods.

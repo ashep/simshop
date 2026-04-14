@@ -54,7 +54,29 @@ referenced by filename in `product.yaml`.
 
 ## Data Entities
 
-### Product listing (`products.yaml`)
+### Shop
+
+Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing
+multilingual maps for `name`, `title`, and `description`.
+
+`GET /shop` returns the shop object as JSON. A missing `shop.yaml` returns an empty JSON object `{}`.
+
+Example `shop.yaml`:
+
+```yaml
+shop:
+  name:
+    en: My Shop
+    uk: Мій магазин
+  title:
+    en: Handcrafted goods
+    uk: Товари ручної роботи
+  description:
+    en: Designed and made by hand.
+    uk: Спроєктовано та виготовлено вручну.
+```
+
+### Product listing
 
 The product listing served by `GET /products` comes from `{data_dir}/products/products.yaml`. This is a flat YAML
 file containing lightweight product entries: an `id`, a multilingual `title`, and a multilingual `description`. A
@@ -77,7 +99,7 @@ products:
       uk: Настінна полиця з масиву дуба, виготовлена вручну.
 ```
 
-### Product (full definition, validated at startup)
+### Product
 
 Each product may have a subdirectory under `{data_dir}/products/` with a `product.yaml` file. If present, it is
 validated at startup to enforce data integrity. Subdirectories without a `product.yaml` are silently skipped.
@@ -155,28 +177,6 @@ attrs:
 images:
   - preview: 01-preview.png
     full: 01.png
-```
-
-### Shop
-
-Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing
-multilingual maps for `name`, `title`, and `description`.
-
-`GET /shop` returns the shop object as JSON. A missing `shop.yaml` returns an empty JSON object `{}`.
-
-Example `shop.yaml`:
-
-```yaml
-shop:
-  name:
-    en: My Shop
-    uk: Мій магазин
-  title:
-    en: Handcrafted goods
-    uk: Товари ручної роботи
-  description:
-    en: Designed and made by hand.
-    uk: Спроєктовано та виготовлено вручну.
 ```
 
 ### Page
