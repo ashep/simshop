@@ -41,7 +41,7 @@ type ProductDetail struct {
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
 	Specs       map[string]SpecItem  `json:"specs,omitempty"`
-	Price       map[string]PriceItem `json:"price"`
+	Price       PriceItem            `json:"price"`
 	Attrs       map[string]AttrLang  `json:"attrs,omitempty"`
 	Images      []ImageItem          `json:"images,omitempty"`
 }

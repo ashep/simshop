@@ -19,8 +19,12 @@ func buildTestResponder(t *testing.T) *openapi.Responder {
 }
 
 func newTestHandler() *Handler {
-	return &Handler{l: zerolog.Nop()}
+	return &Handler{geo: &geoDetectorStub{}, l: zerolog.Nop()}
 }
+
+type geoDetectorStub struct{ country string }
+
+func (s *geoDetectorStub) Detect(_ *http.Request) string { return s.country }
 
 func TestWriteError(main *testing.T) {
 	main.Run("BadRequest", func(t *testing.T) {

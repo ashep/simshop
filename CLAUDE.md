@@ -36,6 +36,23 @@ Config is loaded from `config.yml` and environment variables. Data is read from 
 
 ## Architecture
 
+### Geo detector
+
+`internal/geo.Detector` caches country lookups in memory with a 1-hour TTL. Only successful lookups (non-empty
+country string) are written to the cache. A service error (non-200 or network failure) returns `""` and is **not**
+cached — the next call for the same IP will retry the service. This prevents a transient error from silencing retries
+for an hour.
+
+The `CF-IPCountry` header is validated as a strict 2-letter ISO alpha-2 code by `isAlpha2` before being accepted.
+Any other value (e.g., multi-character strings, empty) is ignored and falls through to IP-based detection. This
+prevents header spoofing from influencing pricing decisions with garbage values.
+
+`clientIP` uses `X-Forwarded-For` only when the `CF-IPCountry` header is absent. In production (behind Cloudflare)
+the XFF path is never reached; without Cloudflare, XFF is caller-controlled and can be spoofed.
+
+The `lookup` response body is capped at 16 bytes via `io.LimitReader` — a country code is at most 2 characters;
+the extra headroom protects against runaway responses from the geo service.
+
 Request processing middleware chain (innermost to outermost): `content-type → openapi validation → handler`.
 
 Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g., `"GET /products"`).
@@ -65,6 +82,10 @@ not implicitly handle OPTIONS for registered methods.
 `internal/app` imports `internal/handler`; therefore `internal/handler` must never import `internal/app`. When the
 handler or service needs config values from the `app.Config` struct, pass the scalar values at construction time
 instead of passing the config struct.
+
+The same rule applies to other internal packages (e.g. `internal/geo`): define a local interface in `handler` (e.g.
+`geoDetector`) satisfied by the concrete type, and wire it in `internal/app`. This avoids coupling handler to
+implementation packages.
 
 ## Implementing features
 
@@ -114,6 +135,9 @@ language exists in `p.Name`, then builds a lang-filtered `product.ProductDetail`
 single strings for the requested language) and returns it as JSON. Both path values are validated with the reject
 pattern: `if value != filepath.Base(value) || value == "" || value == "."`. The route goes through the OpenAPI
 response middleware. Missing product directory or `product.yaml` → 404. Missing language key → 404.
+
+Price selection uses `h.geo.Detect(r)` to get the country code, then looks up `p.Price[country]`; falls back to
+`p.Price["default"]` if the country key is absent. `ProductDetail.Price` is a single `PriceItem`, not a map.
 
 The existing `loadProducts` (per-directory loader) continues to run at startup for validation purposes; its output
 (`Catalog.Products`) is no longer wired to any handler — it exists solely to enforce product YAML integrity at
@@ -270,3 +294,15 @@ Functional tests use YAML fixture files:
 
 The Write tool requires that the file has been Read at least once in the session before overwriting. When writing many
 files in a single pass, Read each target file before calling Write — even for files that will be completely replaced.
+
+### `internal/geo` package: country detection
+
+`geo.Detector` resolves a country code from an incoming HTTP request using two strategies:
+1. **Header shortcut**: if `CF-IPCountry` is present, return it lowercased immediately (no network call, no cache).
+2. **IP lookup**: extract client IP (prefer first `X-Forwarded-For` entry over `RemoteAddr`), check in-memory cache
+   (TTL `1h`), and on a miss call `https://ipinfo.io/{ip}/country`. Result is always lowercased and trimmed. On
+   service error, returns `""`.
+
+`geo.NewDetector()` is the production constructor. Tests construct `*Detector` directly (same package) to inject a
+`httptest.Server` client and URL — the unexported `httpClient` and `serviceURL` fields are intentionally accessible
+this way. The `errcheck` linter requires `defer func() { _ = resp.Body.Close() }()` (not bare `defer resp.Body.Close()`).

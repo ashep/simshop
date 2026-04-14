@@ -36,6 +36,9 @@ price:
   default:
     currency: USD
     value: 49.99
+  ua:
+    currency: UAH
+    value: 1999.99
 `
 
 // makeDataDir creates a data directory with a products.yaml listing and per-product
@@ -108,8 +111,10 @@ func TestListProducts(main *testing.T) {
 
 	main.Run("GetReturnsProductDetail", func(t *testing.T) {
 		t.Parallel()
+		// CF-IPCountry: XX has no price entry → falls back to default. Avoids live ipinfo.io call.
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
 		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "XX")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -122,13 +127,15 @@ func TestListProducts(main *testing.T) {
 		assert.Equal(t, "A wooden desktop clock", body["description"])
 		price, ok := body["price"].(map[string]any)
 		require.True(t, ok)
-		assert.Contains(t, price, "default")
+		assert.Equal(t, "USD", price["currency"])
+		assert.Equal(t, 49.99, price["value"])
 	})
 
 	main.Run("GetReturnsCorrectLanguage", func(t *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/uk"), nil)
 		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "XX")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -138,6 +145,42 @@ func TestListProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		assert.Equal(t, "Кронос", body["name"])
 		assert.Equal(t, "Настільний годинник у деревʼяному корпусі", body["description"])
+	})
+
+	main.Run("GetReturnsCountryPrice", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "UA")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		price, ok := body["price"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "UAH", price["currency"])
+		assert.Equal(t, 1999.99, price["value"])
+	})
+
+	main.Run("GetReturnsDefaultPriceForUnknownCountry", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "ZZ")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		price, ok := body["price"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "USD", price["currency"])
+		assert.Equal(t, 49.99, price["value"])
 	})
 
 	main.Run("GetNotFoundWhenIDMissing", func(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/ashep/go-app/httpserver"
 	"github.com/ashep/go-app/runner"
 	"github.com/ashep/simshop/api"
+	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/openapi"
@@ -37,7 +38,7 @@ func Run(rt *runner.Runtime[Config]) error {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware(cfg.Server.CORSOrigins)
 

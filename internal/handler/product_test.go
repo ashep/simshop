@@ -130,6 +130,22 @@ images:
     full: full.jpg
 `
 
+const testProductWithCountryPriceYAML = `
+name:
+  en: Cronus
+  uk: Кронос
+description:
+  en: A wooden desktop clock
+  uk: Настільний годинник
+price:
+  default:
+    currency: USD
+    value: 49.99
+  ua:
+    currency: UAH
+    value: 1999.99
+`
+
 func TestServeProductContent(main *testing.T) {
 	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
@@ -139,7 +155,7 @@ func TestServeProductContent(main *testing.T) {
 
 	doRequest := func(t *testing.T, id, lang string) *httptest.ResponseRecorder {
 		t.Helper()
-		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/"+id+"/"+lang, nil)
 		r.SetPathValue("id", id)
 		r.SetPathValue("lang", lang)
@@ -180,7 +196,7 @@ func TestServeProductContent(main *testing.T) {
 	})
 
 	main.Run("NotFoundOnIDPathTraversal", func(t *testing.T) {
-		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
 		r.SetPathValue("id", "../cronus")
 		r.SetPathValue("lang", "en")
@@ -190,7 +206,7 @@ func TestServeProductContent(main *testing.T) {
 	})
 
 	main.Run("NotFoundOnLangPathTraversal", func(t *testing.T) {
-		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{dataDir: dataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
 		r.SetPathValue("id", "cronus")
 		r.SetPathValue("lang", "../en")
@@ -205,7 +221,7 @@ func TestServeProductContent(main *testing.T) {
 		require.NoError(t, os.MkdirAll(imgProductDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(imgProductDir, "product.yaml"), []byte(testProductWithImagesYAML), 0644))
 
-		h := &Handler{dataDir: imgDataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{dataDir: imgDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
 		r.SetPathValue("id", "cronus")
 		r.SetPathValue("lang", "en")
@@ -223,5 +239,49 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "/images/cronus/thumb.jpg", img["preview"])
 		assert.Equal(t, "/images/cronus/full.jpg", img["full"])
+	})
+
+	main.Run("ReturnsCountryPrice", func(t *testing.T) {
+		cpDataDir := t.TempDir()
+		cpProductDir := filepath.Join(cpDataDir, "products", "cronus")
+		require.NoError(t, os.MkdirAll(cpProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(cpProductDir, "product.yaml"), []byte(testProductWithCountryPriceYAML), 0644))
+
+		h := &Handler{dataDir: cpDataDir, resp: resp, geo: &geoDetectorStub{country: "ua"}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
+		r.SetPathValue("id", "cronus")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		price, ok := body["price"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "UAH", price["currency"])
+		assert.Equal(t, 1999.99, price["value"])
+	})
+
+	main.Run("FallsBackToDefaultPrice", func(t *testing.T) {
+		cpDataDir := t.TempDir()
+		cpProductDir := filepath.Join(cpDataDir, "products", "cronus")
+		require.NoError(t, os.MkdirAll(cpProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(cpProductDir, "product.yaml"), []byte(testProductWithCountryPriceYAML), 0644))
+
+		h := &Handler{dataDir: cpDataDir, resp: resp, geo: &geoDetectorStub{country: "xx"}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
+		r.SetPathValue("id", "cronus")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		price, ok := body["price"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "USD", price["currency"])
+		assert.Equal(t, 49.99, price["value"])
 	})
 }
