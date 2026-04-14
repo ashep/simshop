@@ -29,6 +29,29 @@ if any product file fails validation. Rules:
   at least one value.
 - All image paths (`preview` and `full`) must exist on disk relative to the product's `images/` subdirectory.
 
+## Filesystem Layout
+
+```
+{data_dir}/
+  shop.yaml                # shop metadata (name, title, description)
+  products/
+    products.yaml          # flat product listing (id, title, description)
+    {product-id}/
+      product.yaml         # optional: full product definition (validated at startup)
+      images/
+        01-preview.png
+        01.png
+  pages/
+    pages.yaml             # page metadata listing
+    {page-id}/
+      en.md
+      uk.md
+```
+
+`products/products.yaml` drives `GET /products`. Each product subdirectory is optional; directories without a
+`product.yaml` are silently skipped by the validator. Image files are placed in the `images/` subdirectory and
+referenced by filename in `product.yaml`.
+
 ## Data Entities
 
 ### Product listing (`products.yaml`)
@@ -181,14 +204,14 @@ pages:
 
 The service exposes a read-only JSON REST API validated against an OpenAPI specification.
 
-| Method | Path                                | Description                                         |
-|--------|-------------------------------------|-----------------------------------------------------|
-| `GET`  | `/shop`                             | Get shop metadata (name, title, description)        |
-| `GET`  | `/products`                         | List all products (id, title, description, image)   |
-| `GET`  | `/products/{id}/{lang}`             | Get full product detail in the requested language   |
-| `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by filename                |
-| `GET`  | `/pages`                            | List all pages (id, title)                          |
-| `GET`  | `/pages/{id}/{lang}`                | Get page content (Markdown) in the requested language |
+| Method | Path                               | Description                                           |
+|--------|------------------------------------|-------------------------------------------------------|
+| `GET`  | `/shop`                            | Get shop metadata (name, title, description)          |
+| `GET`  | `/products`                        | List all products (id, title, description, image)     |
+| `GET`  | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
+| `GET`  | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
+| `GET`  | `/pages`                           | List all pages (id, title)                            |
+| `GET`  | `/pages/{id}/{lang}`               | Get page content (Markdown) in the requested language |
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -210,26 +233,3 @@ data_dir: "./data"
 - `server.addr` — address and port to listen on (default: `":9000"`).
 - `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
-
-## Filesystem Layout
-
-```
-{data_dir}/
-  shop.yaml                # shop metadata (name, title, description)
-  products/
-    products.yaml          # flat product listing (id, title, description)
-    {product-id}/
-      product.yaml         # optional: full product definition (validated at startup)
-      images/
-        01-preview.png
-        01.png
-  pages/
-    pages.yaml             # page metadata listing
-    {page-id}/
-      en.md
-      uk.md
-```
-
-`products/products.yaml` drives `GET /products`. Each product subdirectory is optional; directories without a
-`product.yaml` are silently skipped by the validator. Image files are placed in the `images/` subdirectory and
-referenced by filename in `product.yaml`.
