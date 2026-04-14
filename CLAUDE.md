@@ -70,12 +70,19 @@ instead of passing the config struct.
 
 When asked to implement a new feature, use `api/` package content as additional context to understand the requirements.
 
-### Image path transformation in loader
+### Image path transformation
 
-After `validate`, `loadProduct` rewrites each non-empty `Images[i].Preview` and `Images[i].Full` from a bare filename
-(e.g. `"thumb.jpg"`) to a URL-ready path (e.g. `"/images/{id}/thumb.jpg"`). Validation runs against the bare
-filenames first (so `os.Stat` works), then the transformation happens so the JSON response contains downloadable
-paths without any handler-level mapping.
+Image paths are bare filenames in YAML (e.g. `"thumb.jpg"`) and must be rewritten to URL-ready paths
+(e.g. `"/images/{id}/thumb.jpg"`) before returning to the client. This transformation must happen in **two** places:
+
+1. **Loader** (`loadProduct`): after `validate`, rewrites paths at startup so `catalog.Products` contains downloadable
+   URLs. Validation runs against bare filenames first (so `os.Stat` works).
+
+2. **`ServeProductContent` handler**: reads `product.yaml` directly at request time (bypassing the loader), so it must
+   apply the same transformation inline after YAML parsing, before building `ProductDetail`.
+
+Any new handler that reads `product.yaml` directly must apply this transformation — do not assume the loader has
+already rewritten the paths.
 
 ### Image serving route
 
