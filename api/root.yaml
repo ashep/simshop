@@ -16,6 +16,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListProductsResponse'
 
+  /pages:
+    get:
+      operationId: listPages
+      responses:
+        "200":
+          description: List of page IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /pages/{id}/{lang}:
+    get:
+      operationId: getPage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Page content in the requested language
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Page or language not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   schemas:
     SpecItem:

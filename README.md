@@ -96,6 +96,15 @@ images:
     full: 01.png
 ```
 
+### Page
+
+Each page lives in its own subdirectory under `{data_dir}/pages/`. The directory name is the page ID.
+Inside that subdirectory, per-language Markdown files are named `{lang}.md` (e.g. `en.md`, `uk.md`).
+
+`GET /pages` returns a JSON array of page IDs (subdirectory names).
+`GET /pages/{id}/{lang}` returns the raw Markdown content of that page in the requested language as
+`text/plain`. Returns 404 if the page ID or language file does not exist.
+
 ## API Overview
 
 The service exposes a read-only JSON REST API validated against an OpenAPI specification.
@@ -104,6 +113,8 @@ The service exposes a read-only JSON REST API validated against an OpenAPI speci
 |--------|-------------------------------------|------------------------------------|
 | `GET`  | `/products`                         | List all products                  |
 | `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by name   |
+| `GET`  | `/pages`                            | List all page IDs                  |
+| `GET`  | `/pages/{id}/{lang}`                | Get page content in a language     |
 
 Image paths returned by `GET /products` (e.g. `/images/some-id/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -131,6 +142,10 @@ data_dir: "./data"
       images/
         01-preview.png
         01.png
+  pages/
+    {page-id}/
+      en.md
+      uk.md
 ```
 
 Each subdirectory under `products/` defines one product. The directory name becomes the product ID. Image files
