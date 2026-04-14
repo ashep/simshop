@@ -93,6 +93,20 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 			detail.Attrs[key] = attr[lang]
 		}
 	}
+	if len(p.AttrPrices) > 0 {
+		detail.AttrPrices = make(map[string]map[string]float64, len(p.AttrPrices))
+		for attrKey, valuePrices := range p.AttrPrices {
+			resolved := make(map[string]float64, len(valuePrices))
+			for valueKey, countryPrices := range valuePrices {
+				ap, ok := countryPrices[country]
+				if !ok {
+					ap = countryPrices["default"]
+				}
+				resolved[valueKey] = ap
+			}
+			detail.AttrPrices[attrKey] = resolved
+		}
+	}
 
 	if err := h.resp.Write(w, r, http.StatusOK, detail); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")

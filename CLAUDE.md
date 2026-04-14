@@ -67,6 +67,14 @@ Domain errors are defined in the service package. The handler maps them to HTTP 
 Always use the most semantically appropriate HTTP status code. Examples: 404 Not Found for missing resource — not a
 generic 400 Bad Request.
 
+### Attribute prices (`attr_prices`)
+
+`attr_prices` in `product.yaml` holds per-attribute, per-value, per-country add-on prices. The structure is:
+`attr_key → value_key → country_key → float64`. The `"default"` country key is required and used as a fallback
+when the user's country is absent. `product.Product.AttrPrices` stores the raw map; `product.ProductDetail.AttrPrices`
+holds the resolved form (`attr_key → value_key → float64`) built by `ServeProductContent` using the same country
+resolution logic as the base price. `AttrValue` no longer carries `add_price` — it has only `title`.
+
 ### CORS middleware
 
 `handler.CORSMiddleware()` returns a middleware that unconditionally sets `Access-Control-Allow-Origin: *` for all

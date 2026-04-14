@@ -11,8 +11,7 @@ type PriceItem struct {
 }
 
 type AttrValue struct {
-	Title    string  `json:"title"     yaml:"title"`
-	AddPrice float64 `json:"add_price" yaml:"add_price"`
+	Title string `json:"title" yaml:"title"`
 }
 
 type AttrLang struct {
@@ -26,24 +25,26 @@ type ImageItem struct {
 }
 
 type Product struct {
-	ID          string                         `json:"id"          yaml:"id"`
-	Name        map[string]string              `json:"name"        yaml:"name"`
-	Description map[string]string              `json:"description" yaml:"description"`
-	Specs       map[string]map[string]SpecItem `json:"specs"       yaml:"specs"`
-	Price       map[string]PriceItem           `json:"price"       yaml:"price"`
-	Attrs       map[string]map[string]AttrLang `json:"attrs"       yaml:"attrs"`
-	Images      []ImageItem                    `json:"images"      yaml:"images"`
+	ID          string                                       `json:"id"          yaml:"id"`
+	Name        map[string]string                            `json:"name"        yaml:"name"`
+	Description map[string]string                            `json:"description" yaml:"description"`
+	Specs       map[string]map[string]SpecItem               `json:"specs"       yaml:"specs"`
+	Price       map[string]PriceItem                         `json:"price"       yaml:"price"`
+	Attrs       map[string]map[string]AttrLang               `json:"attrs"       yaml:"attrs"`
+	AttrPrices  map[string]map[string]map[string]float64     `json:"attr_prices" yaml:"attr_prices"`
+	Images      []ImageItem                                  `json:"images"      yaml:"images"`
 }
 
 // ProductDetail holds the lang-filtered product data returned by GET /products/{id}/{lang}.
 type ProductDetail struct {
-	ID          string               `json:"id"`
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Specs       map[string]SpecItem  `json:"specs,omitempty"`
-	Price       PriceItem            `json:"price"`
-	Attrs       map[string]AttrLang  `json:"attrs,omitempty"`
-	Images      []ImageItem          `json:"images,omitempty"`
+	ID          string                       `json:"id"`
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	Specs       map[string]SpecItem          `json:"specs,omitempty"`
+	Price       PriceItem                    `json:"price"`
+	Attrs       map[string]AttrLang          `json:"attrs,omitempty"`
+	AttrPrices  map[string]map[string]float64 `json:"attr_prices,omitempty"`
+	Images      []ImageItem                  `json:"images,omitempty"`
 }
 
 // Item holds the lightweight product metadata loaded from products.yaml.

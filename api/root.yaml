@@ -126,12 +126,9 @@ components:
       type: object
       required:
         - title
-        - add_price
       properties:
         title:
           type: string
-        add_price:
-          type: number
 
     AttrLang:
       type: object
@@ -183,6 +180,13 @@ components:
           nullable: true
           additionalProperties:
             $ref: '#/components/schemas/AttrLang'
+        attr_prices:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: number
         images:
           type: array
           nullable: true
