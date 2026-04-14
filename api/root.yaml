@@ -177,9 +177,7 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/SpecItem'
         price:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/PriceItem'
+          $ref: '#/components/schemas/PriceItem'
         attrs:
           type: object
           nullable: true

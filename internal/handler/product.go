@@ -68,11 +68,17 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	country := h.geo.Detect(r)
+	price, ok := p.Price[country]
+	if !ok {
+		price = p.Price["default"]
+	}
+
 	detail := product.ProductDetail{
 		ID:          p.ID,
 		Name:        p.Name[lang],
 		Description: p.Description[lang],
-		Price:       p.Price,
+		Price:       price,
 		Images:      p.Images,
 	}
 	if len(p.Specs) > 0 {

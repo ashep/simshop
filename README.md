@@ -69,7 +69,10 @@ Fields in `product.yaml`:
 - **description** — multilingual long-form description; must cover the same languages as `name`.
 - **specs** — optional map of specification keys, each translated into every language defined in `name`.
   Each spec entry has a `title` and `value`.
-- **price** — map of country/region codes to `{currency, value}` pairs. Must contain a `default` key.
+- **price** — map of country/region codes (lowercase, e.g. `ua`, `us`) to `{currency, value}` pairs. Must contain
+  a `default` key. The API resolves this map to a single `{currency, value}` object per request: the country is
+  detected from the `CF-IPCountry` request header (sent by Cloudflare) or via an ipinfo.io lookup on the client IP.
+  If no matching country key exists the `default` entry is used.
 - **attrs** — optional map of attribute keys (e.g. `display_color`). Each attribute is translated into every
   language in `name`. Each language entry has a `title` and a `values` map with at least one entry;
   each value has a `title` and an `add_price` surcharge.

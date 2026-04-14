@@ -31,10 +31,15 @@ func (e *NotFoundError) Error() string {
 	return "not found"
 }
 
+type geoDetector interface {
+	Detect(r *http.Request) string
+}
+
 type Handler struct {
 	prod    productService
 	pages   pageService
 	shop    shopService
+	geo     geoDetector
 	resp    *openapi.Responder
 	dataDir string
 	l       zerolog.Logger
@@ -44,6 +49,7 @@ func NewHandler(
 	prod productService,
 	pages pageService,
 	shopSvc shopService,
+	geo geoDetector,
 	resp *openapi.Responder,
 	dataDir string,
 	l zerolog.Logger,
@@ -52,6 +58,7 @@ func NewHandler(
 		prod:    prod,
 		pages:   pages,
 		shop:    shopSvc,
+		geo:     geo,
 		resp:    resp,
 		dataDir: dataDir,
 		l:       l,
