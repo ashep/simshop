@@ -59,6 +59,15 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for i, img := range p.Images {
+		if img.Preview != "" {
+			p.Images[i].Preview = "/images/" + id + "/" + img.Preview
+		}
+		if img.Full != "" {
+			p.Images[i].Full = "/images/" + id + "/" + img.Full
+		}
+	}
+
 	detail := product.ProductDetail{
 		ID:          p.ID,
 		Name:        p.Name[lang],

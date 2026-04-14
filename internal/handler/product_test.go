@@ -114,6 +114,22 @@ price:
     value: 49.99
 `
 
+const testProductWithImagesYAML = `
+name:
+  en: Cronus
+  uk: Кронос
+description:
+  en: A wooden desktop clock
+  uk: Настільний годинник
+price:
+  default:
+    currency: USD
+    value: 49.99
+images:
+  - preview: thumb.jpg
+    full: full.jpg
+`
+
 func TestServeProductContent(main *testing.T) {
 	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
@@ -181,5 +197,31 @@ func TestServeProductContent(main *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeProductContent(w, r)
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	main.Run("ImagePathsAreTransformed", func(t *testing.T) {
+		imgDataDir := t.TempDir()
+		imgProductDir := filepath.Join(imgDataDir, "products", "cronus")
+		require.NoError(t, os.MkdirAll(imgProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(imgProductDir, "product.yaml"), []byte(testProductWithImagesYAML), 0644))
+
+		h := &Handler{dataDir: imgDataDir, resp: resp, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/cronus/en", nil)
+		r.SetPathValue("id", "cronus")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+
+		images, ok := body["images"].([]any)
+		require.True(t, ok, "images field should be present")
+		require.Len(t, images, 1)
+		img, ok := images[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "/images/cronus/thumb.jpg", img["preview"])
+		assert.Equal(t, "/images/cronus/full.jpg", img["full"])
 	})
 }
