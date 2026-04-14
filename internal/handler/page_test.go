@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,44 +9,68 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ashep/simshop/internal/page"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+type pageServiceMock struct {
+	mock.Mock
+}
+
+func (m *pageServiceMock) List(ctx context.Context) ([]*page.Page, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*page.Page), args.Error(1)
+}
 
 func TestListPages(main *testing.T) {
 	resp := buildTestResponder(main)
 
-	doRequest := func(t *testing.T, dataDir string) *httptest.ResponseRecorder {
+	doRequest := func(t *testing.T, pageSvc *pageServiceMock) *httptest.ResponseRecorder {
 		t.Helper()
-		h := &Handler{dataDir: dataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{pages: pageSvc, resp: resp, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/pages", nil)
 		w := httptest.NewRecorder()
 		h.ListPages(w, r)
 		return w
 	}
 
-	main.Run("EmptyWhenNoPagesDir", func(t *testing.T) {
-		dataDir := t.TempDir()
-		w := doRequest(t, dataDir)
+	main.Run("EmptyList", func(t *testing.T) {
+		pageSvc := &pageServiceMock{}
+		defer pageSvc.AssertExpectations(t)
+		pageSvc.On("List", mock.Anything).Return([]*page.Page{}, nil)
+
+		w := doRequest(t, pageSvc)
 		assert.Equal(t, http.StatusOK, w.Code)
-		var body []string
+
+		var body []any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		assert.NotNil(t, body)
 		assert.Len(t, body, 0)
 	})
 
-	main.Run("ReturnsSubdirNamesSkipsFiles", func(t *testing.T) {
-		dataDir := t.TempDir()
-		pagesDir := filepath.Join(dataDir, "pages")
-		require.NoError(t, os.MkdirAll(filepath.Join(pagesDir, "about"), 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(pagesDir, "readme.txt"), []byte("x"), 0644))
+	main.Run("ReturnsList", func(t *testing.T) {
+		pageSvc := &pageServiceMock{}
+		defer pageSvc.AssertExpectations(t)
+		pageSvc.On("List", mock.Anything).Return([]*page.Page{
+			{ID: "about", Title: map[string]string{"en": "About", "uk": "Про нас"}},
+		}, nil)
 
-		w := doRequest(t, dataDir)
+		w := doRequest(t, pageSvc)
 		assert.Equal(t, http.StatusOK, w.Code)
-		var body []string
+
+		var body []map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-		assert.Equal(t, []string{"about"}, body)
+		require.Len(t, body, 1)
+		assert.Equal(t, "about", body[0]["id"])
+		title, ok := body[0]["title"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "About", title["en"])
 	})
 }
 

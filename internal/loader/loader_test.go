@@ -38,6 +38,20 @@ price:
     value: 10
 `
 
+func makePageFile(t *testing.T, dataDir, content string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, "pages")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pages.yaml"), []byte(content), 0644))
+}
+
+func makeProductsFile(t *testing.T, dataDir, content string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, "products")
+	require.NoError(t, os.MkdirAll(dir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "products.yaml"), []byte(content), 0644))
+}
+
 func TestLoad(main *testing.T) {
 	main.Run("EmptyDataDir", func(t *testing.T) {
 		dataDir := filepath.Join(t.TempDir(), "nonexistent")
@@ -49,6 +63,17 @@ func TestLoad(main *testing.T) {
 
 	main.Run("MissingProductsSubdir", func(t *testing.T) {
 		dataDir := t.TempDir()
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.Empty(t, cat.Products)
+	})
+
+	main.Run("ProductSubdirWithoutYAMLIsSkipped", func(t *testing.T) {
+		dataDir := t.TempDir()
+		dir := filepath.Join(dataDir, "products", "content-only")
+		require.NoError(t, os.MkdirAll(dir, 0755))
+		// no product.yaml — should be silently skipped
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
@@ -231,6 +256,82 @@ images:
 
 		_, err := loader.Load(dataDir)
 		assert.ErrorContains(t, err, "image")
+	})
+
+	main.Run("MissingPagesYAML_EmptyPages", func(t *testing.T) {
+		dataDir := t.TempDir()
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.Empty(t, cat.Pages)
+	})
+
+	main.Run("LoadsPages", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makePageFile(t, dataDir, `
+pages:
+  - id: about
+    title:
+      en: About
+      uk: Про нас
+  - id: contacts
+    title:
+      en: Contacts
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Pages, 2)
+		assert.Equal(t, "about", cat.Pages[0].ID)
+		assert.Equal(t, "About", cat.Pages[0].Title["en"])
+		assert.Equal(t, "Про нас", cat.Pages[0].Title["uk"])
+		assert.Equal(t, "contacts", cat.Pages[1].ID)
+	})
+
+	main.Run("MalformedPagesYAML", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makePageFile(t, dataDir, `pages: [not a list of maps`)
+
+		_, err := loader.Load(dataDir)
+		assert.Error(t, err)
+	})
+
+	main.Run("MissingProductsYAML_EmptyProductItems", func(t *testing.T) {
+		dataDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "products"), 0755))
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.Empty(t, cat.ProductItems)
+	})
+
+	main.Run("MalformedProductsYAML", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductsFile(t, dataDir, `products: [not a list of maps`)
+
+		_, err := loader.Load(dataDir)
+		assert.Error(t, err)
+	})
+
+	main.Run("LoadsProductItems", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductsFile(t, dataDir, `
+products:
+  - id: cronus
+    title:
+      en: Cronus
+      uk: Cronus
+    description:
+      en: A wooden desktop clock
+      uk: Настільний годинник
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Equal(t, "cronus", cat.ProductItems[0].ID)
+		assert.Equal(t, "Cronus", cat.ProductItems[0].Title["en"])
+		assert.Equal(t, "A wooden desktop clock", cat.ProductItems[0].Description["en"])
 	})
 
 	main.Run("LoadsProductWithImages", func(t *testing.T) {

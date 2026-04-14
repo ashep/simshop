@@ -2,7 +2,7 @@ openapi: "3.0.0"
 
 info:
   title: SimShop API
-  version: "0.3.0"
+  version: "0.4.0"
 
 paths:
   /products:
@@ -14,20 +14,50 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListProductsResponse'
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductItem'
+
+  /products/{id}/{lang}:
+    get:
+      operationId: getProductContent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product content in the requested language
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Product or language not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /pages:
     get:
       operationId: listPages
       responses:
         "200":
-          description: List of page IDs
+          description: List of pages
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  type: string
+                  $ref: '#/components/schemas/PageItem'
 
   /pages/{id}/{lang}:
     get:
@@ -59,74 +89,16 @@ paths:
 
 components:
   schemas:
-    SpecItem:
-      type: object
-      required:
-        - title
-        - value
-      properties:
-        title:
-          type: string
-        value:
-          type: string
-
-    PriceItem:
-      type: object
-      required:
-        - currency
-        - value
-      properties:
-        currency:
-          type: string
-        value:
-          type: number
-
-    AttrValue:
-      type: object
-      required:
-        - title
-        - add_price
-      properties:
-        title:
-          type: string
-        add_price:
-          type: number
-
-    AttrLang:
-      type: object
-      required:
-        - title
-        - values
-      properties:
-        title:
-          type: string
-        values:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/AttrValue'
-
-    ImageItem:
-      type: object
-      required:
-        - preview
-        - full
-      properties:
-        preview:
-          type: string
-        full:
-          type: string
-
-    GetProductResponse:
+    ProductItem:
       type: object
       required:
         - id
-        - name
+        - title
         - description
-        - price
       properties:
         id:
           type: string
-        name:
+        title:
           type: object
           additionalProperties:
             type: string
@@ -134,34 +106,19 @@ components:
           type: object
           additionalProperties:
             type: string
-        specs:
-          type: object
-          nullable: true
-          additionalProperties:
-            type: object
-            additionalProperties:
-              $ref: '#/components/schemas/SpecItem'
-        price:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/PriceItem'
-        attrs:
-          type: object
-          nullable: true
-          additionalProperties:
-            type: object
-            additionalProperties:
-              $ref: '#/components/schemas/AttrLang'
-        images:
-          type: array
-          nullable: true
-          items:
-            $ref: '#/components/schemas/ImageItem'
 
-    ListProductsResponse:
-      type: array
-      items:
-        $ref: '#/components/schemas/GetProductResponse'
+    PageItem:
+      type: object
+      required:
+        - id
+        - title
+      properties:
+        id:
+          type: string
+        title:
+          type: object
+          additionalProperties:
+            type: string
 
     ErrorResponse:
       type: object

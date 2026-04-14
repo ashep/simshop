@@ -29,12 +29,37 @@ if any product file fails validation. Rules:
 
 ## Data Entities
 
-### Product
+### Product listing (`products.yaml`)
 
-Each product lives in its own subdirectory under `{data_dir}/products/`. The directory name is the product ID.
-The product is described by a `product.yaml` file inside that directory.
+The product listing served by `GET /products` comes from `{data_dir}/products/products.yaml`. This is a flat YAML
+file containing lightweight product entries: an `id`, a multilingual `title`, and a multilingual `description`. A
+missing `products.yaml` results in an empty list — it is not an error.
 
-Fields:
+Example `products.yaml`:
+
+```yaml
+products:
+  - id: cronus
+    title:
+      en: Cronus
+      uk: Cronus
+    description:
+      en: A wooden desktop clock.
+      uk: Настільний годинник у деревʼяному корпусі.
+```
+
+### Product detail content
+
+Per-language long-form content lives in `{data_dir}/products/{id}/{lang}.md`. `GET /products/{id}/{lang}` returns
+the raw Markdown content as `text/plain`. Returns 404 if the product ID or language file does not exist.
+
+### Product (full definition, validated at startup)
+
+Each product may also have a subdirectory under `{data_dir}/products/` with a `product.yaml` file. If present,
+it is validated at startup to enforce data integrity. Subdirectories without a `product.yaml` are silently skipped
+and treated as content-only directories (housing `{lang}.md` files).
+
+Fields in `product.yaml`:
 
 - **name** — multilingual product name (e.g. `en`, `uk`).
 - **description** — multilingual long-form description; must cover the same languages as `name`.
@@ -98,25 +123,38 @@ images:
 
 ### Page
 
-Each page lives in its own subdirectory under `{data_dir}/pages/`. The directory name is the page ID.
-Inside that subdirectory, per-language Markdown files are named `{lang}.md` (e.g. `en.md`, `uk.md`).
+Page metadata is defined in `{data_dir}/pages/pages.yaml` and loaded at startup. Each entry has an `id`
+and a multilingual `title` map.
 
-`GET /pages` returns a JSON array of page IDs (subdirectory names).
-`GET /pages/{id}/{lang}` returns the raw Markdown content of that page in the requested language as
-`text/plain`. Returns 404 if the page ID or language file does not exist.
+`GET /pages` returns a JSON array of page objects: `[{"id": "...", "title": {"en": "...", "uk": "..."}}]`.
+A missing `pages.yaml` returns an empty array.
+
+Per-language content lives in `{data_dir}/pages/{id}/{lang}.md`. `GET /pages/{id}/{lang}` returns the raw
+Markdown content as `text/plain`. Returns 404 if the page ID or language file does not exist.
+
+Example `pages.yaml`:
+
+```yaml
+pages:
+  - id: about
+    title:
+      en: About
+      uk: Про нас
+```
 
 ## API Overview
 
 The service exposes a read-only JSON REST API validated against an OpenAPI specification.
 
-| Method | Path                                | Description                        |
-|--------|-------------------------------------|------------------------------------|
-| `GET`  | `/products`                         | List all products                  |
-| `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by name   |
-| `GET`  | `/pages`                            | List all page IDs                  |
-| `GET`  | `/pages/{id}/{lang}`                | Get page content in a language     |
+| Method | Path                                | Description                             |
+|--------|-------------------------------------|-----------------------------------------|
+| `GET`  | `/products`                         | List all products (id, title, desc)     |
+| `GET`  | `/products/{id}/{lang}`             | Get product content in a language       |
+| `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by name        |
+| `GET`  | `/pages`                            | List all page IDs                       |
+| `GET`  | `/pages/{id}/{lang}`                | Get page content in a language          |
 
-Image paths returned by `GET /products` (e.g. `/images/some-id/thumb.jpg`) map directly to the image download
+Image paths associated with a product (e.g. `/images/some-id/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
 
 ## Configuration
@@ -137,16 +175,21 @@ data_dir: "./data"
 ```
 {data_dir}/
   products/
+    products.yaml          # flat product listing (id, title, description)
     {product-id}/
-      product.yaml
+      product.yaml         # optional: full product definition (validated at startup)
+      en.md                # optional: per-language content for GET /products/{id}/{lang}
+      uk.md
       images/
         01-preview.png
         01.png
   pages/
+    pages.yaml             # page metadata listing
     {page-id}/
       en.md
       uk.md
 ```
 
-Each subdirectory under `products/` defines one product. The directory name becomes the product ID. Image files
-are placed in the `images/` subdirectory and referenced by filename in `product.yaml`.
+`products/products.yaml` drives `GET /products`. Each product subdirectory is optional; directories without a
+`product.yaml` are silently skipped by the validator and serve only as content directories for `{lang}.md` files.
+Image files are placed in the `images/` subdirectory and referenced by filename in `product.yaml`.

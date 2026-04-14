@@ -7,13 +7,16 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
 	"gopkg.in/yaml.v3"
 )
 
 // Catalog holds all content loaded from the data directory at startup.
 type Catalog struct {
-	Products []*product.Product
+	Products     []*product.Product
+	ProductItems []*product.Item
+	Pages        []*page.Page
 }
 
 // Load reads data_dir, returning a populated Catalog.
@@ -25,7 +28,59 @@ func Load(dataDir string) (*Catalog, error) {
 	if err := loadProducts(dataDir, c); err != nil {
 		return nil, err
 	}
+	if err := loadProductsList(dataDir, c); err != nil {
+		return nil, err
+	}
+	if err := loadPages(dataDir, c); err != nil {
+		return nil, err
+	}
 	return c, nil
+}
+
+type pagesFile struct {
+	Pages []*page.Page `yaml:"pages"`
+}
+
+func loadPages(dataDir string, c *Catalog) error {
+	path := filepath.Join(dataDir, "pages", "pages.yaml")
+
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read pages.yaml: %w", err)
+	}
+
+	var f pagesFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return fmt.Errorf("parse pages.yaml: %w", err)
+	}
+	c.Pages = f.Pages
+	return nil
+}
+
+type productsFile struct {
+	Products []*product.Item `yaml:"products"`
+}
+
+func loadProductsList(dataDir string, c *Catalog) error {
+	path := filepath.Join(dataDir, "products", "products.yaml")
+
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read products.yaml: %w", err)
+	}
+
+	var f productsFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return fmt.Errorf("parse products.yaml: %w", err)
+	}
+	c.ProductItems = f.Products
+	return nil
 }
 
 func loadProducts(dataDir string, c *Catalog) error {
@@ -48,6 +103,9 @@ func loadProducts(dataDir string, c *Catalog) error {
 		if err != nil {
 			return fmt.Errorf("load product %s: %w", id, err)
 		}
+		if p == nil {
+			continue
+		}
 		c.Products = append(c.Products, p)
 	}
 	return nil
@@ -55,6 +113,9 @@ func loadProducts(dataDir string, c *Catalog) error {
 
 func loadProduct(dir, id string) (*product.Product, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "product.yaml"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}

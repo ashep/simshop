@@ -4,6 +4,7 @@ package product_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,45 +15,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testProductID   = "018f4e3a-0000-7000-8000-000000000099"
-	testProductYAML = `
-name:
-  en: Widget
-description:
-  en: A fine widget
-price:
-  default:
-    currency: USD
-    value: 9.99
-images:
-  - preview: thumb.jpg
-    full: full.jpg
+const testProductsYAML = `
+products:
+  - id: cronus
+    title:
+      en: Cronus
+      uk: Cronus
+    description:
+      en: A wooden desktop clock
+      uk: Настільний годинник у деревʼяному корпусі
 `
-)
 
-func makeDataDir(t *testing.T, products map[string]string) string {
+// makeDataDir creates a data directory with a products.yaml listing and per-language
+// markdown files for each product.
+func makeDataDir(t *testing.T, productsYAML string, markdownFiles map[string]map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
-	for id, yaml := range products {
-		prodDir := filepath.Join(dataDir, "products", id)
-		imgDir := filepath.Join(prodDir, "images")
-		require.NoError(t, os.MkdirAll(imgDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(prodDir, "product.yaml"), []byte(yaml), 0644))
-		require.NoError(t, os.WriteFile(filepath.Join(imgDir, "thumb.jpg"), []byte("fake"), 0644))
-		require.NoError(t, os.WriteFile(filepath.Join(imgDir, "full.jpg"), []byte("fake"), 0644))
+
+	if productsYAML != "" {
+		productsDir := filepath.Join(dataDir, "products")
+		require.NoError(t, os.MkdirAll(productsDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(productsDir, "products.yaml"), []byte(productsYAML), 0644))
 	}
+
+	for id, langs := range markdownFiles {
+		productDir := filepath.Join(dataDir, "products", id)
+		require.NoError(t, os.MkdirAll(productDir, 0755))
+		for lang, content := range langs {
+			require.NoError(t, os.WriteFile(filepath.Join(productDir, lang+".md"), []byte(content), 0644))
+		}
+	}
+
 	return dataDir
 }
 
 func TestListProducts(main *testing.T) {
-	dataDir := makeDataDir(main, map[string]string{testProductID: testProductYAML})
+	dataDir := makeDataDir(main, testProductsYAML, map[string]map[string]string{
+		"cronus": {"en": "# Cronus", "uk": "# Кронос"},
+	})
 	app := testapp.New(main, dataDir)
 	app.Start()
 
 	main.Run("ReturnsList", func(t *testing.T) {
 		t.Parallel()
-
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products"), nil)
 		require.NoError(t, err)
 		resp, err := http.DefaultClient.Do(req)
@@ -60,25 +65,21 @@ func TestListProducts(main *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
 		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
-		assert.Equal(t, testProductID, body[0]["id"])
-		assert.Contains(t, body[0], "name")
-
-		images, ok := body[0]["images"].([]any)
-		require.True(t, ok, "images must be a list")
-		require.Len(t, images, 1)
-		img := images[0].(map[string]any)
-		assert.Equal(t, "/images/"+testProductID+"/thumb.jpg", img["preview"])
-		assert.Equal(t, "/images/"+testProductID+"/full.jpg", img["full"])
+		assert.Equal(t, "cronus", body[0]["id"])
+		title, ok := body[0]["title"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Cronus", title["en"])
+		assert.Equal(t, "Cronus", title["uk"])
+		description, ok := body[0]["description"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "A wooden desktop clock", description["en"])
 	})
 
-	main.Run("EmptyWhenNoProducts", func(t *testing.T) {
-		t.Parallel()
-
-		emptyDir := t.TempDir()
+	main.Run("EmptyListWhenNoProductsYAML", func(t *testing.T) {
+		emptyDir := makeDataDir(t, "", nil)
 		emptyApp := testapp.New(t, emptyDir)
 		emptyApp.Start()
 
@@ -89,10 +90,45 @@ func TestListProducts(main *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
 		var body []any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		assert.NotNil(t, body)
 		assert.Len(t, body, 0)
+	})
+
+	main.Run("GetReturnsContent", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/en"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, "# Cronus", string(body))
+	})
+
+	main.Run("GetNotFoundWhenIDMissing", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/no-such-product/en"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	main.Run("GetNotFoundWhenLangMissing", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products/cronus/fr"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }

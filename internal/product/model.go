@@ -1,9 +1,5 @@
 package product
 
-import "errors"
-
-var ErrProductNotFound = errors.New("product not found")
-
 type SpecItem struct {
 	Title string `json:"title" yaml:"title"`
 	Value string `json:"value" yaml:"value"`
@@ -37,4 +33,11 @@ type Product struct {
 	Price       map[string]PriceItem           `json:"price"       yaml:"price"`
 	Attrs       map[string]map[string]AttrLang `json:"attrs"       yaml:"attrs"`
 	Images      []ImageItem                    `json:"images"      yaml:"images"`
+}
+
+// Item holds the lightweight product metadata loaded from products.yaml.
+type Item struct {
+	ID          string            `json:"id"          yaml:"id"`
+	Title       map[string]string `json:"title"       yaml:"title"`
+	Description map[string]string `json:"description" yaml:"description"`
 }

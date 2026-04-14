@@ -1,37 +1,27 @@
 package handler
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/ashep/simshop/internal/page"
 )
 
+type pageService interface {
+	List(ctx context.Context) ([]*page.Page, error)
+}
+
 func (h *Handler) ListPages(w http.ResponseWriter, r *http.Request) {
-	pagesDir := filepath.Join(h.dataDir, "pages")
-
-	entries, err := os.ReadDir(pagesDir)
-	if errors.Is(err, fs.ErrNotExist) {
-		if wErr := h.resp.Write(w, r, http.StatusOK, []string{}); wErr != nil {
-			h.l.Error().Err(wErr).Msg("response validation failed")
-		}
-		return
-	}
+	pages, err := h.pages.List(r.Context())
 	if err != nil {
-		h.writeError(w, fmt.Errorf("read pages dir: %w", err))
+		h.writeError(w, err)
 		return
 	}
-
-	ids := []string{}
-	for _, e := range entries {
-		if e.IsDir() {
-			ids = append(ids, e.Name())
-		}
-	}
-
-	if err := h.resp.Write(w, r, http.StatusOK, ids); err != nil {
+	if err := h.resp.Write(w, r, http.StatusOK, pages); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
 }
