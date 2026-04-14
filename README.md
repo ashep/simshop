@@ -1,19 +1,21 @@
 # SimShop
 
-SimShop is a read-only HTTP API service that serves catalog data (products) loaded from YAML files at startup.
+SimShop is a read-only HTTP API service that serves catalog data (products, pages, shop metadata) loaded from YAML
+files at startup.
 
 ## Purpose
 
 SimShop is designed as a lightweight catalog backend where:
 
-- Products are defined in YAML files on disk and served via a JSON REST API.
+- Products, pages, and shop metadata are defined in YAML files on disk and served via a JSON REST API.
+- No database is required — content is read from the filesystem at startup.
+- To update content, update the YAML files and restart the service.
 
 ## Key Concepts
 
 ### YAML-based catalog
 
-All catalog data is loaded from a configurable `data_dir` at startup. No database is required. The catalog is
-read-only at runtime — to update content, update the YAML files and restart the service.
+All catalog data is loaded from a configurable `data_dir` at startup. The catalog is read-only at runtime.
 
 ### Validation at startup
 
@@ -36,32 +38,30 @@ file containing lightweight product entries: an `id`, a multilingual `title`, an
 missing `products.yaml` results in an empty list — it is not an error.
 
 Each entry in the listing response also includes an optional `image` field — the URL path of the first preview image
-from the product's `product.yaml` (e.g. `/images/cronus/thumb.png`). The field is omitted when the product has no
+from the product's `product.yaml` (e.g. `/images/oak-shelf/thumb.png`). The field is omitted when the product has no
 images or when the product subdirectory has no `product.yaml`.
 
 Example `products.yaml`:
 
 ```yaml
 products:
-  - id: cronus
+  - id: oak-shelf
     title:
-      en: Cronus
-      uk: Cronus
+      en: Oak Shelf
+      uk: Дубова полиця
     description:
-      en: A wooden desktop clock.
-      uk: Настільний годинник у деревʼяному корпусі.
+      en: A handcrafted solid oak wall shelf.
+      uk: Настінна полиця з масиву дуба, виготовлена вручну.
 ```
-
-### Product detail content
-
-Per-language long-form content lives in `{data_dir}/products/{id}/{lang}.md`. `GET /products/{id}/{lang}` returns
-the raw Markdown content as `text/plain`. Returns 404 if the product ID or language file does not exist.
 
 ### Product (full definition, validated at startup)
 
-Each product may also have a subdirectory under `{data_dir}/products/` with a `product.yaml` file. If present,
-it is validated at startup to enforce data integrity. Subdirectories without a `product.yaml` are silently skipped
-and treated as content-only directories (housing `{lang}.md` files).
+Each product may have a subdirectory under `{data_dir}/products/` with a `product.yaml` file. If present, it is
+validated at startup to enforce data integrity. Subdirectories without a `product.yaml` are silently skipped.
+
+`GET /products/{id}/{lang}` reads this file, collapses all multilingual maps to the requested language, resolves the
+price for the caller's country, and returns a JSON `ProductDetail` object. Returns 404 if the product or language is
+not found.
 
 Fields in `product.yaml`:
 
@@ -73,55 +73,61 @@ Fields in `product.yaml`:
   a `default` key. The API resolves this map to a single `{currency, value}` object per request: the country is
   detected from the `CF-IPCountry` request header (sent by Cloudflare) or via an ipinfo.io lookup on the client IP.
   If no matching country key exists the `default` entry is used.
-- **attrs** — optional map of attribute keys (e.g. `display_color`). Each attribute is translated into every
-  language in `name`. Each language entry has a `title` and a `values` map with at least one entry;
-  each value has a `title` and an `add_price` surcharge.
-- **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's
-  `images/` subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that
-  can be appended to the server's base URL to download the file.
+- **attrs** — optional map of attribute keys (e.g. `material`). Each attribute is translated into every language in
+  `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`
+  and an `add_price` surcharge.
+- **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's `images/`
+  subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that can be appended to
+  the server's base URL to download the file.
 
 Example `product.yaml`:
 
 ```yaml
 name:
-  en: Cronus
-  uk: Cronus
+  en: Oak Shelf
+  uk: Дубова полиця
 
 description:
-  en: A wooden desktop clock.
-  uk: Настільний годинник у деревʼяному корпусі.
+  en: A handcrafted solid oak wall shelf.
+  uk: Настінна полиця з масиву дуба, виготовлена вручну.
 
 specs:
   weight:
     en:
       title: Weight
-      value: 420 g
+      value: 1.2 kg
     uk:
       title: Вага
-      value: 420 г
+      value: 1.2 кг
 
 price:
   default:
     currency: EUR
-    value: 100
+    value: 80
   ua:
     currency: UAH
-    value: 99
+    value: 3200
 
 attrs:
-  display_color:
+  finish:
     en:
-      title: Display color
+      title: Finish
       values:
-        red:
-          title: Red
+        natural:
+          title: Natural
           add_price: 0
+        dark:
+          title: Dark
+          add_price: 10
     uk:
-      title: Колір дисплея
+      title: Покриття
       values:
-        red:
-          title: Червоний
+        natural:
+          title: Натуральне
           add_price: 0
+        dark:
+          title: Темне
+          add_price: 10
 
 images:
   - preview: 01-preview.png
@@ -175,16 +181,16 @@ pages:
 
 The service exposes a read-only JSON REST API validated against an OpenAPI specification.
 
-| Method | Path                                | Description                             |
-|--------|-------------------------------------|-----------------------------------------|
-| `GET`  | `/shop`                             | Get shop metadata (name, title, desc)   |
-| `GET`  | `/products`                         | List all products (id, title, desc)     |
-| `GET`  | `/products/{id}/{lang}`             | Get product content in a language       |
-| `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by name        |
-| `GET`  | `/pages`                            | List all page IDs                       |
-| `GET`  | `/pages/{id}/{lang}`                | Get page content in a language          |
+| Method | Path                                | Description                                         |
+|--------|-------------------------------------|-----------------------------------------------------|
+| `GET`  | `/shop`                             | Get shop metadata (name, title, description)        |
+| `GET`  | `/products`                         | List all products (id, title, description, image)   |
+| `GET`  | `/products/{id}/{lang}`             | Get full product detail in the requested language   |
+| `GET`  | `/images/{product_id}/{file_name}`  | Download a product image by filename                |
+| `GET`  | `/pages`                            | List all pages (id, title)                          |
+| `GET`  | `/pages/{id}/{lang}`                | Get page content (Markdown) in the requested language |
 
-Image paths associated with a product (e.g. `/images/some-id/thumb.jpg`) map directly to the image download
+Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
 
 ## Configuration
@@ -195,10 +201,15 @@ Config is loaded from `config.yml`:
 debug: false
 server:
   addr: ":9000"
+  cors_origins:
+    - "https://example.com"
 data_dir: "./data"
 ```
 
-- `data_dir` — root directory containing product subdirectories (default: `./data`).
+- `debug` — enable verbose logging (default: `false`).
+- `server.addr` — address and port to listen on (default: `":9000"`).
+- `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
+- `data_dir` — root directory containing catalog files (default: `"./data"`).
 
 ## Filesystem Layout
 
@@ -209,8 +220,6 @@ data_dir: "./data"
     products.yaml          # flat product listing (id, title, description)
     {product-id}/
       product.yaml         # optional: full product definition (validated at startup)
-      en.md                # optional: per-language content for GET /products/{id}/{lang}
-      uk.md
       images/
         01-preview.png
         01.png
@@ -222,5 +231,5 @@ data_dir: "./data"
 ```
 
 `products/products.yaml` drives `GET /products`. Each product subdirectory is optional; directories without a
-`product.yaml` are silently skipped by the validator and serve only as content directories for `{lang}.md` files.
-Image files are placed in the `images/` subdirectory and referenced by filename in `product.yaml`.
+`product.yaml` are silently skipped by the validator. Image files are placed in the `images/` subdirectory and
+referenced by filename in `product.yaml`.
