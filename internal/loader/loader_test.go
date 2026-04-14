@@ -52,6 +52,12 @@ func makeProductsFile(t *testing.T, dataDir, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "products.yaml"), []byte(content), 0644))
 }
 
+func makeShopFile(t *testing.T, dataDir, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dataDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(content), 0644))
+}
+
 func TestLoad(main *testing.T) {
 	main.Run("EmptyDataDir", func(t *testing.T) {
 		dataDir := filepath.Join(t.TempDir(), "nonexistent")
@@ -332,6 +338,128 @@ products:
 		assert.Equal(t, "shelf", cat.ProductItems[0].ID)
 		assert.Equal(t, "Shelf", cat.ProductItems[0].Title["en"])
 		assert.Equal(t, "A wooden desktop clock", cat.ProductItems[0].Description["en"])
+	})
+
+	main.Run("MissingShopYAML_EmptyShop", func(t *testing.T) {
+		dataDir := t.TempDir()
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.Empty(t, cat.Shop.Name)
+		assert.Empty(t, cat.Shop.Title)
+		assert.Empty(t, cat.Shop.Description)
+	})
+
+	main.Run("LoadsShop", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeShopFile(t, dataDir, `
+shop:
+  name:
+    en: Test Shop
+    uk: Test Shop
+  title:
+    en: Handmade Goods
+    uk: Предмети інтер'єру ручної роботи
+  description:
+    en: Designed and made by hand
+    uk: Спроєктовано та виготовлено вручну
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.Equal(t, "Test Shop", cat.Shop.Name["en"])
+		assert.Equal(t, "Test Shop", cat.Shop.Name["uk"])
+		assert.Equal(t, "Handmade Goods", cat.Shop.Title["en"])
+		assert.Equal(t, "Designed and made by hand", cat.Shop.Description["en"])
+	})
+
+	main.Run("MalformedShopYAML", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeShopFile(t, dataDir, `shop: [not a map`)
+
+		_, err := loader.Load(dataDir)
+		assert.Error(t, err)
+	})
+
+	main.Run("ProductItemGetsImageFromProduct", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "shelf", `
+name:
+  en: Shelf
+description:
+  en: A wooden desktop clock
+price:
+  default:
+    currency: EUR
+    value: 10
+images:
+  - preview: thumb.png
+    full: full.png
+`, map[string][]byte{
+			"images/thumb.png": []byte("fake"),
+			"images/full.png":  []byte("fake"),
+		})
+		makeProductsFile(t, dataDir, `
+products:
+  - id: shelf
+    title:
+      en: Shelf
+    description:
+      en: A wooden desktop clock
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		require.NotNil(t, cat.ProductItems[0].Image)
+		assert.Equal(t, "/images/shelf/thumb.png", *cat.ProductItems[0].Image)
+	})
+
+	main.Run("ProductItemImageAbsentWhenProductHasNoImages", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "shelf", minimalValidYAML, nil)
+		makeProductsFile(t, dataDir, `
+products:
+  - id: shelf
+    title:
+      en: Shelf
+    description:
+      en: A test product
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Nil(t, cat.ProductItems[0].Image)
+	})
+
+	main.Run("ProductItemImageAbsentWhenNoMatchingProduct", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductsFile(t, dataDir, `
+products:
+  - id: ghost
+    title:
+      en: Ghost
+    description:
+      en: No product dir
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Nil(t, cat.ProductItems[0].Image)
+	})
+
+	main.Run("EmptyShopYAML_EmptyShop", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeShopFile(t, dataDir, "")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		assert.NotNil(t, cat.Shop)
+		assert.Empty(t, cat.Shop.Name)
+		assert.Empty(t, cat.Shop.Title)
+		assert.Empty(t, cat.Shop.Description)
 	})
 
 	main.Run("LoadsProductWithImages", func(t *testing.T) {

@@ -51,4 +51,5 @@ type Item struct {
 	ID          string            `json:"id"          yaml:"id"`
 	Title       map[string]string `json:"title"       yaml:"title"`
 	Description map[string]string `json:"description" yaml:"description"`
+	Image       *string           `json:"image,omitempty" yaml:"-"`
 }
