@@ -20,7 +20,7 @@ func makeFakeNPServer(t *testing.T) *httptest.Server {
 		var req struct {
 			CalledMethod string `json:"calledMethod"`
 		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
 		w.Header().Set("Content-Type", "application/json")
 		switch req.CalledMethod {
@@ -98,6 +98,7 @@ func TestSearchNovaPoshta(main *testing.T) {
 		defer func() { _ = resp.Body.Close() }()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
