@@ -60,4 +60,21 @@ func TestWriteError(main *testing.T) {
 			t.Errorf("unexpected body: %s", body)
 		}
 	})
+
+	main.Run("BadGateway", func(t *testing.T) {
+		h := newTestHandler()
+		w := httptest.NewRecorder()
+
+		h.writeError(w, &BadGatewayError{Reason: "upstream service failed"})
+
+		if w.Code != http.StatusBadGateway {
+			t.Errorf("expected status %d, got %d", http.StatusBadGateway, w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %q", ct)
+		}
+		if body := w.Body.String(); body != `{"error": "upstream service failed"}` {
+			t.Errorf("unexpected body: %s", body)
+		}
+	})
 }
