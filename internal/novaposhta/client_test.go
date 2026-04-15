@@ -31,6 +31,7 @@ func TestSearchCities(main *testing.T) {
 			assert.Equal(t, "Address", req.ModelName)
 			assert.Equal(t, "searchSettlements", req.CalledMethod)
 			assert.Equal(t, "Київ", req.MethodProperties["CityName"])
+			assert.EqualValues(t, 20, req.MethodProperties["Limit"])
 
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
@@ -96,6 +97,7 @@ func TestSearchBranches(main *testing.T) {
 			assert.Equal(t, "getWarehouses", req.CalledMethod)
 			assert.Equal(t, "city-ref-1", req.MethodProperties["CityRef"])
 			assert.Equal(t, "Хрещ", req.MethodProperties["FindByString"])
+			assert.EqualValues(t, 20, req.MethodProperties["Limit"])
 
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{
