@@ -369,6 +369,7 @@ components:
         - first_name
         - last_name
         - phone
+        - email
         - city
         - address
       properties:
@@ -389,6 +390,8 @@ components:
         last_name:
           type: string
         phone:
+          type: string
+        email:
           type: string
         city:
           type: string

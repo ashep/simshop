@@ -37,6 +37,7 @@ func TestClient_Write(main *testing.T) {
 		MiddleName:  "Іванович",
 		LastName:    "Іваненко",
 		Phone:       "+380501234567",
+		Email:       "ivan@example.com",
 		City:        "Київ",
 		Address:     "Відділення №5",
 		Notes:       "Примітка",
@@ -46,7 +47,7 @@ func TestClient_Write(main *testing.T) {
 		var capturedBody []byte
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
-			assert.Equal(t, "/sheet-id/values/Orders:append", r.URL.Path)
+			assert.Equal(t, "/sheet-id/values/Orders!A1:append", r.URL.Path)
 			assert.Equal(t, "RAW", r.URL.Query().Get("valueInputOption"))
 			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -69,23 +70,25 @@ func TestClient_Write(main *testing.T) {
 		require.NoError(t, json.Unmarshal(capturedBody, &body))
 		require.Len(t, body.Values, 1)
 		row := body.Values[0]
-		require.Len(t, row, 11)
-		assert.Equal(t, "2026-04-15 10:30:00", row[0])
-		assert.Equal(t, "Тестовий товар", row[1])
-		assert.Equal(t, "Колір: Червоний", row[2])
-		assert.Equal(t, "1500.00 UAH", row[3])
-		assert.Equal(t, "Іван", row[4])
-		assert.Equal(t, "Іванович", row[5])
-		assert.Equal(t, "Іваненко", row[6])
-		assert.Equal(t, "+380501234567", row[7])
-		assert.Equal(t, "Київ", row[8])
-		assert.Equal(t, "Відділення №5", row[9])
-		assert.Equal(t, "Примітка", row[10])
+		require.Len(t, row, 15)
+		assert.Equal(t, "2026-04-15", row[2])
+		assert.Equal(t, "10:30:00", row[3])
+		assert.Equal(t, "Тестовий товар", row[4])
+		assert.Equal(t, "Колір: Червоний", row[5])
+		assert.Equal(t, "1500.00 UAH", row[6])
+		assert.Equal(t, "ivan@example.com", row[7])
+		assert.Equal(t, "Іван", row[8])
+		assert.Equal(t, "Іванович", row[9])
+		assert.Equal(t, "Іваненко", row[10])
+		assert.Equal(t, "+380501234567", row[11])
+		assert.Equal(t, "Київ", row[12])
+		assert.Equal(t, "Відділення №5", row[13])
+		assert.Equal(t, "Примітка", row[14])
 	})
 
 	main.Run("DefaultsSheetNameToSheet1", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/sheet-id/values/Sheet1:append", r.URL.Path)
+			assert.Equal(t, "/sheet-id/values/Sheet1!A1:append", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{}`))
 		}))

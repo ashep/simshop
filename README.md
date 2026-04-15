@@ -208,25 +208,27 @@ pages:
 
 ## API Overview
 
-The service exposes a read-only JSON REST API validated against an OpenAPI specification.
+The service exposes a JSON REST API validated against an OpenAPI specification.
 
-| Method | Path                               | Description                                           |
-|--------|------------------------------------|-------------------------------------------------------|
-| `GET`  | `/shop`                            | Get shop metadata (name, title, description)          |
-| `GET`  | `/products`                        | List all products (id, title, description, image)     |
-| `GET`  | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
-| `GET`  | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
-| `GET`  | `/pages`                           | List all pages (id, title)                            |
-| `GET`  | `/pages/{id}/{lang}`               | Get page content (Markdown) in the requested language |
-| `GET`  | `/nova-poshta/cities?q=<query>`    | Search Nova Poshta cities by name                     |
-| `GET`  | `/nova-poshta/branches?city_ref=<ref>&q=<query>` | Search Nova Poshta branches in a city    |
+| Method   | Path                               | Description                                           |
+|----------|------------------------------------|-------------------------------------------------------|
+| `GET`    | `/shop`                            | Get shop metadata (name, title, description)          |
+| `GET`    | `/products`                        | List all products (id, title, description, image)     |
+| `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
+| `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
+| `GET`    | `/pages`                           | List all pages (id, title)                            |
+| `GET`    | `/pages/{id}/{lang}`               | Get page content (Markdown) in the requested language |
+| `GET`    | `/nova-poshta/cities?q=<query>`    | Search Nova Poshta cities by name                     |
+| `GET`    | `/nova-poshta/branches?city_ref=<ref>&q=<query>` | Search Nova Poshta branches in a city    |
+| `GET`    | `/nova-poshta/streets?city_ref=<ref>&q=<query>`  | Search Nova Poshta streets in a city     |
+| `POST`   | `/orders`                          | Submit a customer order (appended to Google Sheets)   |
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
 
 ### Nova Poshta autocomplete
 
-Two endpoints proxy search queries to the Nova Poshta JSON API v2 to support address-autocomplete widgets.
+Three endpoints proxy search queries to the Nova Poshta JSON API v2 to support address-autocomplete widgets.
 
 `GET /nova-poshta/cities?q=<query>` — searches settlements by name. Returns a JSON array of
 `[{"ref": "<uuid>", "name": "<string>"}]` objects. The `q` parameter is required; omitting it returns 400.
@@ -235,7 +237,42 @@ Two endpoints proxy search queries to the Nova Poshta JSON API v2 to support add
 by `city_ref`. Returns a JSON array of `[{"ref": "<uuid>", "name": "<string>"}]` objects. Both `city_ref` and
 `q` are required; omitting either returns 400.
 
-Both endpoints return 502 if the Nova Poshta API call fails.
+`GET /nova-poshta/streets?city_ref=<ref>&q=<query>` — searches streets within a city identified by `city_ref`
+(the settlement ref returned by the cities endpoint). Returns a JSON array of
+`[{"ref": "<uuid>", "name": "<string>"}]` objects. Both `city_ref` and `q` are required; omitting either returns
+400. Intended for courier (door-to-door) delivery address input.
+
+All three endpoints return 502 if the Nova Poshta API call fails.
+
+### Orders
+
+`POST /orders` accepts a single-product order and appends it as a row to a Google Sheet via a service account.
+No data is stored on the service side — Google Sheets is the sole persistence layer.
+
+**Request body (JSON):**
+
+```json
+{
+  "product_id": "oak-shelf",
+  "lang": "uk",
+  "attributes": {"finish": "dark"},
+  "first_name": "Іван",
+  "middle_name": "Іванович",
+  "last_name": "Іваненко",
+  "phone": "+380501234567",
+  "email": "ivan@example.com",
+  "city": "Київ",
+  "address": "Відділення №5, вул. Хрещатик, 1",
+  "notes": "Зателефонуйте за годину"
+}
+```
+
+Required fields: `product_id`, `lang`, `first_name`, `last_name`, `phone`, `email`, `city`, `address`. Optional:
+`middle_name`, `attributes`, `notes`.
+
+The server resolves the product name and price from `product.yaml` (including geo-based pricing and per-attribute
+add-on prices), formats the attributes string, and stamps the server-side datetime. Returns 201 on success, 400
+for invalid input, 404 for an unknown product, and 502 if the Google Sheets API call fails.
 
 ## Configuration
 
@@ -259,3 +296,34 @@ nova_poshta:
 - `nova_poshta.api_key` — Nova Poshta API key. Required for the `/nova-poshta/*` endpoints to work.
 - `nova_poshta.service_url` — override the Nova Poshta API base URL (default: `https://api.novaposhta.ua/v2.0/json/`).
   Leave unset in production; used in tests.
+- `google_sheets.credentials_json` — full service account JSON key (inline). The sheet must be shared with the
+  service account's email. Required for `POST /orders` to work; if empty, orders return 502.
+- `google_sheets.spreadsheet_id` — Google Sheets spreadsheet ID (from the sheet URL).
+- `google_sheets.sheet_name` — name of the target sheet/tab (defaults to `Sheet1` if unset).
+- `google_sheets.service_url` — override the Sheets API base URL. Leave unset in production; used in tests.
+
+### Setting up Google Sheets credentials
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and select or create a project.
+2. Navigate to **APIs & Services → Library** and enable the **Google Sheets API**.
+3. Navigate to **APIs & Services → Credentials**, click **Create credentials → Service account**, fill in a name,
+   and click **Done**.
+4. Click the newly created service account, open the **Keys** tab, click **Add key → Create new key**, choose
+   **JSON**, and download the file.
+5. Open the downloaded JSON file, copy its entire contents, and paste them as the value of
+   `google_sheets.credentials_json` in `config.yml`. Because the JSON contains newlines, use a YAML block scalar:
+
+   ```yaml
+   google_sheets:
+     credentials_json: |
+       {
+         "type": "service_account",
+         "project_id": "...",
+         ...
+       }
+     spreadsheet_id: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+     sheet_name: "Orders"
+   ```
+
+6. In Google Sheets, open the target spreadsheet, click **Share**, and share it with the service account's email
+   address (shown in the JSON as `client_email`) with **Editor** access.
