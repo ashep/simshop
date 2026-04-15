@@ -87,6 +87,75 @@ func TestSearchCities(main *testing.T) {
 	})
 }
 
+func TestSearchStreets(main *testing.T) {
+	main.Run("ReturnsParsedStreets", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+			var req npRequest
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			assert.Equal(t, "test-key", req.APIKey)
+			assert.Equal(t, "Address", req.ModelName)
+			assert.Equal(t, "searchSettlementStreets", req.CalledMethod)
+			assert.Equal(t, "city-ref-1", req.MethodProperties["SettlementRef"])
+			assert.Equal(t, "Хрещ", req.MethodProperties["StreetName"])
+			assert.EqualValues(t, 20, req.MethodProperties["Limit"])
+
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"success": true,
+				"data": [{
+					"TotalCount": 1,
+					"Addresses": [
+						{"SettlementStreetRef": "street-ref-1", "Present": "вул. Хрещатик"}
+					]
+				}]
+			}`))
+		}))
+		defer srv.Close()
+
+		streets, err := newTestClient(srv).SearchStreets(context.Background(), "city-ref-1", "Хрещ")
+		require.NoError(t, err)
+		require.Len(t, streets, 1)
+		assert.Equal(t, "street-ref-1", streets[0].Ref)
+		assert.Equal(t, "вул. Хрещатик", streets[0].Name)
+	})
+
+	main.Run("ReturnsEmptySliceWhenNoResults", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success": true, "data": []}`))
+		}))
+		defer srv.Close()
+
+		streets, err := newTestClient(srv).SearchStreets(context.Background(), "city-ref-1", "xyz")
+		require.NoError(t, err)
+		assert.Equal(t, []Street{}, streets)
+	})
+
+	main.Run("ErrorOnNonOKStatus", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer srv.Close()
+
+		_, err := newTestClient(srv).SearchStreets(context.Background(), "city-ref-1", "Хрещ")
+		assert.Error(t, err)
+	})
+
+	main.Run("ErrorOnSuccessFalse", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success": false}`))
+		}))
+		defer srv.Close()
+
+		_, err := newTestClient(srv).SearchStreets(context.Background(), "city-ref-1", "Хрещ")
+		assert.Error(t, err)
+	})
+}
+
 func TestSearchBranches(main *testing.T) {
 	main.Run("ReturnsParsedBranches", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -27,6 +27,12 @@ type Branch struct {
 	Name string `json:"name"`
 }
 
+// Street is a Nova Poshta street returned by SearchStreets.
+type Street struct {
+	Ref  string `json:"ref"`
+	Name string `json:"name"`
+}
+
 // Client calls the Nova Poshta JSON API v2.
 type Client struct {
 	apiKey     string
@@ -69,6 +75,16 @@ type getWarehousesResponse struct {
 	Data    []struct {
 		Ref         string `json:"Ref"`
 		Description string `json:"Description"`
+	} `json:"data"`
+}
+
+type searchSettlementStreetsResponse struct {
+	Success bool `json:"success"`
+	Data    []struct {
+		Addresses []struct {
+			Ref     string `json:"SettlementStreetRef"`
+			Present string `json:"Present"`
+		} `json:"Addresses"`
 	} `json:"data"`
 }
 
@@ -131,6 +147,39 @@ func (c *Client) SearchCities(ctx context.Context, query string) ([]City, error)
 		}
 	}
 	return cities, nil
+}
+
+// SearchStreets calls Address.searchSettlementStreets and returns matching streets in the given settlement.
+func (c *Client) SearchStreets(ctx context.Context, cityRef, query string) ([]Street, error) {
+	data, err := c.post(ctx, npRequest{
+		APIKey:       c.apiKey,
+		ModelName:    "Address",
+		CalledMethod: "searchSettlementStreets",
+		MethodProperties: map[string]any{
+			"SettlementRef": cityRef,
+			"StreetName":    query,
+			"Limit":         20,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed searchSettlementStreetsResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	if !parsed.Success {
+		return nil, fmt.Errorf("nova poshta api returned success=false")
+	}
+
+	streets := []Street{}
+	if len(parsed.Data) > 0 {
+		for _, a := range parsed.Data[0].Addresses {
+			streets = append(streets, Street{Ref: a.Ref, Name: a.Present})
+		}
+	}
+	return streets, nil
 }
 
 // SearchBranches calls Address.getWarehouses and returns matching warehouses in the given settlement.

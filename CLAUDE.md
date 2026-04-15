@@ -16,6 +16,11 @@ When editing `README.md`, always wrap lines at 120 characters.
 Never run `git commit` or `git push` unless the user explicitly asks. When dispatching subagents, include an explicit
 "do not commit" instruction at the top of every subagent prompt.
 
+When adding a field to an existing struct or method, read the current state of the file first and preserve all
+existing fields and logic — including any that were added by the user outside of the tracked plan. Never use
+`replace_all` to propagate a new field into test bodies without first auditing every match: a "missing X" test
+must not have X added to its body.
+
 ## Project overview
 
 `simshop` is a Go HTTP API service (`github.com/ashep/simshop`). It uses:
@@ -179,6 +184,16 @@ JSON via `h.resp.Write`. The `shopService` interface is defined in `internal/han
 the OpenAPI response middleware. `NewHandler` accepts `shopSvc shopService` as its third parameter (after `pages`,
 before `resp`).
 
+### Orders route
+
+`POST /orders` is served by `handler.CreateOrder`. It reads the product YAML from disk (same pattern as
+`ServeProductContent`), validates required fields (`product_id`, `lang`, `first_name`, `last_name`, `phone`,
+`city`, `address`), resolves geo-based price, accumulates attribute add-on prices, formats attributes as
+`"AttrTitle: ValueTitle"` (sorted by attribute key), and delegates to `h.orders.Submit(ctx, order.Order)`.
+Returns 201 on success, 400 for missing/invalid fields, 404 for unknown product or path traversal, 502 if the
+order service returns an error. The `orderService` interface is defined in `internal/handler/order.go`.
+`NewHandler` accepts `orders orderService` after `np novaPoshtaClient`.
+
 ### Nova Poshta routes
 
 `GET /nova-poshta/cities?q=<query>` and `GET /nova-poshta/branches?city_ref=<ref>&q=<query>` proxy to the
@@ -187,6 +202,14 @@ Nova Poshta JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). The clien
 `nova_poshta.service_url` is empty in production (defaults to the real NP URL) and set to a test server URL
 in functional tests via `testapp.New` options. Both `q` and `city_ref` (branches only) are required — missing
 either returns 400. NP API failure returns 502 via `BadGatewayError`.
+
+### Google Sheets client: disabled mode
+
+`googlesheets.NewClient` returns a valid (but disabled) `*Client` without error when both `credentialsJSON` and
+`serviceURL` are empty — the `httpClient` field is left `nil`. `Write` checks for `nil` and returns an error
+immediately. This prevents startup failure in test environments that don't need the sheets integration, without
+requiring every test package to configure `cfg.GoogleSheets.ServiceURL`. Tests that exercise the orders path must
+set `cfg.GoogleSheets.ServiceURL` to a fake server URL to get a working client.
 
 ### Loader: `shop.yaml` shop settings
 

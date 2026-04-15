@@ -5,8 +5,16 @@ import (
 	"time"
 )
 
+type Status string
+
+const (
+	StatusNew Status = "New"
+)
+
 // Order holds all data for a single customer order.
 type Order struct {
+	ID          string
+	Status      Status
 	DateTime    time.Time
 	ProductName string
 	Attributes  string // formatted: "AttrTitle: ValueTitle, ..." sorted by attribute key
@@ -16,6 +24,7 @@ type Order struct {
 	MiddleName  string
 	LastName    string
 	Phone       string
+	Email       string
 	City        string
 	Address     string
 	Notes       string

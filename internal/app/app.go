@@ -8,10 +8,12 @@ import (
 	"github.com/ashep/go-app/runner"
 	"github.com/ashep/simshop/api"
 	"github.com/ashep/simshop/internal/geo"
+	"github.com/ashep/simshop/internal/googlesheets"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/openapi"
+	"github.com/ashep/simshop/internal/order"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
 	"github.com/ashep/simshop/internal/shop"
@@ -35,12 +37,23 @@ func Run(rt *runner.Runtime[Config]) error {
 	shopSvc := shop.NewService(catalog.Shop)
 	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
 
+	sheetsClient, err := googlesheets.NewClient(
+		cfg.GoogleSheets.CredentialsJSON,
+		cfg.GoogleSheets.SpreadsheetID,
+		cfg.GoogleSheets.SheetName,
+		cfg.GoogleSheets.ServiceURL,
+	)
+	if err != nil {
+		return fmt.Errorf("create sheets client: %w", err)
+	}
+	orderSvc := order.NewService(sheetsClient)
+
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
@@ -64,6 +77,10 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("OPTIONS /nova-poshta/cities", corsMw(nop))
 	srv.HandleFunc("GET /nova-poshta/branches", corsMw(openapiMw(hdl.SearchNPBranches)))
 	srv.HandleFunc("OPTIONS /nova-poshta/branches", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/streets", corsMw(openapiMw(hdl.SearchNPStreets)))
+	srv.HandleFunc("OPTIONS /nova-poshta/streets", corsMw(nop))
+	srv.HandleFunc("POST /orders", corsMw(openapiMw(hdl.CreateOrder)))
+	srv.HandleFunc("OPTIONS /orders", corsMw(nop))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 

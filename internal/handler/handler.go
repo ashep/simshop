@@ -51,6 +51,7 @@ type Handler struct {
 	pages   pageService
 	shop    shopService
 	np      novaPoshtaClient
+	orders  orderService
 	geo     geoDetector
 	resp    *openapi.Responder
 	dataDir string
@@ -62,6 +63,7 @@ func NewHandler(
 	pages pageService,
 	shopSvc shopService,
 	np novaPoshtaClient,
+	orders orderService,
 	geo geoDetector,
 	resp *openapi.Responder,
 	dataDir string,
@@ -72,6 +74,7 @@ func NewHandler(
 		pages:   pages,
 		shop:    shopSvc,
 		np:      np,
+		orders:  orders,
 		geo:     geo,
 		resp:    resp,
 		dataDir: dataDir,

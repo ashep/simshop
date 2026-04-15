@@ -43,6 +43,17 @@ func makeFakeNPServer(t *testing.T) *httptest.Server {
 					{"Ref": "branch-ref-1", "Description": "Відділення №1 (до 30 кг): вул. Хрещатик, 22"}
 				]
 			}`))
+		case "searchSettlementStreets":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"success": true,
+				"data": [{
+					"TotalCount": 1,
+					"Addresses": [
+						{"SettlementStreetRef": "street-ref-1", "Present": "вул. Хрещатик"}
+					]
+				}]
+			}`))
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
@@ -121,6 +132,46 @@ func TestSearchNovaPoshta(main *testing.T) {
 	main.Run("SearchBranchesMissingQReturns400", func(t *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/nova-poshta/branches?city_ref=city-ref-1"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	main.Run("SearchStreetsReturnsResults", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/nova-poshta/streets?city_ref=city-ref-1&q=Хрещ"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+		var body []map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		require.Len(t, body, 1)
+		assert.Equal(t, "street-ref-1", body[0]["ref"])
+		assert.Equal(t, "вул. Хрещатик", body[0]["name"])
+	})
+
+	main.Run("SearchStreetsMissingCityRefReturns400", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/nova-poshta/streets?q=Хрещ"), nil)
+		require.NoError(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	main.Run("SearchStreetsMissingQReturns400", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/nova-poshta/streets?city_ref=city-ref-1"), nil)
 		require.NoError(t, err)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
