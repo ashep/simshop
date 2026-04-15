@@ -31,6 +31,17 @@ func (e *NotFoundError) Error() string {
 	return "not found"
 }
 
+type BadGatewayError struct {
+	Reason string
+}
+
+func (e *BadGatewayError) Error() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
+	return "bad gateway"
+}
+
 type geoDetector interface {
 	Detect(r *http.Request) string
 }
@@ -39,6 +50,7 @@ type Handler struct {
 	prod    productService
 	pages   pageService
 	shop    shopService
+	np      novaPoshtaClient
 	geo     geoDetector
 	resp    *openapi.Responder
 	dataDir string
@@ -49,6 +61,7 @@ func NewHandler(
 	prod productService,
 	pages pageService,
 	shopSvc shopService,
+	np novaPoshtaClient,
 	geo geoDetector,
 	resp *openapi.Responder,
 	dataDir string,
@@ -58,6 +71,7 @@ func NewHandler(
 		prod:    prod,
 		pages:   pages,
 		shop:    shopSvc,
+		np:      np,
 		geo:     geo,
 		resp:    resp,
 		dataDir: dataDir,
@@ -78,6 +92,14 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 
 	if tErr, ok := errors.AsType[*NotFoundError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusNotFound)
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
+		return
+	}
+
+	if tErr, ok := errors.AsType[*BadGatewayError](err); tErr != nil && ok {
+		w.WriteHeader(http.StatusBadGateway)
 		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
 			h.l.Warn().Err(wErr).Msg("error response write failed")
 		}
