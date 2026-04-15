@@ -57,10 +57,11 @@ Request processing middleware chain (innermost to outermost): `content-type → 
 
 Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g., `"GET /products"`).
 
-Handlers use `BadRequestError` (defined in `internal/handler/handler.go`) to map domain errors to HTTP responses via
-`h.writeError(w, err)`. Always populate its `Reason string` field with a human-readable message
-(e.g., `&BadRequestError{Reason: "invalid language code"}`). The reason is written directly into the JSON response body
-as `{"error": "<reason>"}`, so it is client-visible.
+Handlers use `BadRequestError`, `NotFoundError`, and `BadGatewayError` (defined in `internal/handler/handler.go`) to map
+domain errors to HTTP responses via `h.writeError(w, err)`. Always populate the `Reason string` field with a
+human-readable message (e.g., `&BadRequestError{Reason: "invalid language code"}`). The reason is written directly into
+the JSON response body as `{"error": "<reason>"}`, so it is client-visible. `BadGatewayError` maps to HTTP 502 and is
+used when an upstream service (e.g., Nova Poshta API) returns an error.
 
 Domain errors are defined in the service package. The handler maps them to HTTP error types using `errors.Is`.
 
@@ -178,6 +179,15 @@ JSON via `h.resp.Write`. The `shopService` interface is defined in `internal/han
 the OpenAPI response middleware. `NewHandler` accepts `shopSvc shopService` as its third parameter (after `pages`,
 before `resp`).
 
+### Nova Poshta routes
+
+`GET /nova-poshta/cities?q=<query>` and `GET /nova-poshta/branches?city_ref=<ref>&q=<query>` proxy to the
+Nova Poshta JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). The client lives in
+`internal/novaposhta/client.go`. The API key is read from `config.yaml` under `nova_poshta.api_key`.
+`nova_poshta.service_url` is empty in production (defaults to the real NP URL) and set to a test server URL
+in functional tests via `testapp.New` options. Both `q` and `city_ref` (branches only) are required — missing
+either returns 400. NP API failure returns 502 via `BadGatewayError`.
+
 ### Loader: `shop.yaml` shop settings
 
 `{data_dir}/shop.yaml` holds a single `shop:` key mapping to `shop.Shop` (name, title, description — each a
@@ -285,7 +295,8 @@ Functional tests use YAML fixture files:
 **API functional tests (`tests/api/product/`):**
 - `makeDataDir(t, productsYAML, productYAMLs)` creates a temp data dir, writes `products/products.yaml` (if non-empty
   string), and writes per-product `product.yaml` files given as `map[string]string` of `{id: yaml-content}`.
-- `testapp.New(t, dataDir)` always takes a `dataDir` argument.
+- `testapp.New(t, dataDir, opts ...func(*app.Config))` takes a `dataDir` argument and optional config mutators.
+  Pass `func(cfg *app.Config) { cfg.NovaPoshta.ServiceURL = srv.URL }` to override config fields in tests.
 - Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body — safe
   because each app binds to a random port.
 
@@ -313,3 +324,14 @@ files in a single pass, Read each target file before calling Write — even for 
 `geo.NewDetector()` is the production constructor. Tests construct `*Detector` directly (same package) to inject a
 `httptest.Server` client and URL — the unexported `httpClient` and `serviceURL` fields are intentionally accessible
 this way. The `errcheck` linter requires `defer func() { _ = resp.Body.Close() }()` (not bare `defer resp.Body.Close()`).
+
+### `internal/novaposhta` package: Nova Poshta API client
+
+`novaposhta.Client` wraps the Nova Poshta JSON API v2 (`https://api.novaposhta.ua/v2.0/json/`). It exposes:
+- `SearchCities(ctx, query)` — calls `Address.searchSettlements`, returns `[]City{Ref, Name}`.
+- `SearchBranches(ctx, cityRef, query)` — calls `AddressGeneral.getWarehouses`, returns `[]Branch{Ref, Name}`.
+
+`NewClient(apiKey, serviceURL string)` is the production constructor; pass `""` for `serviceURL` to use the default.
+Tests construct `*Client` directly (same package) to inject `httptest.Server` via the unexported `httpClient` and
+`serviceURL` fields — same pattern as `geo.Detector`. Response body is capped at 1 MB via `io.LimitReader`.
+`success=false` in the API response is treated as an error regardless of HTTP status.
