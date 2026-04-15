@@ -109,7 +109,7 @@ func (c *Client) SearchCities(ctx context.Context, query string) ([]City, error)
 		CalledMethod: "searchSettlements",
 		MethodProperties: map[string]any{
 			"CityName": query,
-			"Limit":    "20",
+			"Limit":    20,
 		},
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ func (c *Client) SearchBranches(ctx context.Context, cityRef, query string) ([]B
 		MethodProperties: map[string]any{
 			"CityRef":      cityRef,
 			"FindByString": query,
-			"Limit":        "20",
+			"Limit":        20,
 		},
 	})
 	if err != nil {
