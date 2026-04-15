@@ -133,16 +133,16 @@ func (c *Client) SearchCities(ctx context.Context, query string) ([]City, error)
 	return cities, nil
 }
 
-// SearchBranches calls AddressGeneral.getWarehouses and returns matching warehouses in the given city.
+// SearchBranches calls Address.getWarehouses and returns matching warehouses in the given settlement.
 func (c *Client) SearchBranches(ctx context.Context, cityRef, query string) ([]Branch, error) {
 	data, err := c.post(ctx, npRequest{
 		APIKey:       c.apiKey,
-		ModelName:    "AddressGeneral",
+		ModelName:    "Address",
 		CalledMethod: "getWarehouses",
 		MethodProperties: map[string]any{
-			"CityRef":      cityRef,
-			"FindByString": query,
-			"Limit":        20,
+			"SettlementRef": cityRef,
+			"FindByString":  query,
+			"Limit":         20,
 		},
 	})
 	if err != nil {
