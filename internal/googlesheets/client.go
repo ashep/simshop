@@ -17,8 +17,8 @@ import (
 
 const (
 	defaultServiceURL = "https://sheets.googleapis.com/v4/spreadsheets"
-	maxBodySize       = 1 << 20
-	sheetsScope       = "https://www.googleapis.com/auth/spreadsheets"
+	maxBodySize       = 1 << 20 // 1 MB
+	sheetsScope       = "https://www.googleapis.com/auth/spreadsheets" // read/write access to Google Sheets
 )
 
 // Client appends rows to a Google Sheet via the Sheets API v4.
@@ -47,6 +47,8 @@ func NewClient(credentialsJSON, spreadsheetID, sheetName, serviceURL string) (*C
 		if err != nil {
 			return nil, fmt.Errorf("parse credentials: %w", err)
 		}
+		// context.Background() is intentional: the OAuth2 transport is long-lived and
+		// must outlive any individual request. Token refresh calls use this context.
 		httpClient = conf.Client(context.Background())
 	}
 

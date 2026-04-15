@@ -15,6 +15,15 @@ import (
 	"github.com/ashep/simshop/internal/order"
 )
 
+func newTestClient(srv *httptest.Server, spreadsheetID, sheetName string) *Client {
+	return &Client{
+		httpClient:    srv.Client(),
+		serviceURL:    srv.URL,
+		spreadsheetID: spreadsheetID,
+		sheetName:     sheetName,
+	}
+}
+
 func TestClient_Write(main *testing.T) {
 	now := time.Date(2026, 4, 15, 10, 30, 0, 0, time.UTC)
 
@@ -50,12 +59,7 @@ func TestClient_Write(main *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{
-			httpClient:    srv.Client(),
-			serviceURL:    srv.URL,
-			spreadsheetID: "sheet-id",
-			sheetName:     "Orders",
-		}
+		c := newTestClient(srv, "sheet-id", "Orders")
 
 		require.NoError(t, c.Write(context.Background(), testOrder))
 
@@ -87,12 +91,7 @@ func TestClient_Write(main *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{
-			httpClient:    srv.Client(),
-			serviceURL:    srv.URL,
-			spreadsheetID: "sheet-id",
-			sheetName:     "",
-		}
+		c := newTestClient(srv, "sheet-id", "")
 
 		require.NoError(t, c.Write(context.Background(), order.Order{}))
 	})
@@ -103,13 +102,16 @@ func TestClient_Write(main *testing.T) {
 		}))
 		defer srv.Close()
 
-		c := &Client{
-			httpClient:    srv.Client(),
-			serviceURL:    srv.URL,
-			spreadsheetID: "sheet-id",
-			sheetName:     "Orders",
-		}
+		c := newTestClient(srv, "sheet-id", "Orders")
 
+		assert.Error(t, c.Write(context.Background(), order.Order{}))
+	})
+
+	main.Run("ErrorOnNetworkFailure", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		srv.Close() // close immediately so the request fails
+
+		c := newTestClient(srv, "sheet-id", "Orders")
 		assert.Error(t, c.Write(context.Background(), order.Order{}))
 	})
 }
