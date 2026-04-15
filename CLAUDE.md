@@ -329,7 +329,9 @@ this way. The `errcheck` linter requires `defer func() { _ = resp.Body.Close() }
 
 `novaposhta.Client` wraps the Nova Poshta JSON API v2 (`https://api.novaposhta.ua/v2.0/json/`). It exposes:
 - `SearchCities(ctx, query)` — calls `Address.searchSettlements`, returns `[]City{Ref, Name}`.
-- `SearchBranches(ctx, cityRef, query)` — calls `AddressGeneral.getWarehouses`, returns `[]Branch{Ref, Name}`.
+- `SearchBranches(ctx, settlementRef, query)` — calls `Address.getWarehouses` with `SettlementRef` (the ref returned by
+  `searchSettlements`), returns `[]Branch{Ref, Name}`. Do NOT use `CityRef` — that is a different ref from the old
+  `getCities` API and will return "City not found".
 
 `NewClient(apiKey, serviceURL string)` is the production constructor; pass `""` for `serviceURL` to use the default.
 Tests construct `*Client` directly (same package) to inject `httptest.Server` via the unexported `httpClient` and

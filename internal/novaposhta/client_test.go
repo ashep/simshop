@@ -93,9 +93,9 @@ func TestSearchBranches(main *testing.T) {
 			var req npRequest
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 			assert.Equal(t, "test-key", req.APIKey)
-			assert.Equal(t, "AddressGeneral", req.ModelName)
+			assert.Equal(t, "Address", req.ModelName)
 			assert.Equal(t, "getWarehouses", req.CalledMethod)
-			assert.Equal(t, "city-ref-1", req.MethodProperties["CityRef"])
+			assert.Equal(t, "city-ref-1", req.MethodProperties["SettlementRef"])
 			assert.Equal(t, "Хрещ", req.MethodProperties["FindByString"])
 			assert.EqualValues(t, 20, req.MethodProperties["Limit"])
 

@@ -21,6 +21,7 @@ func (h *Handler) SearchNPCities(w http.ResponseWriter, r *http.Request) {
 
 	cities, err := h.np.SearchCities(r.Context(), q)
 	if err != nil {
+		h.l.Error().Err(err).Str("q", q).Msg("search cities failed")
 		h.writeError(w, &BadGatewayError{Reason: "nova poshta api error"})
 		return
 	}
@@ -45,6 +46,7 @@ func (h *Handler) SearchNPBranches(w http.ResponseWriter, r *http.Request) {
 
 	branches, err := h.np.SearchBranches(r.Context(), cityRef, q)
 	if err != nil {
+		h.l.Error().Err(err).Msg("search branches failed")
 		h.writeError(w, &BadGatewayError{Reason: "nova poshta api error"})
 		return
 	}
