@@ -84,7 +84,9 @@ func TestSearchNPCities(main *testing.T) {
 
 		w := doRequest(t, npClient, "xyz")
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, "[]", w.Body.String())
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Len(t, body, 0)
 	})
 }
 
