@@ -129,6 +129,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /nova-poshta/streets:
+    get:
+      operationId: searchNovaPoshtaStreets
+      parameters:
+        - name: city_ref
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of matching streets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NovaPoshtaStreetItem'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "502":
+          description: Nova Poshta API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /nova-poshta/branches:
     get:
       operationId: searchNovaPoshtaBranches
@@ -160,6 +196,37 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         "502":
           description: Nova Poshta API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders:
+    post:
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        "201":
+          description: Order created successfully
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "502":
+          description: Google Sheets API error
           content:
             application/json:
               schema:
@@ -294,6 +361,43 @@ components:
           additionalProperties:
             type: string
 
+    CreateOrderRequest:
+      type: object
+      required:
+        - product_id
+        - lang
+        - first_name
+        - last_name
+        - phone
+        - city
+        - address
+      properties:
+        product_id:
+          type: string
+        lang:
+          type: string
+        attributes:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+        first_name:
+          type: string
+        middle_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        notes:
+          type: string
+          nullable: true
+
     ErrorResponse:
       type: object
       required:
@@ -330,6 +434,17 @@ components:
           type: string
 
     NovaPoshtaBranchItem:
+      type: object
+      required:
+        - ref
+        - name
+      properties:
+        ref:
+          type: string
+        name:
+          type: string
+
+    NovaPoshtaStreetItem:
       type: object
       required:
         - ref
