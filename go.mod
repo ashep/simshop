@@ -7,10 +7,12 @@ require (
 	github.com/getkin/kin-openapi v0.134.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
