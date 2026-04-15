@@ -10,10 +10,10 @@ import (
 	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
+	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
-	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/shop"
 )
 
