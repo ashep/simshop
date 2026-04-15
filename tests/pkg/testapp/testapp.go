@@ -19,7 +19,7 @@ type App struct {
 }
 
 // New creates a test app instance.
-func New(t *testing.T, dataDir string) *App {
+func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -37,6 +37,9 @@ func New(t *testing.T, dataDir string) *App {
 			Addr: addr,
 		},
 		DataDir: dataDir,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 
 	r := testrunner.New(t, app.Run, cfg).SetHTTPReadyStartWaiter("http://"+addr, time.Second)

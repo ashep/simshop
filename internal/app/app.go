@@ -13,6 +13,7 @@ import (
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/shop"
 )
 
@@ -32,13 +33,14 @@ func Run(rt *runner.Runtime[Config]) error {
 	prodSvc := product.NewService(catalog.ProductItems)
 	pageSvc := page.NewService(catalog.Pages)
 	shopSvc := shop.NewService(catalog.Shop)
+	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
@@ -58,6 +60,10 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("OPTIONS /pages/{id}/{lang}", corsMw(nop))
 	srv.HandleFunc("GET /shop", corsMw(openapiMw(hdl.ServeShop)))
 	srv.HandleFunc("OPTIONS /shop", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/cities", corsMw(openapiMw(hdl.SearchNPCities)))
+	srv.HandleFunc("OPTIONS /nova-poshta/cities", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/branches", corsMw(openapiMw(hdl.SearchNPBranches)))
+	srv.HandleFunc("OPTIONS /nova-poshta/branches", corsMw(nop))
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 
