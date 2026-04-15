@@ -218,9 +218,24 @@ The service exposes a read-only JSON REST API validated against an OpenAPI speci
 | `GET`  | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
 | `GET`  | `/pages`                           | List all pages (id, title)                            |
 | `GET`  | `/pages/{id}/{lang}`               | Get page content (Markdown) in the requested language |
+| `GET`  | `/nova-poshta/cities?q=<query>`    | Search Nova Poshta cities by name                     |
+| `GET`  | `/nova-poshta/branches?city_ref=<ref>&q=<query>` | Search Nova Poshta branches in a city    |
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
+
+### Nova Poshta autocomplete
+
+Two endpoints proxy search queries to the Nova Poshta JSON API v2 to support address-autocomplete widgets.
+
+`GET /nova-poshta/cities?q=<query>` — searches settlements by name. Returns a JSON array of
+`[{"ref": "<uuid>", "name": "<string>"}]` objects. The `q` parameter is required; omitting it returns 400.
+
+`GET /nova-poshta/branches?city_ref=<ref>&q=<query>` — searches warehouses (branches) within a city identified
+by `city_ref`. Returns a JSON array of `[{"ref": "<uuid>", "name": "<string>"}]` objects. Both `city_ref` and
+`q` are required; omitting either returns 400.
+
+Both endpoints return 502 if the Nova Poshta API call fails.
 
 ## Configuration
 
@@ -233,9 +248,14 @@ server:
   cors_origins:
     - "https://example.com"
 data_dir: "./data"
+nova_poshta:
+  api_key: "<your-api-key>"
 ```
 
 - `debug` — enable verbose logging (default: `false`).
 - `server.addr` — address and port to listen on (default: `":9000"`).
 - `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
+- `nova_poshta.api_key` — Nova Poshta API key. Required for the `/nova-poshta/*` endpoints to work.
+- `nova_poshta.service_url` — override the Nova Poshta API base URL (default: `https://api.novaposhta.ua/v2.0/json/`).
+  Leave unset in production; used in tests.
