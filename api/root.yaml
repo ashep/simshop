@@ -98,6 +98,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /nova-poshta/cities:
+    get:
+      operationId: searchNovaPoshtaCities
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of matching cities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NovaPoshtaCityItem'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "502":
+          description: Nova Poshta API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /nova-poshta/branches:
+    get:
+      operationId: searchNovaPoshtaBranches
+      parameters:
+        - name: city_ref
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of matching branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NovaPoshtaBranchItem'
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "502":
+          description: Nova Poshta API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   schemas:
     SpecItem:
@@ -250,3 +317,25 @@ components:
           type: object
           additionalProperties:
             type: string
+
+    NovaPoshtaCityItem:
+      type: object
+      required:
+        - ref
+        - name
+      properties:
+        ref:
+          type: string
+        name:
+          type: string
+
+    NovaPoshtaBranchItem:
+      type: object
+      required:
+        - ref
+        - name
+      properties:
+        ref:
+          type: string
+        name:
+          type: string
