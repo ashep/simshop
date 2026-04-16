@@ -335,6 +335,13 @@ components:
             type: object
             additionalProperties:
               type: string
+        attr_values_order:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: array
+            items:
+              type: string
         images:
           type: array
           nullable: true

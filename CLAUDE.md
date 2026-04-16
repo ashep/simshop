@@ -95,6 +95,17 @@ per-language, per-attribute free-text string (supports Markdown). No country res
 directly into `ProductDetail.Attrs` alongside `title` and `values`. The `AttrLang` OpenAPI schema declares it as
 `type: string` + `nullable: true`. Omitted from JSON when empty.
 
+### Attribute values order (`attr_values_order`)
+
+`attr_values_order` in `product.yaml` holds the preferred display order for each attribute's values. The structure is:
+`attr_key → []value_key` (ordered list). It is optional — attributes without an entry retain their natural map
+iteration order. `product.Product.AttrValuesOrder` stores the raw map (`yaml:"attr_values_order"`).
+`product.ProductDetail.AttrValuesOrder` (`json:"attr_values_order,omitempty"`) is a top-level field in the response,
+at the same level as `attr_prices` and `attr_images`. It is populated by `ServeProductContent` by assigning
+`p.AttrValuesOrder` directly when non-empty. No country resolution or loader rewriting is needed. The
+`GetProductResponse` OpenAPI schema declares `attr_values_order` as `type: object, nullable: true` with
+`additionalProperties: type: array, items: string`.
+
 ### Attribute images (`attr_images`)
 
 `attr_images` in `product.yaml` holds per-attribute, per-value image filenames. The structure is:
