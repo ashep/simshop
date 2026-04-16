@@ -20,7 +20,7 @@ name:
   en: Test Product
 description:
   en: A test product
-price:
+prices:
   default:
     currency: USD
     value: 10

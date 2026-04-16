@@ -128,11 +128,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		attrParts = append(attrParts, attrLang.Title+": "+attrVal.Title)
 	}
 
-	// Resolve base price by geo-detected country with "default" fallback.
+	// Resolve base prices by geo-detected country with "default" fallback.
 	country := h.geo.Detect(r)
-	price, ok := p.Price[country]
+	price, ok := p.Prices[country]
 	if !ok {
-		price = p.Price["default"]
+		price = p.Prices["default"]
 	}
 
 	// Add attribute add-on prices.

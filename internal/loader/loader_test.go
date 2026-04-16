@@ -32,7 +32,7 @@ name:
 description:
   en: A test product.
 
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -111,7 +111,7 @@ func TestLoad(main *testing.T) {
 		makeProductDir(t, dataDir, "p", `
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -126,7 +126,7 @@ price:
 		makeProductDir(t, dataDir, "p", `
 name:
   en: A Product
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -144,7 +144,7 @@ name:
   uk: Продукт
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -168,7 +168,7 @@ specs:
     en:
       title: Weight
       value: 100g
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -185,14 +185,14 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   ua:
     currency: UAH
     value: 999
 `, nil)
 
 		_, err := loader.Load(dataDir)
-		assert.ErrorContains(t, err, "price")
+		assert.ErrorContains(t, err, "prices")
 	})
 
 	main.Run("Validation_AttrLanguageMismatch", func(t *testing.T) {
@@ -204,7 +204,7 @@ name:
 description:
   en: A product.
   uk: Продукт.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -228,7 +228,7 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -250,7 +250,7 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -387,7 +387,7 @@ name:
   en: Widget
 description:
   en: A test product
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -456,7 +456,7 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -476,7 +476,7 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10
@@ -512,7 +512,7 @@ name:
   en: A Product
 description:
   en: A product.
-price:
+prices:
   default:
     currency: EUR
     value: 10

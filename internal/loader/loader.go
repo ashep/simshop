@@ -230,9 +230,9 @@ func validate(p *product.Product, dir string) error {
 		}
 	}
 
-	// Price must always define the "default" key.
-	if _, ok := p.Price["default"]; !ok {
-		return fmt.Errorf("price must define a \"default\" key")
+	// Prices must always define the "default" key.
+	if _, ok := p.Prices["default"]; !ok {
+		return fmt.Errorf("prices must define a \"default\" key")
 	}
 
 	// Each attr must carry all languages defined in name, and each language entry

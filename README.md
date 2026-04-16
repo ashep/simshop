@@ -24,7 +24,7 @@ if any product file fails validation. Rules:
 
 - `name` and `description` are required and must define the same set of languages.
 - Every spec entry must be translated into all languages defined in `name`.
-- `price` must define at least a `default` key.
+- `prices` must define at least a `default` key.
 - Every attribute entry must be translated into all languages defined in `name`, and each language entry must have
   at least one value.
 - All image paths (`preview` and `full`) must exist on disk relative to the product's `images/` subdirectory.
@@ -114,15 +114,15 @@ Fields in `product.yaml`:
 - **description** — multilingual long-form description; must cover the same languages as `name`.
 - **specs** — optional map of specification keys, each translated into every language defined in `name`.
   Each spec entry has a `title` and `value`.
-- **price** — map of country/region codes (lowercase, e.g. `ua`, `us`) to `{currency, value}` pairs. Must contain
+- **prices** — map of country/region codes (lowercase, e.g. `ua`, `us`) to `{currency, value}` pairs. Must contain
   a `default` key. The API resolves this map to a single `{currency, value}` object per request: the country is
   detected from the `CF-IPCountry` request header (sent by Cloudflare) or via an ipinfo.io lookup on the client IP.
   If no matching country key exists the `default` entry is used.
 - **attrs** — optional map of attribute keys (e.g. `display_color`). Each attribute is translated into every language
   in `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`.
-- **attr_prices** — optional map of add-on prices per attribute value, keyed by country (same structure as `price`).
+- **attr_prices** — optional map of add-on prices per attribute value, keyed by country (same structure as `prices`).
   Shape: `attr_key → value_key → country_key → float64`. Must contain a `default` country key for each value.
-  The API resolves this to `attr_key → value_key → float64` using the same country detection logic as `price`.
+  The API resolves this to `attr_key → value_key → float64` using the same country detection logic as `prices`.
 - **attr_images** — optional map of per-attribute-value image filenames. Shape: `attr_key → value_key → filename`.
   Filenames are relative to the product's `images/` subdirectory. The API response returns them as URL paths
   (e.g. `/images/{id}/red-thumb.jpg`). No country resolution is applied — each value maps to exactly one image.
@@ -150,7 +150,7 @@ specs:
       title: Вага
       value: 1.2 кг
 
-price:
+prices:
   default:
     currency: EUR
     value: 80
