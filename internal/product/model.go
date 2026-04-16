@@ -32,6 +32,7 @@ type Product struct {
 	Price       map[string]PriceItem                         `json:"price"       yaml:"price"`
 	Attrs       map[string]map[string]AttrLang               `json:"attrs"       yaml:"attrs"`
 	AttrPrices  map[string]map[string]map[string]float64     `json:"attr_prices" yaml:"attr_prices"`
+	AttrImages  map[string]map[string]string                 `json:"attr_images" yaml:"attr_images"`
 	Images      []ImageItem                                  `json:"images"      yaml:"images"`
 }
 

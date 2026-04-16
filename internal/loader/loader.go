@@ -273,5 +273,16 @@ func validate(p *product.Product, dir string) error {
 		}
 	}
 
+	// All attr_images paths must exist on disk relative to the product's images directory.
+	for attrKey, valueImages := range p.AttrImages {
+		for valueKey, filename := range valueImages {
+			if _, statErr := os.Stat(filepath.Join(imagesDir, filename)); errors.Is(statErr, fs.ErrNotExist) {
+				return fmt.Errorf("attr_images[%s][%s] file not found: %s", attrKey, valueKey, filename)
+			} else if statErr != nil {
+				return fmt.Errorf("attr_images[%s][%s]: %w", attrKey, valueKey, statErr)
+			}
+		}
+	}
+
 	return nil
 }
