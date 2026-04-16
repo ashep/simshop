@@ -449,6 +449,50 @@ products:
 		assert.Nil(t, cat.ProductItems[0].Image)
 	})
 
+	main.Run("Validation_AttrImageNotFound", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+price:
+  default:
+    currency: EUR
+    value: 10
+attr_images:
+  color:
+    red: missing.png
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "attr_images")
+	})
+
+	main.Run("LoadsProductWithAttrImages", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+price:
+  default:
+    currency: EUR
+    value: 10
+attr_images:
+  color:
+    red: thumb.png
+`, map[string][]byte{
+			"images/thumb.png": []byte("fake png"),
+		})
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Products, 1)
+		assert.Equal(t, "thumb.png", cat.Products[0].AttrImages["color"]["red"])
+	})
+
 	main.Run("EmptyShopYAML_EmptyShop", func(t *testing.T) {
 		dataDir := t.TempDir()
 		makeShopFile(t, dataDir, "")
