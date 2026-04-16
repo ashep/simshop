@@ -81,6 +81,23 @@ attr_prices:
       ua: 3
 `
 
+const testProductWithAttrImagesYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+price:
+  default:
+    currency: USD
+    value: 49.99
+attr_images:
+  display_color:
+    red: red-thumb.jpg
+    green: green-thumb.jpg
+`
+
 // makeDataDir creates a data directory with a products.yaml listing and per-product
 // product.yaml detail files.
 func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]string) string {
@@ -266,6 +283,38 @@ func TestListProducts(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 5.0, displayColor["red"])
 		assert.Equal(t, 3.0, displayColor["green"])
+	})
+
+	main.Run("GetReturnsAttrImages", func(t *testing.T) {
+		aiDataDir := t.TempDir()
+		productDir := filepath.Join(aiDataDir, "products", "widget")
+		imagesDir := filepath.Join(productDir, "images")
+		require.NoError(t, os.MkdirAll(imagesDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(productDir, "product.yaml"),
+			[]byte(testProductWithAttrImagesYAML), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(imagesDir, "red-thumb.jpg"), []byte("fake"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(imagesDir, "green-thumb.jpg"), []byte("fake"), 0644))
+
+		aiApp := testapp.New(t, aiDataDir)
+		aiApp.Start()
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+			aiApp.URL("/products/widget/en"), nil)
+		require.NoError(t, err)
+		req.Header.Set("CF-IPCountry", "XX")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		attrImages, ok := body["attr_images"].(map[string]any)
+		require.True(t, ok, "attr_images should be present")
+		displayColor, ok := attrImages["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "/images/widget/red-thumb.jpg", displayColor["red"])
+		assert.Equal(t, "/images/widget/green-thumb.jpg", displayColor["green"])
 	})
 
 	main.Run("GetReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {
