@@ -107,6 +107,18 @@ to with 204 before calling `next`. There is no per-origin configuration — all 
 Explicit `OPTIONS` routes must be registered alongside each `GET` route in `app.go` because Go 1.22+ stdlib mux does
 not implicitly handle OPTIONS for registered methods.
 
+### Rate limit middleware
+
+`handler.RateLimitMiddleware(rpm int)` returns a middleware that limits each client IP to `rpm` requests per minute
+per endpoint. Excess requests receive HTTP 429 with a `Retry-After` header and JSON error body. The rate limiter uses
+a sliding window approach: each client IP gets one entry per request, and subsequent requests within `window =
+60s / rpm` are rejected. A background goroutine sweeps expired entries every `window` seconds. The `rateLimitClientIP`
+function extracts the client IP, preferring `X-Forwarded-For` (set by Cloudflare) over `RemoteAddr`.
+
+The `POST /orders` endpoint is rate-limited by default (config value `cfg.RateLimit`). A value of 0 means use the
+default of 10 RPM. A negative value disables rate limiting entirely. Functional tests set `cfg.RateLimit = -1` to
+disable rate limiting so multiple requests can be made synchronously from the same IP without hitting the limit.
+
 ### Circular import: handler ↔ app
 
 `internal/app` imports `internal/handler`; therefore `internal/handler` must never import `internal/app`. When the

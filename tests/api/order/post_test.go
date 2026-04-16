@@ -105,6 +105,7 @@ func TestCreateOrder(main *testing.T) {
 		cfg.GoogleSheets.ServiceURL = sheets.srv.URL
 		cfg.GoogleSheets.SpreadsheetID = "test-sheet-id"
 		cfg.GoogleSheets.SheetName = "Orders"
+		cfg.RateLimit = -1 // negative value disables rate limiting in tests
 	})
 	a.Start()
 
