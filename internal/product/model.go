@@ -29,7 +29,7 @@ type Product struct {
 	Name        map[string]string                            `json:"name"        yaml:"name"`
 	Description map[string]string                            `json:"description" yaml:"description"`
 	Specs       map[string]map[string]SpecItem               `json:"specs"       yaml:"specs"`
-	Price       map[string]PriceItem                         `json:"price"       yaml:"price"`
+	Prices      map[string]PriceItem                         `json:"prices"      yaml:"prices"`
 	Attrs       map[string]map[string]AttrLang               `json:"attrs"       yaml:"attrs"`
 	AttrPrices  map[string]map[string]map[string]float64     `json:"attr_prices" yaml:"attr_prices"`
 	AttrImages  map[string]map[string]string                 `json:"attr_images" yaml:"attr_images"`
@@ -42,7 +42,7 @@ type ProductDetail struct {
 	Name        string                        `json:"name"`
 	Description string                        `json:"description"`
 	Specs       map[string]SpecItem           `json:"specs,omitempty"`
-	Price       PriceItem                     `json:"price"`
+	Prices      PriceItem                     `json:"price"`
 	Attrs       map[string]AttrLang           `json:"attrs,omitempty"`
 	AttrPrices  map[string]map[string]float64 `json:"attr_prices,omitempty"`
 	AttrImages  map[string]map[string]string  `json:"attr_images,omitempty"`

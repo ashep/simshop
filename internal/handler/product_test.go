@@ -108,7 +108,7 @@ name:
 description:
   en: A test product
   uk: Тестовий продукт
-price:
+prices:
   default:
     currency: USD
     value: 49.99
@@ -121,7 +121,7 @@ name:
 description:
   en: A test product
   uk: Тестовий продукт
-price:
+prices:
   default:
     currency: USD
     value: 49.99
@@ -137,7 +137,7 @@ name:
 description:
   en: A test product
   uk: Тестовий продукт
-price:
+prices:
   default:
     currency: USD
     value: 49.99
@@ -153,7 +153,7 @@ name:
 description:
   en: A test product
   uk: Тестовий продукт
-price:
+prices:
   default:
     currency: USD
     value: 49.99
@@ -170,7 +170,7 @@ name:
 description:
   en: A test product
   uk: Тестовий продукт
-price:
+prices:
   default:
     currency: USD
     value: 49.99

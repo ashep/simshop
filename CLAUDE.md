@@ -79,7 +79,14 @@ generic 400 Bad Request.
 `attr_key → value_key → country_key → float64`. The `"default"` country key is required and used as a fallback
 when the user's country is absent. `product.Product.AttrPrices` stores the raw map; `product.ProductDetail.AttrPrices`
 holds the resolved form (`attr_key → value_key → float64`) built by `ServeProductContent` using the same country
-resolution logic as the base price. `AttrValue` no longer carries `add_price` — it has only `title`.
+resolution logic as the base prices. `AttrValue` no longer carries `add_price` — it has only `title`.
+
+### Price field naming
+
+`product.yaml` uses `prices:` as the YAML key (a map of country codes to `{currency, value}`). The `Product` struct
+field is `Prices` with `yaml:"prices"`. In the API response (`GetProductResponse`), the resolved single-country price
+is serialised as `"price"` — the `ProductDetail.Prices` field carries `json:"price"`. The YAML key and JSON key are
+intentionally different.
 
 ### Attribute images (`attr_images`)
 
@@ -243,7 +250,7 @@ Validation lives in `internal/loader/loader.go:validate`. Rules are fatal at sta
 2. `description` must be non-empty.
 3. Language sets of `name` and `description` must be identical.
 4. Every spec entry must cover exactly the languages in `name`.
-5. `price` must contain a `"default"` key.
+5. `prices` must contain a `"default"` key.
 6. Every attr entry must cover exactly the languages in `name`, and each language entry must have ≥ 1 value.
 7. Every image `preview` and `full` path must exist on disk relative to `{productDir}/images/` (checked with `os.Stat`;
    uses `errors.Is(err, fs.ErrNotExist)`).
