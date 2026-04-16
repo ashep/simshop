@@ -115,9 +115,9 @@ a sliding window approach: each client IP gets one entry per request, and subseq
 60s / rpm` are rejected. A background goroutine sweeps expired entries every `window` seconds. The `rateLimitClientIP`
 function extracts the client IP, preferring `X-Forwarded-For` (set by Cloudflare) over `RemoteAddr`.
 
-The `POST /orders` endpoint is rate-limited by default (config value `cfg.RateLimit`). A value of 0 means use the
-default of 10 RPM. A negative value disables rate limiting entirely. Functional tests set `cfg.RateLimit = -1` to
-disable rate limiting so multiple requests can be made synchronously from the same IP without hitting the limit.
+The `POST /orders` endpoint is rate-limited via `cfg.RateLimit` (`rate_limit` in config YAML). A value of 0 uses
+the default of 1 RPM. A negative value disables rate limiting entirely. Functional tests set `cfg.RateLimit = -1`
+to disable rate limiting so multiple requests can be made synchronously from the same IP without hitting the limit.
 
 ### Circular import: handler ↔ app
 

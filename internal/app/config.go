@@ -22,5 +22,5 @@ type Config struct {
 	DataDir      string             `yaml:"data_dir"`
 	NovaPoshta   NovaPoshtaConfig   `yaml:"nova_poshta"`
 	GoogleSheets GoogleSheetsConfig `yaml:"google_sheets"`
-	RateLimit    int                `yaml:"rate_limit"` // requests per minute for POST /orders; 0 disables
+	RateLimit    int                `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
 }
