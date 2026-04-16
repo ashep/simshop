@@ -35,9 +35,11 @@ func TestCreateOrder(main *testing.T) {
 	require.NoError(main, os.MkdirAll(attrProductDir, 0755))
 	require.NoError(main, os.WriteFile(filepath.Join(attrProductDir, "product.yaml"), []byte(testProductWithAttrPricesYAML), 0644))
 
+	resp := buildTestResponder(main)
+
 	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, body string) *httptest.ResponseRecorder {
 		t.Helper()
-		h := &Handler{orders: svc, geo: &geoDetectorStub{}, dataDir: dataDir, l: zerolog.Nop()}
+		h := &Handler{orders: svc, geo: &geoDetectorStub{}, dataDir: dataDir, resp: resp, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -72,6 +74,7 @@ func TestCreateOrder(main *testing.T) {
 			"address": "Відділення №5"
 		}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.JSONEq(t, `{"payment_url": "https://foo.bar"}`, w.Body.String())
 	})
 
 	main.Run("ResolvesAndFormatsAttributes", func(t *testing.T) {

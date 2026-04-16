@@ -146,6 +146,9 @@ func TestCreateOrder(main *testing.T) {
 		initialCount := len(sheets.capturedRows())
 		resp := do(t, validBody(nil))
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"payment_url": "https://foo.bar"}`, string(body))
 
 		rows := sheets.capturedRows()
 		require.Len(t, rows, initialCount+1)

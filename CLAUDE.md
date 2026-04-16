@@ -88,6 +88,13 @@ field is `Prices` with `yaml:"prices"`. In the API response (`GetProductResponse
 is serialised as `"price"` — the `ProductDetail.Prices` field carries `json:"price"`. The YAML key and JSON key are
 intentionally different.
 
+### Attribute descriptions (`AttrLang.Description`)
+
+`AttrLang` carries an optional `description` field (`yaml:"description"`, `json:"description,omitempty"`). It is a
+per-language, per-attribute free-text string (supports Markdown). No country resolution is needed — it is copied
+directly into `ProductDetail.Attrs` alongside `title` and `values`. The `AttrLang` OpenAPI schema declares it as
+`type: string` + `nullable: true`. Omitted from JSON when empty.
+
 ### Attribute images (`attr_images`)
 
 `attr_images` in `product.yaml` holds per-attribute, per-value image filenames. The structure is:
@@ -219,8 +226,9 @@ before `resp`).
 `ServeProductContent`), validates required fields (`product_id`, `lang`, `first_name`, `last_name`, `phone`,
 `city`, `address`), resolves geo-based price, accumulates attribute add-on prices, formats attributes as
 `"AttrTitle: ValueTitle"` (sorted by attribute key), and delegates to `h.orders.Submit(ctx, order.Order)`.
-Returns 201 on success, 400 for missing/invalid fields, 404 for unknown product or path traversal, 502 if the
-order service returns an error. The `orderService` interface is defined in `internal/handler/order.go`.
+Returns 201 with `{"payment_url": "https://foo.bar"}` (stub) on success, 400 for missing/invalid fields, 404 for
+unknown product or path traversal, 502 if the order service returns an error. The `orderService` interface is defined
+in `internal/handler/order.go`.
 `NewHandler` accepts `orders orderService` after `np novaPoshtaClient`.
 
 ### Nova Poshta routes
