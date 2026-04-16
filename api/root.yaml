@@ -321,6 +321,13 @@ components:
             type: object
             additionalProperties:
               type: number
+        attr_images:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
         images:
           type: array
           nullable: true
