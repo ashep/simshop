@@ -107,6 +107,16 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 			detail.AttrPrices[attrKey] = resolved
 		}
 	}
+	if len(p.AttrImages) > 0 {
+		detail.AttrImages = make(map[string]map[string]string, len(p.AttrImages))
+		for attrKey, valueImages := range p.AttrImages {
+			resolved := make(map[string]string, len(valueImages))
+			for valueKey, filename := range valueImages {
+				resolved[valueKey] = "/images/" + id + "/" + filename
+			}
+			detail.AttrImages[attrKey] = resolved
+		}
+	}
 
 	if err := h.resp.Write(w, r, http.StatusOK, detail); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")

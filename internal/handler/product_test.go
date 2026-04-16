@@ -146,6 +146,23 @@ price:
     value: 1999.99
 `
 
+const testProductWithAttrImagesYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+price:
+  default:
+    currency: USD
+    value: 49.99
+attr_images:
+  display_color:
+    red: red-thumb.jpg
+    green: green-thumb.jpg
+`
+
 const testProductWithAttrPricesYAML = `
 name:
   en: Widget
@@ -344,6 +361,32 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 5.0, displayColor["red"])
 		assert.Equal(t, 3.0, displayColor["green"])
+	})
+
+	main.Run("AttrImagePathsAreTransformed", func(t *testing.T) {
+		aiDataDir := t.TempDir()
+		aiProductDir := filepath.Join(aiDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(aiProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(aiProductDir, "product.yaml"),
+			[]byte(testProductWithAttrImagesYAML), 0644))
+
+		h := &Handler{dataDir: aiDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+
+		attrImages, ok := body["attr_images"].(map[string]any)
+		require.True(t, ok, "attr_images field should be present")
+		displayColor, ok := attrImages["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "/images/widget/red-thumb.jpg", displayColor["red"])
+		assert.Equal(t, "/images/widget/green-thumb.jpg", displayColor["green"])
 	})
 
 	main.Run("ReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {

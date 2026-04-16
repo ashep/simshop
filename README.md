@@ -123,6 +123,9 @@ Fields in `product.yaml`:
 - **attr_prices** — optional map of add-on prices per attribute value, keyed by country (same structure as `price`).
   Shape: `attr_key → value_key → country_key → float64`. Must contain a `default` country key for each value.
   The API resolves this to `attr_key → value_key → float64` using the same country detection logic as `price`.
+- **attr_images** — optional map of per-attribute-value image filenames. Shape: `attr_key → value_key → filename`.
+  Filenames are relative to the product's `images/` subdirectory. The API response returns them as URL paths
+  (e.g. `/images/{id}/red-thumb.jpg`). No country resolution is applied — each value maps to exactly one image.
 - **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's `images/`
   subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that can be appended to
   the server's base URL to download the file.
@@ -179,6 +182,11 @@ attr_prices:
     dark:
       default: 10
       ua: 400
+
+attr_images:
+  finish:
+    natural: finish-natural.jpg
+    dark: finish-dark.jpg
 
 images:
   - preview: 01-preview.png
