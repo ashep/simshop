@@ -87,7 +87,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	} else {
 		rateLimit := cfg.RateLimit
 		if rateLimit == 0 {
-			rateLimit = 10 // default: 10 requests per minute
+			rateLimit = 1 // default: 1 request per minute
 		}
 		rateLimitMw := handler.RateLimitMiddleware(rateLimit)
 		ordersHandler = rateLimitMw(hdl.CreateOrder)
