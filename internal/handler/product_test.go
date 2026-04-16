@@ -200,6 +200,33 @@ attr_prices:
       ua: 3
 `
 
+const testProductWithAttrDescriptionYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+prices:
+  default:
+    currency: USD
+    value: 49.99
+attrs:
+  display_color:
+    en:
+      title: Display color
+      description: "Pick a color carefully."
+      values:
+        red:
+          title: Red
+    uk:
+      title: Колір дисплея
+      description: "Оберіть колір уважно."
+      values:
+        red:
+          title: Червоний
+`
+
 func TestServeProductContent(main *testing.T) {
 	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
@@ -387,6 +414,30 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "/images/widget/red-thumb.jpg", displayColor["red"])
 		assert.Equal(t, "/images/widget/green-thumb.jpg", displayColor["green"])
+	})
+
+	main.Run("ReturnsAttrDescription", func(t *testing.T) {
+		adDataDir := t.TempDir()
+		adProductDir := filepath.Join(adDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(adProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(adProductDir, "product.yaml"), []byte(testProductWithAttrDescriptionYAML), 0644))
+
+		h := &Handler{dataDir: adDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		attrs, ok := body["attrs"].(map[string]any)
+		require.True(t, ok, "attrs should be present")
+		displayColor, ok := attrs["display_color"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Display color", displayColor["title"])
+		assert.Equal(t, "Pick a color carefully.", displayColor["description"])
 	})
 
 	main.Run("ReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {

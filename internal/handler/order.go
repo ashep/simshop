@@ -24,6 +24,10 @@ type orderService interface {
 	Submit(ctx context.Context, o order.Order) error
 }
 
+type createOrderResponse struct {
+	PaymentURL string `json:"payment_url"`
+}
+
 type createOrderRequest struct {
 	ProductID  string            `json:"product_id"`
 	Lang       string            `json:"lang"`
@@ -176,5 +180,8 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	if err := h.resp.Write(w, r, http.StatusCreated, &createOrderResponse{PaymentURL: "https://foo.bar"}); err != nil {
+		h.l.Error().Err(err).Msg("write create order response failed")
+		h.writeError(w, err)
+	}
 }

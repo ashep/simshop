@@ -15,8 +15,9 @@ type AttrValue struct {
 }
 
 type AttrLang struct {
-	Title  string               `json:"title"  yaml:"title"`
-	Values map[string]AttrValue `json:"values" yaml:"values"`
+	Title       string               `json:"title"                 yaml:"title"`
+	Description string               `json:"description,omitempty" yaml:"description"`
+	Values      map[string]AttrValue `json:"values"                yaml:"values"`
 }
 
 type ImageItem struct {

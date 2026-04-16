@@ -213,6 +213,10 @@ paths:
       responses:
         "201":
           description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
         "400":
           description: Invalid request
           content:
@@ -272,6 +276,9 @@ components:
       properties:
         title:
           type: string
+        description:
+          type: string
+          nullable: true
         values:
           type: object
           additionalProperties:
@@ -407,6 +414,14 @@ components:
         notes:
           type: string
           nullable: true
+
+    CreateOrderResponse:
+      type: object
+      required:
+        - payment_url
+      properties:
+        payment_url:
+          type: string
 
     ErrorResponse:
       type: object
