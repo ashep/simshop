@@ -26,28 +26,30 @@ type ImageItem struct {
 }
 
 type Product struct {
-	ID          string                                       `json:"id"          yaml:"id"`
-	Name        map[string]string                            `json:"name"        yaml:"name"`
-	Description map[string]string                            `json:"description" yaml:"description"`
-	Specs       map[string]map[string]SpecItem               `json:"specs"       yaml:"specs"`
-	Prices      map[string]PriceItem                         `json:"prices"      yaml:"prices"`
-	Attrs       map[string]map[string]AttrLang               `json:"attrs"       yaml:"attrs"`
-	AttrPrices  map[string]map[string]map[string]float64     `json:"attr_prices" yaml:"attr_prices"`
-	AttrImages  map[string]map[string]string                 `json:"attr_images" yaml:"attr_images"`
-	Images      []ImageItem                                  `json:"images"      yaml:"images"`
+	ID              string                                       `json:"id"                yaml:"id"`
+	Name            map[string]string                            `json:"name"              yaml:"name"`
+	Description     map[string]string                            `json:"description"       yaml:"description"`
+	Specs           map[string]map[string]SpecItem               `json:"specs"             yaml:"specs"`
+	Prices          map[string]PriceItem                         `json:"prices"            yaml:"prices"`
+	Attrs           map[string]map[string]AttrLang               `json:"attrs"             yaml:"attrs"`
+	AttrPrices      map[string]map[string]map[string]float64     `json:"attr_prices"       yaml:"attr_prices"`
+	AttrImages      map[string]map[string]string                 `json:"attr_images"       yaml:"attr_images"`
+	AttrValuesOrder map[string][]string                          `json:"attr_values_order" yaml:"attr_values_order"`
+	Images          []ImageItem                                  `json:"images"            yaml:"images"`
 }
 
 // ProductDetail holds the lang-filtered product data returned by GET /products/{id}/{lang}.
 type ProductDetail struct {
-	ID          string                        `json:"id"`
-	Name        string                        `json:"name"`
-	Description string                        `json:"description"`
-	Specs       map[string]SpecItem           `json:"specs,omitempty"`
-	Prices      PriceItem                     `json:"price"`
-	Attrs       map[string]AttrLang           `json:"attrs,omitempty"`
-	AttrPrices  map[string]map[string]float64 `json:"attr_prices,omitempty"`
-	AttrImages  map[string]map[string]string  `json:"attr_images,omitempty"`
-	Images      []ImageItem                   `json:"images,omitempty"`
+	ID              string                        `json:"id"`
+	Name            string                        `json:"name"`
+	Description     string                        `json:"description"`
+	Specs           map[string]SpecItem           `json:"specs,omitempty"`
+	Prices          PriceItem                     `json:"price"`
+	Attrs           map[string]AttrLang           `json:"attrs,omitempty"`
+	AttrPrices      map[string]map[string]float64 `json:"attr_prices,omitempty"`
+	AttrImages      map[string]map[string]string  `json:"attr_images,omitempty"`
+	AttrValuesOrder map[string][]string           `json:"attr_values_order,omitempty"`
+	Images          []ImageItem                   `json:"images,omitempty"`
 }
 
 // Item holds the lightweight product metadata loaded from products.yaml.

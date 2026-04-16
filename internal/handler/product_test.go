@@ -200,6 +200,44 @@ attr_prices:
       ua: 3
 `
 
+const testProductWithAttrValuesOrderYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+prices:
+  default:
+    currency: USD
+    value: 49.99
+attrs:
+  display_color:
+    en:
+      title: Display color
+      values:
+        red:
+          title: Red
+        green:
+          title: Green
+        blue:
+          title: Blue
+    uk:
+      title: Колір дисплея
+      values:
+        red:
+          title: Червоний
+        green:
+          title: Зелений
+        blue:
+          title: Синій
+attr_values_order:
+  display_color:
+    - blue
+    - red
+    - green
+`
+
 const testProductWithAttrDescriptionYAML = `
 name:
   en: Widget
@@ -438,6 +476,29 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "Display color", displayColor["title"])
 		assert.Equal(t, "Pick a color carefully.", displayColor["description"])
+	})
+
+	main.Run("ReturnsAttrValuesOrder", func(t *testing.T) {
+		avoDataDir := t.TempDir()
+		avoProductDir := filepath.Join(avoDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(avoProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(avoProductDir, "product.yaml"), []byte(testProductWithAttrValuesOrderYAML), 0644))
+
+		h := &Handler{dataDir: avoDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		attrValuesOrder, ok := body["attr_values_order"].(map[string]any)
+		require.True(t, ok, "attr_values_order should be present")
+		displayColor, ok := attrValuesOrder["display_color"].([]any)
+		require.True(t, ok, "display_color order should be present")
+		assert.Equal(t, []any{"blue", "red", "green"}, displayColor)
 	})
 
 	main.Run("ReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {

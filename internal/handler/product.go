@@ -93,6 +93,9 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 			detail.Attrs[key] = attr[lang]
 		}
 	}
+	if len(p.AttrValuesOrder) > 0 {
+		detail.AttrValuesOrder = p.AttrValuesOrder
+	}
 	if len(p.AttrPrices) > 0 {
 		detail.AttrPrices = make(map[string]map[string]float64, len(p.AttrPrices))
 		for attrKey, valuePrices := range p.AttrPrices {
