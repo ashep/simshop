@@ -81,6 +81,14 @@ when the user's country is absent. `product.Product.AttrPrices` stores the raw m
 holds the resolved form (`attr_key → value_key → float64`) built by `ServeProductContent` using the same country
 resolution logic as the base price. `AttrValue` no longer carries `add_price` — it has only `title`.
 
+### Attribute images (`attr_images`)
+
+`attr_images` in `product.yaml` holds per-attribute, per-value image filenames. The structure is:
+`attr_key → value_key → filename`. `product.Product.AttrImages` stores bare filenames (e.g. `"thumb.png"`);
+they are validated at startup by `validate()` using the same `os.Stat` pattern as `images[]`. Path rewriting
+to `/images/{id}/{filename}` URLs happens in the handler (`ServeProductContent`), not in the loader — do not
+rewrite in the loader.
+
 ### CORS middleware
 
 `handler.CORSMiddleware()` returns a middleware that unconditionally sets `Access-Control-Allow-Origin: *` for all
