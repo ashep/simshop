@@ -1,7 +1,7 @@
 CREATE TYPE order_status AS ENUM (
     'new',
+    'awaiting_payment',
     'paid',
-    'payment_failed',
     'processing',
     'cancelled',
     'shipped',
