@@ -38,6 +38,27 @@ prices:
     value: 10
 `
 
+const minimalShopYAML = `
+shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+      currency:
+        en: UAH
+      phone_code: "+380"
+`
+
+// setupDataDir creates a temp data directory containing a minimal valid shop.yaml.
+// shop.yaml is mandatory at startup, so every loader test that should succeed must
+// have one.
+func setupDataDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	makeShopFile(t, dir, minimalShopYAML)
+	return dir
+}
+
 func makePageFile(t *testing.T, dataDir, content string) {
 	t.Helper()
 	dir := filepath.Join(dataDir, "pages")
@@ -59,16 +80,8 @@ func makeShopFile(t *testing.T, dataDir, content string) {
 }
 
 func TestLoad(main *testing.T) {
-	main.Run("EmptyDataDir", func(t *testing.T) {
-		dataDir := filepath.Join(t.TempDir(), "nonexistent")
-
-		cat, err := loader.Load(dataDir)
-		require.NoError(t, err)
-		assert.Empty(t, cat.Products)
-	})
-
 	main.Run("MissingProductsSubdir", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
@@ -76,7 +89,7 @@ func TestLoad(main *testing.T) {
 	})
 
 	main.Run("ProductSubdirWithoutYAMLIsSkipped", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		dir := filepath.Join(dataDir, "products", "content-only")
 		require.NoError(t, os.MkdirAll(dir, 0755))
 		// no product.yaml — should be silently skipped
@@ -87,7 +100,7 @@ func TestLoad(main *testing.T) {
 	})
 
 	main.Run("LoadsProduct", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
 
 		cat, err := loader.Load(dataDir)
@@ -264,7 +277,7 @@ images:
 	})
 
 	main.Run("MissingPagesYAML_EmptyPages", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
@@ -272,7 +285,7 @@ images:
 	})
 
 	main.Run("LoadsPages", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makePageFile(t, dataDir, `
 pages:
   - id: about
@@ -302,7 +315,7 @@ pages:
 	})
 
 	main.Run("MissingProductsYAML_EmptyProductItems", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "products"), 0755))
 
 		cat, err := loader.Load(dataDir)
@@ -319,7 +332,7 @@ pages:
 	})
 
 	main.Run("LoadsProductItems", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductsFile(t, dataDir, `
 products:
   - id: widget
@@ -339,20 +352,27 @@ products:
 		assert.Equal(t, "A test product", cat.ProductItems[0].Description["en"])
 	})
 
-	main.Run("MissingShopYAML_EmptyShop", func(t *testing.T) {
+	main.Run("MissingShopYAML_Fatal", func(t *testing.T) {
 		dataDir := t.TempDir()
 
-		cat, err := loader.Load(dataDir)
-		require.NoError(t, err)
-		assert.Empty(t, cat.Shop.Name)
-		assert.Empty(t, cat.Shop.Title)
-		assert.Empty(t, cat.Shop.Description)
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "shop.yaml")
 	})
 
 	main.Run("LoadsShop", func(t *testing.T) {
 		dataDir := t.TempDir()
 		makeShopFile(t, dataDir, `
 shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+        uk: Україна
+      currency:
+        en: UAH
+        uk: грн
+      phone_code: "+380"
+      flag: "🇺🇦"
   name:
     en: D5Y Design
     uk: D5Y Design
@@ -366,6 +386,15 @@ shop:
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
+		require.Len(t, cat.Shop.Countries, 1)
+		ua, ok := cat.Shop.Countries["ua"]
+		require.True(t, ok)
+		assert.Equal(t, "Ukraine", ua.Name["en"])
+		assert.Equal(t, "Україна", ua.Name["uk"])
+		assert.Equal(t, "UAH", ua.Currency["en"])
+		assert.Equal(t, "грн", ua.Currency["uk"])
+		assert.Equal(t, "+380", ua.PhoneCode)
+		assert.Equal(t, "🇺🇦", ua.Flag)
 		assert.Equal(t, "D5Y Design", cat.Shop.Name["en"])
 		assert.Equal(t, "D5Y Design", cat.Shop.Name["uk"])
 		assert.Equal(t, "Crafted Interior Objects", cat.Shop.Title["en"])
@@ -380,8 +409,33 @@ shop:
 		assert.Error(t, err)
 	})
 
-	main.Run("ProductItemGetsImageFromProduct", func(t *testing.T) {
+	main.Run("Validation_ShopMissingCountries", func(t *testing.T) {
 		dataDir := t.TempDir()
+		makeShopFile(t, dataDir, `
+shop:
+  name:
+    en: D5Y Design
+`)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "countries")
+	})
+
+	main.Run("Validation_ShopEmptyCountries", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeShopFile(t, dataDir, `
+shop:
+  countries: {}
+  name:
+    en: D5Y Design
+`)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "countries")
+	})
+
+	main.Run("ProductItemGetsImageFromProduct", func(t *testing.T) {
+		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "widget", `
 name:
   en: Widget
@@ -415,7 +469,7 @@ products:
 	})
 
 	main.Run("ProductItemImageAbsentWhenProductHasNoImages", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
 		makeProductsFile(t, dataDir, `
 products:
@@ -433,7 +487,7 @@ products:
 	})
 
 	main.Run("ProductItemImageAbsentWhenNoMatchingProduct", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductsFile(t, dataDir, `
 products:
   - id: ghost
@@ -470,7 +524,7 @@ attr_images:
 	})
 
 	main.Run("LoadsProductWithAttrImages", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "p", `
 name:
   en: A Product
@@ -493,20 +547,16 @@ attr_images:
 		assert.Equal(t, "thumb.png", cat.Products[0].AttrImages["color"]["red"])
 	})
 
-	main.Run("EmptyShopYAML_EmptyShop", func(t *testing.T) {
+	main.Run("EmptyShopYAML_Fatal", func(t *testing.T) {
 		dataDir := t.TempDir()
 		makeShopFile(t, dataDir, "")
 
-		cat, err := loader.Load(dataDir)
-		require.NoError(t, err)
-		assert.NotNil(t, cat.Shop)
-		assert.Empty(t, cat.Shop.Name)
-		assert.Empty(t, cat.Shop.Title)
-		assert.Empty(t, cat.Shop.Description)
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "countries")
 	})
 
 	main.Run("LoadsProductWithImages", func(t *testing.T) {
-		dataDir := t.TempDir()
+		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "p", `
 name:
   en: A Product

@@ -6,13 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -37,6 +35,7 @@ type createOrderRequest struct {
 	LastName   string            `json:"last_name"`
 	Phone      string            `json:"phone"`
 	Email      string            `json:"email"`
+	Country    string            `json:"country"`
 	City       string            `json:"city"`
 	Address    string            `json:"address"`
 	Notes      string            `json:"notes"`
@@ -68,11 +67,24 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	case req.Email == "":
 		h.writeError(w, &BadRequestError{Reason: "email is required"})
 		return
+	case req.Country == "":
+		h.writeError(w, &BadRequestError{Reason: "country is required"})
+		return
 	case req.City == "":
 		h.writeError(w, &BadRequestError{Reason: "city is required"})
 		return
 	case req.Address == "":
 		h.writeError(w, &BadRequestError{Reason: "address is required"})
+		return
+	}
+
+	s, err := h.shop.Get(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if _, ok := s.Countries[req.Country]; !ok {
+		h.writeError(w, &BadRequestError{Reason: "invalid country"})
 		return
 	}
 
@@ -97,20 +109,27 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	productName, ok := p.Name[req.Lang]
-	if !ok {
+	if _, ok := p.Name[req.Lang]; !ok {
 		h.writeError(w, &BadRequestError{Reason: "language not found"})
 		return
 	}
 
-	// Validate attributes and format as "AttrTitle: ValueTitle, ..." sorted by attribute key.
+	// Resolve attributes into rendered title pairs and validate them, sorted by attribute key for stable output.
 	attrKeys := make([]string, 0, len(req.Attributes))
 	for k := range req.Attributes {
 		attrKeys = append(attrKeys, k)
 	}
 	sort.Strings(attrKeys)
 
-	var attrParts []string
+	// Resolve base price by request-supplied country with "default" fallback.
+	country := req.Country
+	price, ok := p.Prices[country]
+	if !ok {
+		price = p.Prices["default"]
+	}
+
+	totalCents := int(math.Round(price.Value * 100))
+	attrs := make([]order.Attr, 0, len(attrKeys))
 	for _, attrID := range attrKeys {
 		valueID := req.Attributes[attrID]
 
@@ -129,49 +148,40 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, &BadRequestError{Reason: fmt.Sprintf("unknown value %q for attribute: %s", valueID, attrID)})
 			return
 		}
-		attrParts = append(attrParts, attrLang.Title+": "+attrVal.Title)
-	}
 
-	// Resolve base prices by geo-detected country with "default" fallback.
-	country := h.geo.Detect(r)
-	price, ok := p.Prices[country]
-	if !ok {
-		price = p.Prices["default"]
-	}
-
-	// Add attribute add-on prices.
-	totalPrice := price.Value
-	for _, attrID := range attrKeys {
-		valueID := req.Attributes[attrID]
+		var addonValue float64
 		if valuePrices, ok := p.AttrPrices[attrID]; ok {
 			if countryPrices, ok := valuePrices[valueID]; ok {
-				ap, ok := countryPrices[country]
+				addonValue, ok = countryPrices[country]
 				if !ok {
-					ap = countryPrices["default"]
+					addonValue = countryPrices["default"]
 				}
-				totalPrice += ap
 			}
 		}
+		addonCents := int(math.Round(addonValue * 100))
+		totalCents += addonCents
+
+		attrs = append(attrs, order.Attr{
+			Name:  attrLang.Title,
+			Value: attrVal.Title,
+			Price: addonCents,
+		})
 	}
 
-	now := time.Now().UTC()
-
 	o := order.Order{
-		ID:          strconv.FormatInt(now.Unix(), 16),
-		Status:      order.StatusNew,
-		DateTime:    now,
-		ProductName: productName,
-		Attributes:  strings.Join(attrParts, ", "),
-		Price:       totalPrice,
-		Currency:    price.Currency,
-		FirstName:   req.FirstName,
-		MiddleName:  req.MiddleName,
-		LastName:    req.LastName,
-		Phone:       req.Phone,
-		Email:       req.Email,
-		City:        req.City,
-		Address:     req.Address,
-		Notes:       req.Notes,
+		ProductID:    req.ProductID,
+		Email:        req.Email,
+		Price:        totalCents,
+		Currency:     price.Currency,
+		FirstName:    req.FirstName,
+		MiddleName:   req.MiddleName,
+		LastName:     req.LastName,
+		Country:      country,
+		City:         req.City,
+		Phone:        req.Phone,
+		Address:      req.Address,
+		Attrs:        attrs,
+		CustomerNote: req.Notes,
 	}
 
 	if err := h.orders.Submit(r.Context(), o); err != nil {

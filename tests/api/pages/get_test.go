@@ -15,11 +15,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testShopYAML = `
+shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+      currency:
+        en: UAH
+      phone_code: "+380"
+`
+
 // makeDataDir creates a data directory with a pages.yaml listing the given pages
 // and per-language markdown files for each page.
 func makeDataDir(t *testing.T, pagesYAML string, markdownFiles map[string]map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(testShopYAML), 0644))
 
 	if pagesYAML != "" {
 		pagesDir := filepath.Join(dataDir, "pages")

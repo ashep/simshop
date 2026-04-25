@@ -25,6 +25,16 @@ func makeDataDir(t *testing.T, shopYAML string) string {
 
 const testShopYAML = `
 shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+        uk: Україна
+      currency:
+        en: UAH
+        uk: грн
+      phone_code: "+380"
+      flag: "🇺🇦"
   name:
     en: D5Y Design
     uk: D5Y Design
@@ -54,6 +64,21 @@ func TestGetShop(main *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 
+		countries, ok := body["countries"].(map[string]any)
+		require.True(t, ok)
+		ua, ok := countries["ua"].(map[string]any)
+		require.True(t, ok)
+		uaName, ok := ua["name"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Ukraine", uaName["en"])
+		assert.Equal(t, "Україна", uaName["uk"])
+		uaCurrency, ok := ua["currency"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "UAH", uaCurrency["en"])
+		assert.Equal(t, "грн", uaCurrency["uk"])
+		assert.Equal(t, "+380", ua["phone_code"])
+		assert.Equal(t, "🇺🇦", ua["flag"])
+
 		name, ok := body["name"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "D5Y Design", name["en"])
@@ -68,23 +93,5 @@ func TestGetShop(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "Designed and made by hand", description["en"])
 		assert.Equal(t, "Спроєктовано та виготовлено вручну", description["uk"])
-	})
-
-	main.Run("EmptyWhenNoShopYAML", func(t *testing.T) {
-		emptyDir := makeDataDir(t, "")
-		emptyApp := testapp.New(t, emptyDir)
-		emptyApp.Start()
-
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, emptyApp.URL("/shop"), nil)
-		require.NoError(t, err)
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		var body map[string]any
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Empty(t, body)
 	})
 }

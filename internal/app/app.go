@@ -4,19 +4,23 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ashep/go-app/dbmigrator"
 	"github.com/ashep/go-app/httpserver"
 	"github.com/ashep/go-app/runner"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/ashep/simshop/api"
 	"github.com/ashep/simshop/internal/geo"
-	"github.com/ashep/simshop/internal/googlesheets"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
 	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/order"
+	"github.com/ashep/simshop/internal/orderdb"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
 	"github.com/ashep/simshop/internal/shop"
+	appsql "github.com/ashep/simshop/internal/sql"
 )
 
 func Run(rt *runner.Runtime[Config]) error {
@@ -26,6 +30,24 @@ func Run(rt *runner.Runtime[Config]) error {
 	if cfg.DataDir == "" {
 		cfg.DataDir = "./data"
 	}
+
+	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
+	if err != nil {
+		return fmt.Errorf("migrate db: %w", err)
+	}
+
+	if migRes.PrevVersion != migRes.NewVersion {
+		l.Info().
+			Uint("from", migRes.PrevVersion).
+			Uint("to", migRes.NewVersion).
+			Msg("database migrated")
+	}
+
+	db, err := pgxpool.New(rt.Ctx, cfg.Database.DSN)
+	if err != nil {
+		return fmt.Errorf("connect to db: %w", err)
+	}
+	defer db.Close()
 
 	catalog, err := loader.Load(cfg.DataDir)
 	if err != nil {
@@ -37,16 +59,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	shopSvc := shop.NewService(catalog.Shop)
 	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
 
-	sheetsClient, err := googlesheets.NewClient(
-		cfg.GoogleSheets.CredentialsJSON,
-		cfg.GoogleSheets.SpreadsheetID,
-		cfg.GoogleSheets.SheetName,
-		cfg.GoogleSheets.ServiceURL,
-	)
-	if err != nil {
-		return fmt.Errorf("create sheets client: %w", err)
-	}
-	orderSvc := order.NewService(sheetsClient)
+	orderSvc := order.NewService(orderdb.New(db))
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {

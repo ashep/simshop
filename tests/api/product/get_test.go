@@ -98,11 +98,24 @@ attr_images:
     green: green-thumb.jpg
 `
 
+const testShopYAML = `
+shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+      currency:
+        en: UAH
+      phone_code: "+380"
+`
+
 // makeDataDir creates a data directory with a products.yaml listing and per-product
 // product.yaml detail files.
 func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(testShopYAML), 0644))
 
 	if productsYAML != "" {
 		productsDir := filepath.Join(dataDir, "products")
@@ -287,6 +300,7 @@ func TestListProducts(main *testing.T) {
 
 	main.Run("GetReturnsAttrImages", func(t *testing.T) {
 		aiDataDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(aiDataDir, "shop.yaml"), []byte(testShopYAML), 0644))
 		productDir := filepath.Join(aiDataDir, "products", "widget")
 		imagesDir := filepath.Join(productDir, "images")
 		require.NoError(t, os.MkdirAll(imagesDir, 0755))

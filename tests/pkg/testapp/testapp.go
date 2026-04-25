@@ -5,6 +5,7 @@ package testapp
 import (
 	"fmt"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -13,12 +14,17 @@ import (
 	"github.com/ashep/simshop/internal/app"
 )
 
+// DefaultDSN is used when APP_DB_DSN is not set. Matches the docker-compose.tests.yaml network.
+const DefaultDSN = "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+
 type App struct {
 	*testrunner.Runner[func(*runner.Runtime[app.Config]) error, app.Config]
 	addr string
+	dsn  string
 }
 
-// New creates a test app instance.
+// New creates a test app instance. The database DSN is read from APP_DB_DSN
+// (defaulting to DefaultDSN). Tests can override it via opts.
 func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 	t.Helper()
 
@@ -32,11 +38,19 @@ func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 		panic(fmt.Sprintf("close listener: %s", err))
 	}
 
+	dsn := os.Getenv("APP_DB_DSN")
+	if dsn == "" {
+		dsn = DefaultDSN
+	}
+
 	cfg := app.Config{
 		Server: app.Server{
 			Addr: addr,
 		},
 		DataDir: dataDir,
+		Database: app.DBConfig{
+			DSN: dsn,
+		},
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -44,9 +58,12 @@ func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 
 	r := testrunner.New(t, app.Run, cfg).SetHTTPReadyStartWaiter("http://"+addr, time.Second)
 
-	return &App{Runner: r, addr: addr}
+	return &App{Runner: r, addr: addr, dsn: cfg.Database.DSN}
 }
 
 func (a *App) URL(path string) string {
 	return "http://" + a.addr + path
 }
+
+// DSN returns the postgres DSN this app instance is configured with.
+func (a *App) DSN() string { return a.dsn }

@@ -391,6 +391,7 @@ components:
         - last_name
         - phone
         - email
+        - country
         - city
         - address
       properties:
@@ -413,6 +414,8 @@ components:
         phone:
           type: string
         email:
+          type: string
+        country:
           type: string
         city:
           type: string
@@ -441,6 +444,10 @@ components:
     ShopResponse:
       type: object
       properties:
+        countries:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ShopCountry'
         name:
           type: object
           additionalProperties:
@@ -453,6 +460,22 @@ components:
           type: object
           additionalProperties:
             type: string
+
+    ShopCountry:
+      type: object
+      properties:
+        name:
+          type: object
+          additionalProperties:
+            type: string
+        currency:
+          type: object
+          additionalProperties:
+            type: string
+        phone_code:
+          type: string
+        flag:
+          type: string
 
     NovaPoshtaCityItem:
       type: object

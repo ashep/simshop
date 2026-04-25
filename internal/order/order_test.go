@@ -19,7 +19,7 @@ func (m *writerMock) Write(ctx context.Context, o Order) error {
 func TestService(main *testing.T) {
 	main.Run("SubmitDelegatesToWriter", func(t *testing.T) {
 		w := &writerMock{}
-		o := Order{ProductName: "Widget"}
+		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return(nil)
 
 		svc := NewService(w)
@@ -29,7 +29,7 @@ func TestService(main *testing.T) {
 
 	main.Run("SubmitReturnsWriterError", func(t *testing.T) {
 		w := &writerMock{}
-		o := Order{ProductName: "Widget"}
+		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return(errors.New("write failed"))
 
 		svc := NewService(w)
