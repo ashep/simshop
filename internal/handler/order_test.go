@@ -19,8 +19,13 @@ import (
 
 type orderServiceMock struct{ mock.Mock }
 
-func (m *orderServiceMock) Submit(ctx context.Context, o order.Order) error {
-	return m.Called(ctx, o).Error(0)
+func (m *orderServiceMock) Submit(ctx context.Context, o order.Order) (string, error) {
+	args := m.Called(ctx, o)
+	return args.String(0), args.Error(1)
+}
+
+func (m *orderServiceMock) AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error {
+	return m.Called(ctx, orderID, inv).Error(0)
 }
 
 func (m *orderServiceMock) List(ctx context.Context) ([]order.Record, error) {
@@ -73,7 +78,7 @@ func TestCreateOrder(main *testing.T) {
 				o.Email == "ivan@example.com" &&
 				o.City == "Київ" &&
 				o.Address == "Відділення №5"
-		})).Return(nil)
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
 		w := doRequest(t, baseDataDir, svc, `{
 			"product_id": "widget",
@@ -101,7 +106,7 @@ func TestCreateOrder(main *testing.T) {
 				o.Attrs[0].Price == 1000 &&
 				o.Price == 5999 &&
 				o.Currency == "USD"
-		})).Return(nil)
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
 		w := doRequest(t, attrDataDir, svc, `{
 			"product_id": "widget",
@@ -123,7 +128,7 @@ func TestCreateOrder(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
 			return o.Country == "ua"
-		})).Return(nil)
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
 		// Geo stub returns "xx"; the request says "ua"; the stored country must be "ua".
 		h := &Handler{orders: svc, shop: shopStub, geo: &geoDetectorStub{country: "xx"}, dataDir: baseDataDir, resp: resp, l: zerolog.Nop()}
@@ -279,7 +284,7 @@ func TestCreateOrder(main *testing.T) {
 	main.Run("ServiceErrorReturns502", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("Submit", mock.Anything, mock.Anything).Return(assert.AnError)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("", assert.AnError)
 
 		w := doRequest(t, baseDataDir, svc, `{
 			"product_id": "widget", "lang": "en",

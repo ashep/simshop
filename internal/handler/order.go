@@ -14,13 +14,19 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ashep/simshop/internal/monobank"
 	"github.com/ashep/simshop/internal/order"
 	"github.com/ashep/simshop/internal/product"
 )
 
 type orderService interface {
-	Submit(ctx context.Context, o order.Order) error
+	Submit(ctx context.Context, o order.Order) (string, error)
+	AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error
 	List(ctx context.Context) ([]order.Record, error)
+}
+
+type monobankClient interface {
+	CreateInvoice(ctx context.Context, req monobank.CreateInvoiceRequest) (*monobank.CreateInvoiceResponse, error)
 }
 
 type createOrderResponse struct {
@@ -185,7 +191,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		CustomerNote: req.Notes,
 	}
 
-	if err := h.orders.Submit(r.Context(), o); err != nil {
+	if _, err := h.orders.Submit(r.Context(), o); err != nil {
 		h.l.Error().Err(err).Msg("submit order failed")
 		h.writeError(w, &BadGatewayError{Reason: "failed to submit order"})
 		return

@@ -58,15 +58,17 @@ type geoDetector interface {
 }
 
 type Handler struct {
-	prod    productService
-	pages   pageService
-	shop    shopService
-	np      novaPoshtaClient
-	orders  orderService
-	geo     geoDetector
-	resp    *openapi.Responder
-	dataDir string
-	l       zerolog.Logger
+	prod        productService
+	pages       pageService
+	shop        shopService
+	np          novaPoshtaClient
+	monobank    monobankClient
+	orders      orderService
+	geo         geoDetector
+	resp        *openapi.Responder
+	dataDir     string
+	redirectURL string
+	l           zerolog.Logger
 }
 
 func NewHandler(
@@ -74,22 +76,26 @@ func NewHandler(
 	pages pageService,
 	shopSvc shopService,
 	np novaPoshtaClient,
+	mb monobankClient,
 	orders orderService,
 	geo geoDetector,
 	resp *openapi.Responder,
 	dataDir string,
+	redirectURL string,
 	l zerolog.Logger,
 ) *Handler {
 	return &Handler{
-		prod:    prod,
-		pages:   pages,
-		shop:    shopSvc,
-		np:      np,
-		orders:  orders,
-		geo:     geo,
-		resp:    resp,
-		dataDir: dataDir,
-		l:       l,
+		prod:        prod,
+		pages:       pages,
+		shop:        shopSvc,
+		np:          np,
+		monobank:    mb,
+		orders:      orders,
+		geo:         geo,
+		resp:        resp,
+		dataDir:     dataDir,
+		redirectURL: redirectURL,
+		l:           l,
 	}
 }
 
