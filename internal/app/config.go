@@ -10,6 +10,12 @@ type NovaPoshtaConfig struct {
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use production URL
 }
 
+type MonobankConfig struct {
+	APIKey      string `yaml:"api_key"`      // X-Token; empty → startup error
+	ServiceURL  string `yaml:"service_url"`  // overridden in tests; empty means use production URL
+	RedirectURL string `yaml:"redirect_url"` // post-payment customer landing page; empty → startup error
+}
+
 type DBConfig struct {
 	DSN string `yaml:"dsn"`
 }
@@ -19,6 +25,7 @@ type Config struct {
 	Server     Server           `yaml:"server"`
 	DataDir    string           `yaml:"data_dir"`
 	NovaPoshta NovaPoshtaConfig `yaml:"nova_poshta"`
+	Monobank   MonobankConfig   `yaml:"monobank"`
 	Database   DBConfig         `yaml:"database"`
 	RateLimit  int              `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
 }
