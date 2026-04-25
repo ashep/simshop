@@ -43,17 +43,28 @@ const insertAttrSQL = `INSERT INTO order_attrs
 
 const insertHistorySQL = `INSERT INTO order_history (order_id, status) VALUES ($1, 'new')`
 
-// Write inserts a row for o into orders and one row per attr into order_attrs.
-// id, status, and timestamps are populated by database defaults.
-func (w *Writer) Write(ctx context.Context, o order.Order) error {
+const insertInvoiceSQL = `INSERT INTO order_invoices
+	(order_id, provider, invoice_id, page_url, amount, currency)
+	VALUES ($1, $2, $3, $4, $5, $6)`
+
+const updateOrderStatusAwaitingPaymentSQL = `UPDATE orders
+	SET status = 'awaiting_payment', updated_at = CURRENT_TIMESTAMP
+	WHERE id = $1`
+
+const insertHistoryAwaitingPaymentSQL = `INSERT INTO order_history
+	(order_id, status) VALUES ($1, 'awaiting_payment')`
+
+// Write inserts a row for o into orders and one row per attr into order_attrs,
+// then inserts the initial 'new' status into order_history. Returns the
+// assigned order id. id, status, and timestamps are populated by database
+// defaults.
+func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
-		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
 		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			// Best-effort: surface unexpected rollback errors via the existing returned error.
 			_ = rbErr
 		}
 	}()
@@ -65,16 +76,54 @@ func (w *Writer) Write(ctx context.Context, o order.Order) error {
 		o.Country, o.City, o.Phone, o.Address,
 		nullIfEmpty(o.CustomerNote),
 	).Scan(&orderID); err != nil {
-		return fmt.Errorf("insert order: %w", err)
+		return "", fmt.Errorf("insert order: %w", err)
 	}
 
 	for _, a := range o.Attrs {
 		if _, err := tx.Exec(ctx, insertAttrSQL, orderID, a.Name, a.Value, a.Price); err != nil {
-			return fmt.Errorf("insert order_attr %q: %w", a.Name, err)
+			return "", fmt.Errorf("insert order_attr %q: %w", a.Name, err)
 		}
 	}
 
 	if _, err := tx.Exec(ctx, insertHistorySQL, orderID); err != nil {
+		return "", fmt.Errorf("insert order_history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit tx: %w", err)
+	}
+	return orderID, nil
+}
+
+// AttachInvoice records an issued payment invoice and transitions the order
+// to status='awaiting_payment' in a single transaction. Order, attrs, and the
+// initial 'new' history row must already exist (created by Write).
+func (w *Writer) AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error {
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			_ = rbErr
+		}
+	}()
+
+	if _, err := tx.Exec(ctx, insertInvoiceSQL,
+		orderID, inv.Provider, inv.InvoiceID, inv.PageURL, inv.Amount, inv.Currency,
+	); err != nil {
+		return fmt.Errorf("insert order_invoice: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx, updateOrderStatusAwaitingPaymentSQL, orderID)
+	if err != nil {
+		return fmt.Errorf("update order status: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
+	}
+
+	if _, err := tx.Exec(ctx, insertHistoryAwaitingPaymentSQL, orderID); err != nil {
 		return fmt.Errorf("insert order_history: %w", err)
 	}
 
@@ -119,6 +168,11 @@ FROM order_history
 WHERE order_id = ANY($1::uuid[])
 ORDER BY created_at ASC`
 
+const listInvoicesSQL = `SELECT order_id::text, provider, invoice_id, page_url, amount, currency
+	FROM order_invoices
+	WHERE order_id = ANY($1::uuid[])
+	ORDER BY created_at ASC`
+
 // List returns all orders, newest first, each populated with its attrs and
 // history. Always returns a non-nil slice on success (possibly empty).
 func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
@@ -156,6 +210,7 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 		}
 		rec.Attrs = []order.Attr{}
 		rec.History = []order.HistoryEntry{}
+		rec.Invoices = []order.Invoice{}
 		out = append(out, rec)
 		ids = append(ids, rec.ID)
 	}
@@ -217,6 +272,26 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 	hRows.Close()
 	if err := hRows.Err(); err != nil {
 		return nil, fmt.Errorf("iter order_history: %w", err)
+	}
+
+	iRows, err := r.db.Query(ctx, listInvoicesSQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_invoices: %w", err)
+	}
+	for iRows.Next() {
+		var orderID string
+		var inv order.Invoice
+		if err := iRows.Scan(&orderID, &inv.Provider, &inv.InvoiceID, &inv.PageURL, &inv.Amount, &inv.Currency); err != nil {
+			iRows.Close()
+			return nil, fmt.Errorf("scan order_invoice: %w", err)
+		}
+		if rec, ok := indexByID[orderID]; ok {
+			rec.Invoices = append(rec.Invoices, inv)
+		}
+	}
+	iRows.Close()
+	if err := iRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_invoices: %w", err)
 	}
 
 	return out, nil
