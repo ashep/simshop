@@ -3,11 +3,12 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,7 +102,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, err := os.ReadFile(filepath.Join(h.dataDir, "products", req.ProductID, "product.yaml"))
-	if errors.Is(err, fs.ErrNotExist) {
+	if stderrors.Is(err, fs.ErrNotExist) {
 		h.writeError(w, &NotFoundError{Reason: "product not found"})
 		return
 	}
@@ -121,14 +122,12 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve attributes into rendered title pairs and validate them, sorted by attribute key for stable output.
 	attrKeys := make([]string, 0, len(req.Attributes))
 	for k := range req.Attributes {
 		attrKeys = append(attrKeys, k)
 	}
 	sort.Strings(attrKeys)
 
-	// Resolve base price by request-supplied country with "default" fallback.
 	country := req.Country
 	price, ok := p.Prices[country]
 	if !ok {
@@ -175,6 +174,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	if totalCents <= 0 {
+		h.writeError(w, &BadRequestError{Reason: "order amount must be positive"})
+		return
+	}
+
 	o := order.Order{
 		ProductID:    req.ProductID,
 		Email:        req.Email,
@@ -191,14 +195,112 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		CustomerNote: req.Notes,
 	}
 
-	if _, err := h.orders.Submit(r.Context(), o); err != nil {
+	orderID, err := h.orders.Submit(r.Context(), o)
+	if err != nil {
 		h.l.Error().Err(err).Msg("submit order failed")
-		h.writeError(w, &BadGatewayError{Reason: "failed to submit order"})
+		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
 		return
 	}
 
-	if err := h.resp.Write(w, r, http.StatusCreated, &createOrderResponse{PaymentURL: "https://foo.bar"}); err != nil {
+	ccy, err := monobank.MapCurrency(price.Currency)
+	if err != nil {
+		h.logMonobankError(err, orderID, "")
+		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
+		return
+	}
+
+	destination := buildDestination(s.Name, req.Lang, orderID)
+	redirect, err := buildRedirect(h.redirectURL, orderID)
+	if err != nil {
+		h.l.Error().Err(err).Str("order_id", orderID).Msg("build redirect url failed")
+		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
+		return
+	}
+
+	inv, err := h.monobank.CreateInvoice(r.Context(), monobank.CreateInvoiceRequest{
+		Amount: totalCents,
+		Ccy:    ccy,
+		MerchantPaymInfo: monobank.MerchantPaymInfo{
+			Reference:   orderID,
+			Destination: destination,
+		},
+		RedirectURL: redirect,
+	})
+	if err != nil {
+		h.logMonobankError(err, orderID, "")
+		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
+		return
+	}
+
+	if err := h.orders.AttachInvoice(r.Context(), orderID, order.Invoice{
+		Provider:  "monobank",
+		InvoiceID: inv.InvoiceID,
+		PageURL:   inv.PageURL,
+		Amount:    totalCents,
+		Currency:  price.Currency,
+	}); err != nil {
+		h.l.Error().Err(err).
+			Str("order_id", orderID).
+			Str("invoice_id", inv.InvoiceID).
+			Str("page_url", inv.PageURL).
+			Msg("attach invoice failed; monobank invoice will expire unattached")
+		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
+		return
+	}
+
+	if err := h.resp.Write(w, r, http.StatusCreated, &createOrderResponse{PaymentURL: inv.PageURL}); err != nil {
 		h.l.Error().Err(err).Msg("write create order response failed")
 		h.writeError(w, err)
 	}
+}
+
+// logMonobankError emits a structured error log including any *monobank.APIError
+// fields. invoiceID may be empty when the error happened before/at invoice
+// creation.
+func (h *Handler) logMonobankError(err error, orderID, invoiceID string) {
+	ev := h.l.Error().Err(err).Str("order_id", orderID)
+	if invoiceID != "" {
+		ev = ev.Str("invoice_id", invoiceID)
+	}
+	var apiErr *monobank.APIError
+	if stderrors.As(err, &apiErr) {
+		ev = ev.Int("monobank_status", apiErr.Status).
+			Str("monobank_err_code", apiErr.ErrCode).
+			Str("monobank_err_text", apiErr.ErrText)
+	}
+	ev.Msg("monobank invoice flow failed")
+}
+
+// buildDestination renders the Monobank "destination" string shown to the
+// customer in their bank app. Falls back to the alphabetically first language
+// in shopName if req.Lang is missing.
+func buildDestination(shopName map[string]string, lang, orderID string) string {
+	name := shopName[lang]
+	if name == "" {
+		keys := make([]string, 0, len(shopName))
+		for k := range shopName {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		if len(keys) > 0 {
+			name = shopName[keys[0]]
+		}
+	}
+	short := orderID
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	return fmt.Sprintf("%s, order %s", name, short)
+}
+
+// buildRedirect appends ?order_id=<orderID> to base.
+func buildRedirect(base, orderID string) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("parse redirect url: %w", err)
+	}
+	q := u.Query()
+	q.Set("order_id", orderID)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }

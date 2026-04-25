@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ashep/simshop/internal/monobank"
 	"github.com/ashep/simshop/internal/order"
 	"github.com/ashep/simshop/internal/shop"
 	"github.com/rs/zerolog"
@@ -34,6 +36,14 @@ func (m *orderServiceMock) List(ctx context.Context) ([]order.Record, error) {
 	return v, args.Error(1)
 }
 
+type monobankClientMock struct{ mock.Mock }
+
+func (m *monobankClientMock) CreateInvoice(ctx context.Context, req monobank.CreateInvoiceRequest) (*monobank.CreateInvoiceResponse, error) {
+	args := m.Called(ctx, req)
+	v, _ := args.Get(0).(*monobank.CreateInvoiceResponse)
+	return v, args.Error(1)
+}
+
 func TestCreateOrder(main *testing.T) {
 	// Shared product directory with testProductYAML (no attrs).
 	baseDataDir := main.TempDir()
@@ -53,9 +63,18 @@ func TestCreateOrder(main *testing.T) {
 		"us": {Name: map[string]string{"en": "United States"}, PhoneCode: "+1"},
 	}}}
 
-	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, body string) *httptest.ResponseRecorder {
+	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, mb *monobankClientMock, body string) *httptest.ResponseRecorder {
 		t.Helper()
-		h := &Handler{orders: svc, shop: shopStub, geo: &geoDetectorStub{}, dataDir: dataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{
+			orders:      svc,
+			monobank:    mb,
+			shop:        shopStub,
+			geo:         &geoDetectorStub{},
+			dataDir:     dataDir,
+			redirectURL: "https://test.example/thanks",
+			resp:        resp,
+			l:           zerolog.Nop(),
+		}
 		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -65,7 +84,9 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("Returns201OnSuccess", func(t *testing.T) {
 		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
 		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
 			return o.ProductID == "widget" &&
 				len(o.Attrs) == 0 &&
@@ -79,8 +100,10 @@ func TestCreateOrder(main *testing.T) {
 				o.City == "Київ" &&
 				o.Address == "Відділення №5"
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, `{
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget",
 			"lang": "en",
 			"first_name": "Іван",
@@ -92,12 +115,14 @@ func TestCreateOrder(main *testing.T) {
 			"address": "Відділення №5"
 		}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
-		assert.JSONEq(t, `{"payment_url": "https://foo.bar"}`, w.Body.String())
+		assert.JSONEq(t, `{"payment_url": "https://pay.example/inv-1"}`, w.Body.String())
 	})
 
 	main.Run("ResolvesAndFormatsAttributes", func(t *testing.T) {
 		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
 		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
 		// display_color red: base 49.99 + attr_price default 10 = 59.99 → 5999 cents.
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
 			return len(o.Attrs) == 1 &&
@@ -107,8 +132,10 @@ func TestCreateOrder(main *testing.T) {
 				o.Price == 5999 &&
 				o.Currency == "USD"
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, attrDataDir, svc, `{
+		w := doRequest(t, attrDataDir, svc, mb, `{
 			"product_id": "widget",
 			"lang": "en",
 			"attributes": {"display_color": "red"},
@@ -125,13 +152,26 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("PassesRequestCountryToOrder", func(t *testing.T) {
 		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
 		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
 			return o.Country == "ua"
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		// Geo stub returns "xx"; the request says "ua"; the stored country must be "ua".
-		h := &Handler{orders: svc, shop: shopStub, geo: &geoDetectorStub{country: "xx"}, dataDir: baseDataDir, resp: resp, l: zerolog.Nop()}
+		h := &Handler{
+			orders:      svc,
+			monobank:    mb,
+			shop:        shopStub,
+			geo:         &geoDetectorStub{country: "xx"},
+			dataDir:     baseDataDir,
+			redirectURL: "https://test.example/thanks",
+			resp:        resp,
+			l:           zerolog.Nop(),
+		}
 		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
@@ -144,7 +184,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingProductIDReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -153,7 +194,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingLangReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -162,7 +204,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingFirstNameReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -171,7 +214,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingLastNameReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "phone": "1", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -180,7 +224,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingPhoneReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -189,7 +234,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingEmailReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -198,7 +244,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingCountryReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "city": "C", "address": "D"
 		}`)
@@ -207,7 +254,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingCityReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "address": "D"
 		}`)
@@ -216,7 +264,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingAddressReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C"
 		}`)
@@ -225,8 +274,9 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("CountryNotInAllowedListReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
 		// "fr" is not in shopStub.Countries (ua, us)
-		w := doRequest(t, baseDataDir, svc, `{
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "fr", "city": "C", "address": "D"
 		}`)
@@ -236,7 +286,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("UnknownProductReturns404", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "no-such-product", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -245,7 +296,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("UnknownLangReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "fr",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -254,7 +306,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("UnknownAttrIDReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, attrDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, attrDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"attributes": {"no_such_attr": "red"},
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
@@ -264,7 +317,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("UnknownAttrValueReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, attrDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, attrDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"attributes": {"display_color": "no_such_value"},
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
@@ -274,7 +328,8 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("PathTraversalInProductIDReturns404", func(t *testing.T) {
 		svc := &orderServiceMock{}
-		w := doRequest(t, baseDataDir, svc, `{
+		mb := &monobankClientMock{}
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "../widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
@@ -283,13 +338,117 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("ServiceErrorReturns502", func(t *testing.T) {
 		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
 		defer svc.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.Anything).Return("", assert.AnError)
 
-		w := doRequest(t, baseDataDir, svc, `{
+		w := doRequest(t, baseDataDir, svc, mb, `{
 			"product_id": "widget", "lang": "en",
 			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
 		}`)
 		assert.Equal(t, http.StatusBadGateway, w.Code)
+	})
+
+	main.Run("ZeroAmount_Returns400", func(t *testing.T) {
+		// product with price 0 → reject before any DB call.
+		zeroDir := main.TempDir()
+		zeroProductDir := filepath.Join(zeroDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(zeroProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(zeroProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: USD
+    value: 0.00
+`), 0644))
+
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		w := doRequest(t, zeroDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "order amount must be positive")
+		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
+		mb.AssertNotCalled(t, "CreateInvoice", mock.Anything, mock.Anything)
+	})
+
+	main.Run("MonobankSuccess_Returns201WithPageURL", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000099", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return req.Amount == 4999 &&
+				req.Ccy == 840 &&
+				req.MerchantPaymInfo.Reference == "018f4e3a-0000-7000-8000-000000000099" &&
+				req.RedirectURL == "https://test.example/thanks?order_id=018f4e3a-0000-7000-8000-000000000099"
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000099", mock.MatchedBy(func(inv order.Invoice) bool {
+			return inv.Provider == "monobank" && inv.InvoiceID == "inv-1" && inv.PageURL == "https://pay.example/inv-1" && inv.Amount == 4999 && inv.Currency == "USD"
+		})).Return(nil)
+
+		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body=%s", w.Body.String())
+		assert.JSONEq(t, `{"payment_url":"https://pay.example/inv-1"}`, w.Body.String())
+		svc.AssertExpectations(t)
+		mb.AssertExpectations(t)
+	})
+
+	main.Run("MonobankFailure_Returns502_NoAttach", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000098", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return((*monobank.CreateInvoiceResponse)(nil), &monobank.APIError{Status: 500, ErrCode: "limit_exceeded", ErrText: "x"})
+
+		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+
+		require.Equal(t, http.StatusBadGateway, w.Code)
+		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
+		svc.AssertCalled(t, "Submit", mock.Anything, mock.Anything)
+		svc.AssertNotCalled(t, "AttachInvoice", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	main.Run("CurrencyUnsupported_Returns502", func(t *testing.T) {
+		// Product with currency JPY (not in MapCurrency) → 502, never call Monobank.
+		jpyDir := main.TempDir()
+		jpyProductDir := filepath.Join(jpyDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(jpyProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(jpyProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: JPY
+    value: 49.99
+`), 0644))
+
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000097", nil)
+
+		w := doRequest(t, jpyDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+
+		require.Equal(t, http.StatusBadGateway, w.Code)
+		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
+		mb.AssertNotCalled(t, "CreateInvoice", mock.Anything, mock.Anything)
+	})
+
+	main.Run("AttachInvoiceFailure_Returns502", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000096", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-2", PageURL: "https://pay.example/inv-2"}, nil)
+		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000096", mock.Anything).Return(errors.New("db down"))
+
+		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+
+		require.Equal(t, http.StatusBadGateway, w.Code)
+		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
 	})
 }
