@@ -271,17 +271,6 @@ Nova Poshta JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). The clien
 in functional tests via `testapp.New` options. Both `q` and `city_ref` (branches only) are required — missing
 either returns 400. NP API failure returns 502 via `BadGatewayError`.
 
-### Monobank acquiring client (`internal/monobank`)
-
-`internal/monobank` is a thin client for the Monobank acquiring API. `APIError` is the shared error type returned
-whenever the API responds with an application-level error or a non-2xx HTTP status; callers use `errors.As` to
-extract `ErrCode`/`ErrText` for logging without leaking detail in user-facing responses.
-
-`MapCurrency(code string) (int, error)` converts an ISO-4217 alpha-3 currency code (case-insensitive) to the
-ISO-4217 numeric code expected by the Monobank API (UAH=980, USD=840, EUR=978). Unknown codes return
-`*APIError{ErrCode: "unsupported_currency"}`. The `ErrText` field holds the original (uppercased) input for
-forensic logging.
-
 ### Orders persistence (`internal/orderdb`)
 
 `orderdb.Writer` implements `order.Writer`. It owns a `*pgxpool.Pool` (concrete, not an interface) and writes
