@@ -120,6 +120,17 @@ func TestCreateInvoice(main *testing.T) {
 		_, err := newTestClient(srv).CreateInvoice(context.Background(), CreateInvoiceRequest{Amount: 100, Ccy: 980})
 		require.Error(t, err)
 	})
+
+	main.Run("NetworkError", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		// Close the server immediately so the next request fails at the
+		// transport layer (Do) rather than reaching the response path.
+		srv.Close()
+
+		_, err := newTestClient(srv).CreateInvoice(context.Background(), CreateInvoiceRequest{Amount: 100, Ccy: 980})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "do request:")
+	})
 }
 
 func TestNewClient(main *testing.T) {
