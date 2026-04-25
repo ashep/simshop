@@ -23,6 +23,12 @@ func (m *orderServiceMock) Submit(ctx context.Context, o order.Order) error {
 	return m.Called(ctx, o).Error(0)
 }
 
+func (m *orderServiceMock) List(ctx context.Context) ([]order.Record, error) {
+	args := m.Called(ctx)
+	v, _ := args.Get(0).([]order.Record)
+	return v, args.Error(1)
+}
+
 func TestCreateOrder(main *testing.T) {
 	// Shared product directory with testProductYAML (no attrs).
 	baseDataDir := main.TempDir()

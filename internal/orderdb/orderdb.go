@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ashep/simshop/internal/order"
@@ -88,4 +89,135 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// Reader reads orders and their attrs and history from PostgreSQL.
+// Implements order.Reader.
+type Reader struct {
+	db *pgxpool.Pool
+}
+
+// NewReader returns a Reader backed by db.
+func NewReader(db *pgxpool.Pool) *Reader {
+	return &Reader{db: db}
+}
+
+const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, currency,
+	first_name, middle_name, last_name,
+	country, city, phone, address,
+	admin_note, customer_note,
+	created_at, updated_at
+FROM orders
+ORDER BY created_at DESC`
+
+const listAttrsSQL = `SELECT order_id::text, attr_name, attr_value, attr_price
+FROM order_attrs
+WHERE order_id = ANY($1::uuid[])`
+
+const listHistorySQL = `SELECT id::text, order_id::text, status::text, note, created_at
+FROM order_history
+WHERE order_id = ANY($1::uuid[])
+ORDER BY created_at ASC`
+
+// List returns all orders, newest first, each populated with its attrs and
+// history. Always returns a non-nil slice on success (possibly empty).
+func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
+	rows, err := r.db.Query(ctx, listOrdersSQL)
+	if err != nil {
+		return nil, fmt.Errorf("query orders: %w", err)
+	}
+
+	out := []order.Record{}
+	var ids []string
+	for rows.Next() {
+		var rec order.Record
+		var middleName, adminNote, customerNote pgtype.Text
+		if err := rows.Scan(
+			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency,
+			&rec.FirstName, &middleName, &rec.LastName,
+			&rec.Country, &rec.City, &rec.Phone, &rec.Address,
+			&adminNote, &customerNote,
+			&rec.CreatedAt, &rec.UpdatedAt,
+		); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan order: %w", err)
+		}
+		if middleName.Valid {
+			v := middleName.String
+			rec.MiddleName = &v
+		}
+		if adminNote.Valid {
+			v := adminNote.String
+			rec.AdminNote = &v
+		}
+		if customerNote.Valid {
+			v := customerNote.String
+			rec.CustomerNote = &v
+		}
+		rec.Attrs = []order.Attr{}
+		rec.History = []order.HistoryEntry{}
+		out = append(out, rec)
+		ids = append(ids, rec.ID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iter orders: %w", err)
+	}
+
+	if len(out) == 0 {
+		return out, nil
+	}
+
+	// Build the index after the slice is fully grown so &out[i] stays valid.
+	indexByID := make(map[string]*order.Record, len(out))
+	for i := range out {
+		indexByID[out[i].ID] = &out[i]
+	}
+
+	aRows, err := r.db.Query(ctx, listAttrsSQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_attrs: %w", err)
+	}
+	for aRows.Next() {
+		var orderID string
+		var attr order.Attr
+		if err := aRows.Scan(&orderID, &attr.Name, &attr.Value, &attr.Price); err != nil {
+			aRows.Close()
+			return nil, fmt.Errorf("scan order_attr: %w", err)
+		}
+		if rec, ok := indexByID[orderID]; ok {
+			rec.Attrs = append(rec.Attrs, attr)
+		}
+	}
+	aRows.Close()
+	if err := aRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_attrs: %w", err)
+	}
+
+	hRows, err := r.db.Query(ctx, listHistorySQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_history: %w", err)
+	}
+	for hRows.Next() {
+		var entry order.HistoryEntry
+		var orderID string
+		var note pgtype.Text
+		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &entry.CreatedAt); err != nil {
+			hRows.Close()
+			return nil, fmt.Errorf("scan order_history: %w", err)
+		}
+		if note.Valid {
+			v := note.String
+			entry.Note = &v
+		}
+		if rec, ok := indexByID[orderID]; ok {
+			rec.History = append(rec.History, entry)
+		}
+	}
+	hRows.Close()
+	if err := hRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_history: %w", err)
+	}
+
+	return out, nil
 }

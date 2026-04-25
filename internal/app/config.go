@@ -1,7 +1,8 @@
 package app
 
 type Server struct {
-	Addr string `yaml:"addr"`
+	Addr   string `yaml:"addr"`
+	APIKey string `yaml:"api_key"` // bearer token required for protected admin routes; empty disables them
 }
 
 type NovaPoshtaConfig struct {

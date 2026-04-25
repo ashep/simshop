@@ -59,7 +59,9 @@ func Run(rt *runner.Runtime[Config]) error {
 	shopSvc := shop.NewService(catalog.Shop)
 	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
 
-	orderSvc := order.NewService(orderdb.New(db))
+	ordersWriter := orderdb.New(db)
+	ordersReader := orderdb.NewReader(db)
+	orderSvc := order.NewService(ordersWriter, ordersReader)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
@@ -107,6 +109,10 @@ func Run(rt *runner.Runtime[Config]) error {
 	}
 	srv.HandleFunc("POST /orders", corsMw(openapiMw(ordersHandler)))
 	srv.HandleFunc("OPTIONS /orders", corsMw(nop))
+	if cfg.Server.APIKey != "" {
+		apiKeyMw := handler.APIKeyMiddleware(cfg.Server.APIKey)
+		srv.HandleFunc("GET /orders", corsMw(apiKeyMw(openapiMw(hdl.ListOrders))))
+	}
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
 
