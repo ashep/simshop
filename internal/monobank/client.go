@@ -1,7 +1,44 @@
 // Package monobank is a thin client for the Monobank acquiring API.
 package monobank
 
-import "fmt"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
+
+const (
+	defaultServiceURL = "https://api.monobank.ua/"
+	createInvoicePath = "api/merchant/invoice/create"
+	maxBodySize       = 1 << 20 // 1 MB
+	maxBodyForensic   = 4096
+)
+
+// CreateInvoiceRequest is the application-level input for CreateInvoice.
+type CreateInvoiceRequest struct {
+	Amount           int
+	Ccy              int
+	MerchantPaymInfo MerchantPaymInfo
+	RedirectURL      string
+}
+
+// MerchantPaymInfo is the merchant-side metadata Monobank attaches to the invoice.
+type MerchantPaymInfo struct {
+	Reference   string // our order id
+	Destination string // shown in the bank app
+}
+
+// CreateInvoiceResponse is the parsed Monobank response.
+type CreateInvoiceResponse struct {
+	InvoiceID string
+	PageURL   string
+}
 
 // APIError is returned by the client when the Monobank API responds with an
 // application-level error or a non-2xx HTTP status. Callers extract structured
@@ -22,4 +59,111 @@ func (e *APIError) Error() string {
 		return fmt.Sprintf("monobank: status %d", e.Status)
 	}
 	return "monobank: api error"
+}
+
+// Client calls the Monobank acquiring API.
+type Client struct {
+	apiKey     string
+	httpClient *http.Client
+	serviceURL string
+}
+
+// NewClient returns a production Client. Pass "" for serviceURL to use the
+// default Monobank URL. Tests construct *Client directly to inject a test server.
+func NewClient(apiKey, serviceURL string) *Client {
+	url := serviceURL
+	if url == "" {
+		url = defaultServiceURL
+	}
+	return &Client{
+		apiKey:     apiKey,
+		httpClient: &http.Client{Timeout: 5 * time.Second},
+		serviceURL: url,
+	}
+}
+
+type createInvoiceBody struct {
+	Amount           int                     `json:"amount"`
+	Ccy              int                     `json:"ccy"`
+	MerchantPaymInfo merchantPaymInfoPayload `json:"merchantPaymInfo"`
+	RedirectURL      string                  `json:"redirectUrl,omitempty"`
+}
+
+type merchantPaymInfoPayload struct {
+	Reference   string `json:"reference,omitempty"`
+	Destination string `json:"destination,omitempty"`
+}
+
+type createInvoiceResponseBody struct {
+	InvoiceID string `json:"invoiceId"`
+	PageURL   string `json:"pageUrl"`
+	ErrCode   string `json:"errCode"`
+	ErrText   string `json:"errText"`
+}
+
+// CreateInvoice issues POST /api/merchant/invoice/create and returns the
+// parsed invoiceId/pageUrl. Application-level and HTTP errors are wrapped in
+// *APIError so handlers can extract structured fields with errors.As.
+func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*CreateInvoiceResponse, error) {
+	payload := createInvoiceBody{
+		Amount: req.Amount,
+		Ccy:    req.Ccy,
+		MerchantPaymInfo: merchantPaymInfoPayload{
+			Reference:   req.MerchantPaymInfo.Reference,
+			Destination: req.MerchantPaymInfo.Destination,
+		},
+		RedirectURL: req.RedirectURL,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, joinURL(c.serviceURL, createInvoicePath), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Token", c.apiKey)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
+	if readErr != nil {
+		return nil, fmt.Errorf("read body: %w", readErr)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &APIError{Status: resp.StatusCode, Body: forensicBody(raw)}
+	}
+
+	var parsed createInvoiceResponseBody
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	if parsed.ErrCode != "" {
+		return nil, &APIError{Status: resp.StatusCode, ErrCode: parsed.ErrCode, ErrText: parsed.ErrText, Body: forensicBody(raw)}
+	}
+	if parsed.InvoiceID == "" || parsed.PageURL == "" {
+		return nil, errors.New("monobank: empty invoiceId or pageUrl in response")
+	}
+	return &CreateInvoiceResponse{InvoiceID: parsed.InvoiceID, PageURL: parsed.PageURL}, nil
+}
+
+func joinURL(base, path string) string {
+	if strings.HasSuffix(base, "/") {
+		return base + path
+	}
+	return base + "/" + path
+}
+
+func forensicBody(b []byte) string {
+	if len(b) > maxBodyForensic {
+		return string(b[:maxBodyForensic])
+	}
+	return string(b)
 }
