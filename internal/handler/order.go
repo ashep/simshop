@@ -20,6 +20,7 @@ import (
 
 type orderService interface {
 	Submit(ctx context.Context, o order.Order) error
+	List(ctx context.Context) ([]order.Record, error)
 }
 
 type createOrderResponse struct {

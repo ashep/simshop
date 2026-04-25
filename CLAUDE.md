@@ -315,6 +315,47 @@ unit coverage, the writer is exercised end-to-end by `tests/api/order/post_test.
 instance from `docker-compose.tests.yaml`. Don't reintroduce a stub-based unit test for this package without
 also providing a real `pgx.Tx` implementation.
 
+### API key middleware (`handler.APIKeyMiddleware`)
+
+`handler.APIKeyMiddleware(apiKey string)` returns a bearer-token middleware backed by `cfg.Server.APIKey`. It
+parses the `Authorization` header, requires the `Bearer ` scheme, and compares the supplied token to the
+configured key with `crypto/subtle.ConstantTimeCompare` to defeat timing attacks. The middleware emits two
+distinct error reasons, both as HTTP 401: `"missing or invalid authorization header"` when the header is absent
+or does not start with `Bearer ` (or carries an empty token), and `"invalid api key"` when the header is
+well-formed but the token does not match. Both produce HTTP 401 via `UnauthorizedError`. Passing an empty
+`apiKey` to the constructor is a programmer error — the middleware would accept any empty bearer. Only register
+the protected route in `app.go` when `cfg.Server.APIKey != ""`; do not push that check inside the middleware.
+
+### Orders read path (`internal/order` + `internal/orderdb`)
+
+`order.Record` is the read-side struct returned by `GET /orders`. It carries the DB-generated columns
+(`ID`, `Status`, `CreatedAt`, `UpdatedAt`) alongside the persisted order fields, plus inline `Attrs []Attr`
+and `History []HistoryEntry`. `order.Record` is intentionally separate from `order.Order` (the write-only
+struct used by `CreateOrder`) — the two have different lifetimes and different fields, so unifying them would
+muddy both. Nullable text columns (`MiddleName`, `AdminNote`, `CustomerNote`, `HistoryEntry.Note`) are typed as
+`*string` so that SQL NULL becomes JSON omission via `json:",omitempty"` rather than serialising as an empty
+string.
+
+`orderdb.Reader.List(ctx)` issues exactly three queries (`orders`, `order_attrs`, `order_history`) and stitches
+the result in Go, keyed by `order_id`, to avoid the N+1 pattern that a per-order fan-out would create. Nullable
+text columns are scanned into `pgtype.Text` and converted to `*string` (NULL → nil) before being assigned to the
+`Record`. The reader has no unit tests for the same reason `orderdb.Writer` does not (see "No unit tests in
+`internal/orderdb`" above): `pgx.Tx`/`pgxpool.Pool` is too wide to stub by hand and no `pgxmock`-style dep is
+vendored. Functional tests in `tests/api/order/get_test.go` cover the read path end-to-end against the real
+Postgres container.
+
+### Conditional route registration
+
+Routes that depend on operator-supplied secrets (currently only `GET /orders`, gated by `cfg.Server.APIKey`)
+are registered **only when their secret is configured**. The conditional registration block lives in
+`internal/app/app.go`; the handler itself does not check for an empty key. Because `POST /orders` is registered
+unconditionally on the same path, an unregistered `GET /orders` produces HTTP 405 Method Not Allowed (not 404)
+— Go 1.22+ stdlib mux returns 405 when a path is registered for some methods but not the requested one. This is
+acceptable: the user-facing requirement is that the endpoint be unavailable when the key is unset, and 405 fits
+that. Do not add a runtime "401 / 404 if key empty" branch inside the handler — the conditional registration
+in `app.go` is the correct shape, and duplicating the check inside the handler would create two sources of
+truth.
+
 ### `uuidv7` and PostgreSQL 18
 
 The `orders` and `order_history` tables use `id uuid PRIMARY KEY DEFAULT uuidv7()`. `uuidv7()` is a built-in

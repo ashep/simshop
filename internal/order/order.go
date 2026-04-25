@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"time"
 )
 
 // Attr is a single selected attribute on an order, ready to be persisted as a
@@ -32,22 +33,66 @@ type Order struct {
 	CustomerNote string
 }
 
+// HistoryEntry is one row of an order's status timeline.
+type HistoryEntry struct {
+	ID        string
+	Status    string
+	Note      *string // nil when SQL NULL
+	CreatedAt time.Time
+}
+
+// Record is a fully-populated order read from the store, including DB-generated
+// fields and all related attrs and history entries.
+type Record struct {
+	ID           string
+	ProductID    string
+	Status       string // order_status enum, as text
+	Email        string
+	Price        int
+	Currency     string
+	FirstName    string
+	MiddleName   *string // nil when SQL NULL
+	LastName     string
+	Country      string
+	City         string
+	Phone        string
+	Address      string
+	AdminNote    *string // nil when SQL NULL
+	CustomerNote *string // nil when SQL NULL
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Attrs        []Attr         // never nil; possibly empty
+	History      []HistoryEntry // chronological, oldest first; never nil
+}
+
 // Writer persists an order to a backing store.
 type Writer interface {
 	Write(ctx context.Context, o Order) error
 }
 
-// Service submits orders via a Writer.
-type Service struct {
-	w Writer
+// Reader reads orders from a backing store.
+type Reader interface {
+	List(ctx context.Context) ([]Record, error)
 }
 
-// NewService returns a Service backed by w.
-func NewService(w Writer) *Service {
-	return &Service{w: w}
+// Service submits orders via a Writer and reads them via a Reader.
+type Service struct {
+	w Writer
+	r Reader
+}
+
+// NewService returns a Service backed by w and r.
+func NewService(w Writer, r Reader) *Service {
+	return &Service{w: w, r: r}
 }
 
 // Submit writes the order to the backing store.
 func (s *Service) Submit(ctx context.Context, o Order) error {
 	return s.w.Write(ctx, o)
+}
+
+// List returns all orders, newest first. Always returns a non-nil slice on
+// success (possibly empty).
+func (s *Service) List(ctx context.Context) ([]Record, error) {
+	return s.r.List(ctx)
 }

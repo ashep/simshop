@@ -88,4 +88,21 @@ func TestWriteError(main *testing.T) {
 			t.Errorf("unexpected body: %s", body)
 		}
 	})
+
+	main.Run("Unauthorized", func(t *testing.T) {
+		h := newTestHandler()
+		w := httptest.NewRecorder()
+
+		h.writeError(w, &UnauthorizedError{Reason: "invalid api key"})
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected status %d, got %d", http.StatusUnauthorized, w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %q", ct)
+		}
+		if body := w.Body.String(); body != `{"error": "invalid api key"}` {
+			t.Errorf("unexpected body: %s", body)
+		}
+	})
 }

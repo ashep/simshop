@@ -257,6 +257,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/nova-poshta/branches?city_ref=<ref>&q=<query>` | Search Nova Poshta branches in a city    |
 | `GET`    | `/nova-poshta/streets?city_ref=<ref>&q=<query>`  | Search Nova Poshta streets in a city     |
 | `POST`   | `/orders`                          | Submit a customer order (persisted to PostgreSQL)     |
+| `GET`    | `/orders`                          | List persisted orders (requires API key)              |
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -337,6 +338,29 @@ status.
 
 Migrations are embedded under `internal/sql/` and applied automatically at startup.
 
+#### Listing orders
+
+`GET /orders` returns every persisted order, newest first, with the order header, all selected attributes, and the
+full status history inlined into each record. It is intended for operator/admin tooling and is protected by a bearer
+token.
+
+**Auth:** the request must carry an `Authorization: Bearer <key>` header whose value matches the configured
+`server.api_key` from `config.yml`. A missing or malformed header returns HTTP 401 with
+`{"error": "missing or invalid authorization header"}`; a well-formed header carrying the wrong key returns HTTP 401
+with `{"error": "invalid api key"}`.
+
+**Conditional registration:** the `GET /orders` route is registered only when `server.api_key` is non-empty in
+config. When the key is empty (or absent) the route is not registered at all. Because `POST /orders` is registered
+unconditionally on the same path, requests to `GET /orders` then receive HTTP 405 Method Not Allowed (the path
+exists, just not for `GET`) rather than 404.
+
+**Response:** a JSON array of order records. Each record carries the `orders` table fields (`id`, `status`,
+`product_id`, `email`, `price` in minor units, `currency`, `first_name`, `middle_name` (optional), `last_name`,
+`country`, `city`, `phone`, `address`, `admin_note` (optional), `customer_note` (optional), `created_at`,
+`updated_at`) plus two inlined arrays: `attrs` — the rendered title pairs from `order_attrs` (one entry per selected
+attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
+change, each `{id, status, note (optional), created_at}`). Optional text fields are omitted from JSON when NULL.
+
 ## Configuration
 
 Config is loaded from `config.yml`:
@@ -345,6 +369,7 @@ Config is loaded from `config.yml`:
 debug: false
 server:
   addr: ":9000"
+  api_key: "<operator-api-key>"
   cors_origins:
     - "https://example.com"
 data_dir: "./data"
@@ -357,6 +382,9 @@ rate_limit: 1
 
 - `debug` — enable verbose logging (default: `false`).
 - `server.addr` — address and port to listen on (default: `":9000"`).
+- `server.api_key` — bearer token required to call `GET /orders`. Leave empty to disable the listing endpoint
+  entirely; in that case `GET /orders` is not registered and responds with HTTP 405 Method Not Allowed (because
+  `POST /orders` is registered on the same path).
 - `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
 - `database.dsn` — PostgreSQL DSN for the orders database. Required: the service runs the embedded migrations
