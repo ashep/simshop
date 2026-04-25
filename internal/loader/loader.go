@@ -95,8 +95,7 @@ func loadShop(dataDir string, c *Catalog) error {
 
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		c.Shop = &shop.Shop{}
-		return nil
+		return fmt.Errorf("shop.yaml is required but not found at %s", path)
 	}
 	if err != nil {
 		return fmt.Errorf("read shop.yaml: %w", err)
@@ -107,10 +106,12 @@ func loadShop(dataDir string, c *Catalog) error {
 		return fmt.Errorf("parse shop.yaml: %w", err)
 	}
 	if f.Shop == nil {
-		c.Shop = &shop.Shop{}
-	} else {
-		c.Shop = f.Shop
+		f.Shop = &shop.Shop{}
 	}
+	if len(f.Shop.Countries) == 0 {
+		return fmt.Errorf("shop.yaml must define a non-empty countries list")
+	}
+	c.Shop = f.Shop
 	return nil
 }
 

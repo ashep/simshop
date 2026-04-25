@@ -29,9 +29,21 @@ images:
     full: photo.jpg
 `
 
+const testShopYAML = `
+shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+      currency:
+        en: UAH
+      phone_code: "+380"
+`
+
 func makeDataDir(t *testing.T) string {
 	t.Helper()
 	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(testShopYAML), 0644))
 	prodDir := filepath.Join(dataDir, "products", testProductID)
 	imgDir := filepath.Join(prodDir, "images")
 	require.NoError(t, os.MkdirAll(imgDir, 0755))

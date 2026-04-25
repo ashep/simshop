@@ -1,15 +1,16 @@
 # SimShop
 
-SimShop is a read-only HTTP API service that serves catalog data (products, pages, shop metadata) loaded from YAML
-files at startup.
+SimShop is an HTTP API service that serves catalog data (products, pages, shop metadata) loaded from YAML files at
+startup and persists customer orders to PostgreSQL.
 
 ## Purpose
 
 SimShop is designed as a lightweight catalog backend where:
 
 - Products, pages, and shop metadata are defined in YAML files on disk and served via a JSON REST API.
-- No database is required — content is read from the filesystem at startup.
-- To update content, update the YAML files and restart the service.
+- The catalog is read from the filesystem at startup; no database is involved in serving catalog reads.
+- Customer orders submitted through `POST /orders` are persisted to a PostgreSQL database.
+- To update catalog content, update the YAML files and restart the service.
 
 ## Key Concepts
 
@@ -56,15 +57,41 @@ referenced by filename in `product.yaml`.
 
 ### Shop
 
-Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing
-multilingual maps for `name`, `title`, and `description`.
+Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing the
+allowed-countries map and multilingual maps for `name`, `title`, and `description`.
 
-`GET /shop` returns the shop object as JSON. A missing `shop.yaml` returns an empty JSON object `{}`.
+`shop.yaml` is **required** at startup. The application fails to start if it is missing or if `countries` is empty.
+The `countries` map is keyed by lowercase ISO alpha-2 country code; each entry carries a per-language `name`,
+per-language `currency` symbol/code, an international `phone_code` (e.g. `"+380"`), and a `flag` glyph
+(typically a Unicode flag emoji such as `"🇺🇦"`). The set of keys is the authoritative allow-list from which
+orders may be created — any order whose `country` field is not a key of this map is rejected with HTTP 400
+`invalid country`.
+
+`GET /shop` returns the shop object as JSON, including the full `countries` map.
 
 Example `shop.yaml`:
 
 ```yaml
 shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+        uk: Україна
+      currency:
+        en: UAH
+        uk: грн
+      phone_code: "+380"
+      flag: "🇺🇦"
+    us:
+      name:
+        en: United States
+        uk: США
+      currency:
+        en: USD
+        uk: дол.
+      phone_code: "+1"
+      flag: "🇺🇸"
   name:
     en: My Shop
     uk: Мій магазин
@@ -229,7 +256,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/nova-poshta/cities?q=<query>`    | Search Nova Poshta cities by name                     |
 | `GET`    | `/nova-poshta/branches?city_ref=<ref>&q=<query>` | Search Nova Poshta branches in a city    |
 | `GET`    | `/nova-poshta/streets?city_ref=<ref>&q=<query>`  | Search Nova Poshta streets in a city     |
-| `POST`   | `/orders`                          | Submit a customer order (appended to Google Sheets)   |
+| `POST`   | `/orders`                          | Submit a customer order (persisted to PostgreSQL)     |
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -254,8 +281,8 @@ All three endpoints return 502 if the Nova Poshta API call fails.
 
 ### Orders
 
-`POST /orders` accepts a single-product order and appends it as a row to a Google Sheet via a service account.
-No data is stored on the service side — Google Sheets is the sole persistence layer.
+`POST /orders` accepts a single-product order and inserts it as a row into the `orders` table in PostgreSQL. The
+order id, status (`new`), and timestamps are populated by database defaults.
 
 **Request body (JSON):**
 
@@ -269,18 +296,46 @@ No data is stored on the service side — Google Sheets is the sole persistence 
   "last_name": "Іваненко",
   "phone": "+380501234567",
   "email": "ivan@example.com",
+  "country": "ua",
   "city": "Київ",
   "address": "Відділення №5, вул. Хрещатик, 1",
   "notes": "Зателефонуйте за годину"
 }
 ```
 
-Required fields: `product_id`, `lang`, `first_name`, `last_name`, `phone`, `email`, `city`, `address`. Optional:
-`middle_name`, `attributes`, `notes`.
+Required fields: `product_id`, `lang`, `first_name`, `last_name`, `phone`, `email`, `country`, `city`, `address`.
+Optional: `middle_name`, `attributes`, `notes` (stored in the `customer_note` column).
 
-The server resolves the product name and price from `product.yaml` (including geo-based pricing and per-attribute
-add-on prices), formats the attributes string, and stamps the server-side datetime. Returns 201 on success, 400
-for invalid input, 404 for an unknown product, and 502 if the Google Sheets API call fails.
+The supplied `country` must be a key of the `shop.countries` map defined in `shop.yaml`; otherwise the request
+is rejected with HTTP 400 `invalid country`. The server resolves the price from `product.yaml` using the
+request-supplied `country` against `prices.<country>` (falling back to `prices.default` when there is no matching
+key) plus per-attribute add-on prices resolved the same way, converts each amount to integer minor units (cents),
+renders the selected attributes into title pairs in the customer's language, and inserts the order header, one row
+per selected attribute, and one initial `order_history` row inside a single transaction. The `country` column
+receives the request-supplied value verbatim; geo detection is no longer consulted at order time. Returns 201 on
+success, 400 for invalid input (including a missing or disallowed `country`), 404 for an unknown product, and 502
+if the database write fails.
+
+#### Schema
+
+`orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int,
+minor units, total = base + sum of attr add-ons), `currency`, `first_name`, `middle_name` (nullable), `last_name`,
+`country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable), `created_at`,
+`updated_at`.
+
+`order_attrs` columns: `order_id` (FK to `orders.id`), `attr_name`, `attr_value`, `attr_price` (int, minor units;
+the per-attribute add-on amount). One row per selected attribute on the order.
+
+`order_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `status` (`order_status`,
+NOT NULL), `note` (nullable), `created_at`. Each newly created order writes one initial row here with
+`status = 'new'` and `note` NULL inside the same transaction as the `orders` and `order_attrs` inserts, so an
+order always has at least one history entry. Future status changes will append further rows carrying the new
+status.
+
+`order_status` enum values: `new`, `paid`, `payment_failed`, `processing`, `cancelled`, `shipped`, `delivered`,
+`refund_requested`, `returned`, `refunded`.
+
+Migrations are embedded under `internal/sql/` and applied automatically at startup.
 
 ## Configuration
 
@@ -293,45 +348,22 @@ server:
   cors_origins:
     - "https://example.com"
 data_dir: "./data"
+database:
+  dsn: "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 nova_poshta:
   api_key: "<your-api-key>"
+rate_limit: 1
 ```
 
 - `debug` — enable verbose logging (default: `false`).
 - `server.addr` — address and port to listen on (default: `":9000"`).
 - `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
+- `database.dsn` — PostgreSQL DSN for the orders database. Required: the service runs the embedded migrations
+  against this DSN at startup and refuses to start if the connection fails. PostgreSQL 18 or newer is required
+  (the order id default uses the built-in `uuidv7()` function).
 - `nova_poshta.api_key` — Nova Poshta API key. Required for the `/nova-poshta/*` endpoints to work.
 - `nova_poshta.service_url` — override the Nova Poshta API base URL (default: `https://api.novaposhta.ua/v2.0/json/`).
   Leave unset in production; used in tests.
-- `google_sheets.credentials_json` — full service account JSON key (inline). The sheet must be shared with the
-  service account's email. Required for `POST /orders` to work; if empty, orders return 502.
-- `google_sheets.spreadsheet_id` — Google Sheets spreadsheet ID (from the sheet URL).
-- `google_sheets.sheet_name` — name of the target sheet/tab (defaults to `Sheet1` if unset).
-- `google_sheets.service_url` — override the Sheets API base URL. Leave unset in production; used in tests.
-
-### Setting up Google Sheets credentials
-
-1. Open [Google Cloud Console](https://console.cloud.google.com/) and select or create a project.
-2. Navigate to **APIs & Services → Library** and enable the **Google Sheets API**.
-3. Navigate to **APIs & Services → Credentials**, click **Create credentials → Service account**, fill in a name,
-   and click **Done**.
-4. Click the newly created service account, open the **Keys** tab, click **Add key → Create new key**, choose
-   **JSON**, and download the file.
-5. Open the downloaded JSON file, copy its entire contents, and paste them as the value of
-   `google_sheets.credentials_json` in `config.yml`. Because the JSON contains newlines, use a YAML block scalar:
-
-   ```yaml
-   google_sheets:
-     credentials_json: |
-       {
-         "type": "service_account",
-         "project_id": "...",
-         ...
-       }
-     spreadsheet_id: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
-     sheet_name: "Orders"
-   ```
-
-6. In Google Sheets, open the target spreadsheet, click **Share**, and share it with the service account's email
-   address (shown in the JSON as `client_email`) with **Editor** access.
+- `rate_limit` — requests per minute allowed for `POST /orders` per client IP. `0` defaults to 1 RPM; a negative
+  value disables rate limiting.

@@ -235,12 +235,32 @@ before `resp`).
 
 `POST /orders` is served by `handler.CreateOrder`. It reads the product YAML from disk (same pattern as
 `ServeProductContent`), validates required fields (`product_id`, `lang`, `first_name`, `last_name`, `phone`,
-`city`, `address`), resolves geo-based price, accumulates attribute add-on prices, formats attributes as
-`"AttrTitle: ValueTitle"` (sorted by attribute key), and delegates to `h.orders.Submit(ctx, order.Order)`.
+`email`, `country`, `city`, `address`), resolves the base price from `p.Prices[req.Country]` with `default`
+fallback, and walks attributes (sorted by attribute key) to build a `[]order.Attr` of rendered title pairs and
+per-attribute add-on prices in cents (also resolved by `req.Country` with `default` fallback). The total order
+price is the base plus the sum of `Attr.Price`. The handler then delegates to `h.orders.Submit(ctx, order.Order)`.
 Returns 201 with `{"payment_url": "https://foo.bar"}` (stub) on success, 400 for missing/invalid fields, 404 for
 unknown product or path traversal, 502 if the order service returns an error. The `orderService` interface is defined
-in `internal/handler/order.go`.
-`NewHandler` accepts `orders orderService` after `np novaPoshtaClient`.
+in `internal/handler/order.go`. `NewHandler` accepts `orders orderService` after `np novaPoshtaClient`.
+
+`country` is request-supplied at order time, not geo-detected. The same value drives both price resolution and
+the `orders.country` column, so the stored country always matches the price tier the customer was quoted; geo
+detection (`h.geo`) is still wired into the handler for `ServeProductContent` (browsing) but is not consulted
+by `CreateOrder`. Tests that need to exercise the `default` price fallback should send a country with no
+matching `prices.<country>` key (e.g., `"us"` against a UA-only catalog), not an empty string — empty values
+are now rejected with 400.
+
+`CreateOrder` validates `req.Country` against `shop.Shop.Countries` (loaded from `shop.yaml`) by calling
+`h.shop.Get(ctx)` and a map lookup (`_, ok := s.Countries[req.Country]`). This check runs before the product
+YAML is read so disallowed countries fail fast. A country not in the allow-list returns HTTP 400 with
+`{"error": "invalid country"}`. The allowed-countries map is independent of `prices.<country>` keys: the price
+for a permitted country can still fall back to `prices.default`. Use a country present in the shop allow-list
+but absent from the product's `prices` map to exercise the price `default` fallback path. The `default` key in
+`prices` is **not** an allowed country — it is a price-resolution fallback only.
+
+Prices crossing the domain boundary are integer minor units (cents) — never float — to match the DB column type
+and avoid float drift. The handler does the conversion: `int(math.Round(value * 100))` for both the base price and
+each attribute add-on. Round once per amount; do not multiply totals because the rounding bias would compound.
 
 ### Nova Poshta routes
 
@@ -251,20 +271,100 @@ Nova Poshta JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). The clien
 in functional tests via `testapp.New` options. Both `q` and `city_ref` (branches only) are required — missing
 either returns 400. NP API failure returns 502 via `BadGatewayError`.
 
-### Google Sheets client: disabled mode
+### Orders persistence (`internal/orderdb`)
 
-`googlesheets.NewClient` returns a valid (but disabled) `*Client` without error when both `credentialsJSON` and
-`serviceURL` are empty — the `httpClient` field is left `nil`. `Write` checks for `nil` and returns an error
-immediately. This prevents startup failure in test environments that don't need the sheets integration, without
-requiring every test package to configure `cfg.GoogleSheets.ServiceURL`. Tests that exercise the orders path must
-set `cfg.GoogleSheets.ServiceURL` to a fake server URL to get a working client.
+`orderdb.Writer` implements `order.Writer`. It owns a `*pgxpool.Pool` (concrete, not an interface) and writes
+each order in a single transaction:
+
+1. `INSERT INTO orders (...) ... RETURNING id` — captures the DB-generated `uuidv7` id.
+2. For each `order.Attr`, `INSERT INTO order_attrs (order_id, attr_name, attr_value, attr_price)`.
+3. `INSERT INTO order_history (order_id, status) VALUES ($1, 'new')` — one initial history row per created
+   order. `status` is the `order_status` enum and is NOT NULL; the literal `'new'` matches the orders table
+   default for newly created orders. `note` is left NULL; `id` and `created_at` are filled by column defaults.
+   The history insert is a side effect of order creation, not driven by any field in `order.Order`; do not add
+   a history field to the public `Order` struct.
+4. `Commit`. The deferred `Rollback` is a no-op after a successful commit (`pgx.ErrTxClosed`, ignored).
+
+This is transactional because a half-written order — header without attrs, or attrs/history without header —
+would be worse than a clean failure: the customer's record would be ambiguous and reconciliation harder.
+Atomicity is the whole reason for the `order_attrs` and initial `order_history` writes living in the same
+transaction as `orders`.
+
+The wired pool is created in `internal/app/app.go` via `pgxpool.New(rt.Ctx, cfg.Database.DSN)` after
+`dbmigrator.RunPostgres` has applied the embedded migrations from `internal/sql/`.
+
+The DB schema columns drive the field mapping. `order.Order` carries only what the writer must INSERT — `id`,
+`status`, `created_at`, and `updated_at` come from PostgreSQL defaults and are absent from the struct.
+
+- `Order.Attrs` is `[]order.Attr`. Each `Attr{Name, Value, Price}` becomes one row in `order_attrs`, with `Price`
+  being the per-attribute add-on amount in minor units (cents). `Order.Price` is the total — base + sum of
+  `Attr.Price` — so it can be read directly without joining.
+- `Attr.Name` and `Attr.Value` store **rendered titles** in the customer's language (e.g. `"Display color"` →
+  `"Red"`), not raw attribute/value IDs. This makes orders self-documenting and immutable to later product YAML
+  renames; it is the reason `handler.CreateOrder` resolves `attrLang.Title` and `attrVal.Title` before appending
+  to the slice.
+- `MiddleName == ""` and `CustomerNote == ""` are converted to SQL NULL via the `nullIfEmpty` helper so the
+  nullable columns store NULL rather than an empty string.
+
+#### No unit tests in `internal/orderdb`
+
+The transactional writer needs `*pgxpool.Pool.Begin → pgx.Tx`. `pgx.Tx` is a wide interface (Exec, Query,
+QueryRow, Commit, Rollback, CopyFrom, SendBatch, Prepare, …) that is impractical to stub by hand, and no mock
+package (e.g. `pgxmock`) is vendored. Rather than introduce a leaky narrow interface or a heavy dep just for
+unit coverage, the writer is exercised end-to-end by `tests/api/order/post_test.go` against the real Postgres
+instance from `docker-compose.tests.yaml`. Don't reintroduce a stub-based unit test for this package without
+also providing a real `pgx.Tx` implementation.
+
+### `uuidv7` and PostgreSQL 18
+
+The `orders` and `order_history` tables use `id uuid PRIMARY KEY DEFAULT uuidv7()`. `uuidv7()` is a built-in
+function in PostgreSQL 18+ — there is no separate `uuidv7` type. Earlier PG versions need an extension
+(`pg_uuidv7`) or a custom `CREATE DOMAIN`. The test container in `docker-compose.tests.yaml` pins
+`postgres:18-alpine` to satisfy this requirement.
+
+### Functional tests: postgres backend
+
+`docker-compose.tests.yaml` defines a `postgres:18-alpine` service. The `tests` service depends on
+`postgres: service_healthy` and exports `APP_DB_DSN=postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable`.
+`testapp.New` reads `APP_DB_DSN` (defaulting to the same value) and assigns it to `cfg.Database.DSN`. Tests can
+override the DSN via the `opts` callback like any other config field.
+
+Because the postgres container persists across `task go:test:func` runs, tests that need clean state must truncate
+explicitly. `tests/api/order/post_test.go` uses a `truncateOrders` helper that runs
+`TRUNCATE order_attrs, order_history, orders RESTART IDENTITY CASCADE` before each subtest that inspects the
+tables. After a destructive test (e.g. forcing a DB error), restore the schema in `t.Cleanup` rather than leaving
+the database in a broken state — `TestCreateOrder_DBFailure` does this by renaming `orders` away and back instead
+of dropping it.
+
+When the postgres state ends up dirty (e.g. an interrupted test), run `task go:test:func:clean` to wipe and recreate
+the container.
+
+`testapp.New` exposes the DSN via `(*App).DSN()` so tests can open their own `pgxpool.Pool` to inspect or mutate
+the database.
+
+### `t.Cleanup` runs after `defer`, not before
+
+`t.Cleanup` callbacks fire after the test function returns *and after all deferred statements run*. If a test does
+`defer pool.Close()` and then registers a cleanup that uses the pool, the cleanup will silently fail because the
+pool is already closed. Either close the pool inside the cleanup callback, or skip the `defer` and let the cleanup
+own teardown. This bit `TestCreateOrder_DBFailure`'s table-rename rollback once already.
 
 ### Loader: `shop.yaml` shop settings
 
-`{data_dir}/shop.yaml` holds a single `shop:` key mapping to `shop.Shop` (name, title, description — each a
-`map[string]string`). It is loaded by `loadShop` into `catalog.Shop`. A missing file results in an empty `&shop.Shop{}`
-— not an error. A malformed YAML file is fatal. The wrapper struct `shopFile` is needed because the YAML root key is
-`shop:`, not the struct fields directly.
+`{data_dir}/shop.yaml` holds a single `shop:` key mapping to `shop.Shop` (countries, name, title, description).
+It is loaded by `loadShop` into `catalog.Shop`. The file is **mandatory** — a missing `shop.yaml` is a fatal
+startup error, and `shop.countries` must be a non-empty map. A malformed YAML file is fatal. The wrapper struct
+`shopFile` is needed because the YAML root key is `shop:`, not the struct fields directly. Functional and loader
+tests must therefore lay down a valid `shop.yaml` (with at least one `countries` entry) in their data dir, or the
+app will refuse to boot.
+
+`shop.Countries map[string]*Country` is keyed by lowercase ISO alpha-2 country code. Each `Country` carries
+`Name map[string]string` (per-language display name), `Currency map[string]string` (per-language currency
+symbol/code), `PhoneCode string` (international dialing prefix, e.g. `"+380"`), and `Flag string` (a glyph,
+typically a Unicode flag emoji such as `"🇺🇦"`, used by the frontend country picker). The set of map keys is
+the authoritative source for which countries can place orders (see `CreateOrder` validation). It is independent of
+any product's `prices` map: a country key can exist in `shop.countries` without appearing in `prices`, in which
+case the `prices.default` fallback is used at order time.
 
 ### Loader: missing products directory is not an error
 

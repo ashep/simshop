@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/ashep/simshop/api"
 	"github.com/ashep/simshop/internal/openapi"
+	"github.com/ashep/simshop/internal/shop"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +27,15 @@ func newTestHandler() *Handler {
 type geoDetectorStub struct{ country string }
 
 func (s *geoDetectorStub) Detect(_ *http.Request) string { return s.country }
+
+type shopServiceStub struct {
+	shop *shop.Shop
+	err  error
+}
+
+func (s *shopServiceStub) Get(_ context.Context) (*shop.Shop, error) {
+	return s.shop, s.err
+}
 
 func TestWriteError(main *testing.T) {
 	main.Run("BadRequest", func(t *testing.T) {

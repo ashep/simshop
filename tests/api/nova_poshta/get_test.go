@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ashep/simshop/internal/app"
@@ -13,6 +15,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testShopYAML = `
+shop:
+  countries:
+    ua:
+      name:
+        en: Ukraine
+      currency:
+        en: UAH
+      phone_code: "+380"
+`
 
 func makeFakeNPServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -65,6 +78,7 @@ func TestSearchNovaPoshta(main *testing.T) {
 	main.Cleanup(npSrv.Close)
 
 	dataDir := main.TempDir()
+	require.NoError(main, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(testShopYAML), 0644))
 	a := testapp.New(main, dataDir, func(cfg *app.Config) {
 		cfg.NovaPoshta.ServiceURL = npSrv.URL
 		cfg.NovaPoshta.APIKey = "test-key"
