@@ -15,7 +15,7 @@ import (
 
 // Writer inserts an order and its attributes into PostgreSQL inside a single
 // transaction so partial failure cannot leave an order without its attrs (or
-// vice versa). Implements order.Writer.
+// vice versa). Implements order.Writer and order.InvoiceWriter.
 type Writer struct {
 	db *pgxpool.Pool
 }
@@ -64,7 +64,9 @@ func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 		return "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
+		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
 		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			// Best-effort: surface unexpected rollback errors via the existing returned error.
 			_ = rbErr
 		}
 	}()
@@ -104,7 +106,9 @@ func (w *Writer) AttachInvoice(ctx context.Context, orderID string, inv order.In
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
+		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
 		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			// Best-effort: surface unexpected rollback errors via the existing returned error.
 			_ = rbErr
 		}
 	}()
