@@ -52,6 +52,14 @@ func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 			DSN: dsn,
 		},
 	}
+
+	if v := os.Getenv("APP_MONOBANK_API_KEY"); v != "" {
+		cfg.Monobank.APIKey = v
+	} else {
+		cfg.Monobank.APIKey = "test-key"
+	}
+	cfg.Monobank.RedirectURL = "https://test.example/thanks"
+
 	for _, opt := range opts {
 		opt(&cfg)
 	}
