@@ -13,6 +13,7 @@ import (
 	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
+	"github.com/ashep/simshop/internal/monobank"
 	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/ashep/simshop/internal/order"
@@ -29,6 +30,13 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	if cfg.DataDir == "" {
 		cfg.DataDir = "./data"
+	}
+
+	if cfg.Monobank.APIKey == "" {
+		return fmt.Errorf("monobank api key is required")
+	}
+	if cfg.Monobank.RedirectURL == "" {
+		return fmt.Errorf("monobank redirect url is required")
 	}
 
 	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
@@ -58,17 +66,19 @@ func Run(rt *runner.Runtime[Config]) error {
 	pageSvc := page.NewService(catalog.Pages)
 	shopSvc := shop.NewService(catalog.Shop)
 	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
+	mbClient := monobank.NewClient(cfg.Monobank.APIKey, cfg.Monobank.ServiceURL)
 
 	ordersWriter := orderdb.New(db)
 	ordersReader := orderdb.NewReader(db)
-	orderSvc := order.NewService(ordersWriter, ordersReader)
+	// orderdb.Writer implements both order.Writer and order.InvoiceWriter.
+	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, mbClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, cfg.Monobank.RedirectURL, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
