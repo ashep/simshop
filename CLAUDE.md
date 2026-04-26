@@ -195,6 +195,13 @@ the underlying detail. The handler logs the full detail with structured fields (
 `errors.As(err, &apiErr)` to extract `*monobank.APIError`. HTTP non-2xx and `errCode`/`errText` body fields both
 produce `*monobank.APIError`.
 
+`monobank.ParseWebhook(body []byte)` decodes a Monobank invoice-status webhook delivery. It validates that
+`invoiceId`, `status`, and `reference` are non-empty and returns a `*WebhookPayload`. `WebhookPayload.RawBody` is a
+**defensive copy** of the input bytes (via `append(json.RawMessage(nil), body...)`), safe to store as JSONB without
+re-encoding even if the caller reuses the buffer. `WebhookPayload` carries no JSON struct tags — it is a domain
+type; only the unexported `webhookBody` wire struct carries tags. Empty date strings produce zero `time.Time` (not an
+error), tolerating future Monobank contract changes. Dates are parsed with `time.RFC3339`.
+
 ### internal/orderdb
 
 `orderdb.Writer` and `orderdb.Reader` own a `*pgxpool.Pool` (concrete, not an interface). The pool is created in
