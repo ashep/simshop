@@ -4,10 +4,6 @@ package order_test
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,17 +24,12 @@ const testAPIKey = "test-api-key"
 func TestListOrders(main *testing.T) {
 	dataDir := makeDataDir(main)
 
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(main, err)
-	pubPEM, err := encodePubPEM(&priv.PublicKey)
-	require.NoError(main, err)
-	pubKeyPayload := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM) + `"}`)
-	_ = priv
+	pubPayload := pubKeyPayload(main)
 
 	var mbCounter atomic.Uint64
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/merchant/pubkey" {
-			_, _ = w.Write(pubKeyPayload)
+			_, _ = w.Write(pubPayload)
 			return
 		}
 		n := mbCounter.Add(1)
@@ -196,16 +187,11 @@ func TestListOrders(main *testing.T) {
 func TestListOrders_NoAPIKeyConfigured(t *testing.T) {
 	dataDir := makeDataDir(t)
 
-	privNoKey, errNoKey := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, errNoKey)
-	pubPEMNoKey, errNoKey := encodePubPEM(&privNoKey.PublicKey)
-	require.NoError(t, errNoKey)
-	pubKeyPayloadNoKey := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEMNoKey) + `"}`)
-	_ = privNoKey
+	pubPayloadNoKey := pubKeyPayload(t)
 
 	mbServerNoKey := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/merchant/pubkey" {
-			_, _ = w.Write(pubKeyPayloadNoKey)
+			_, _ = w.Write(pubPayloadNoKey)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
