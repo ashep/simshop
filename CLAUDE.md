@@ -238,10 +238,15 @@ before `resp`).
 `email`, `country`, `city`, `address`), resolves the base price from `p.Prices[req.Country]` with `default`
 fallback, and walks attributes (sorted by attribute key) to build a `[]order.Attr` of rendered title pairs and
 per-attribute add-on prices in cents (also resolved by `req.Country` with `default` fallback). The total order
-price is the base plus the sum of `Attr.Price`. The handler then delegates to `h.orders.Submit(ctx, order.Order)`.
-Returns 201 with `{"payment_url": "https://foo.bar"}` (stub) on success, 400 for missing/invalid fields, 404 for
-unknown product or path traversal, 502 if the order service returns an error. The `orderService` interface is defined
-in `internal/handler/order.go`. `NewHandler` accepts `orders orderService` after `np novaPoshtaClient`.
+price is the base plus the sum of `Attr.Price`. The handler then executes a two-phase flow: (1) calls
+`h.orders.Submit(ctx, order.Order)` to persist the order and initial `order_history` row in a transaction,
+(2) calls `h.monobank.CreateInvoice(...)` to obtain a hosted-payment page URL, and (3) transitions the order to
+`status='awaiting_payment'` in a second transaction. Returns 201 with `{"payment_url": "<monobank-page-url>"}` on
+success, 400 for missing/invalid fields, 404 for unknown product or path traversal, 502 if the DB write, Monobank
+call, or second DB transaction fails. The `orderService` interface is defined in `internal/handler/order.go`. The
+`monobankClient` interface is defined in the same file. `NewHandler` accepts parameters in this order: `prod`,
+`pages`, `shopSvc`, `np novaPoshtaClient`, `mb monobankClient`, `orders orderService`, `geo`, `resp`, `dataDir
+string`, `redirectURL string`, `l zerolog.Logger`.
 
 `country` is request-supplied at order time, not geo-detected. The same value drives both price resolution and
 the `orders.country` column, so the stored country always matches the price tier the customer was quoted; geo

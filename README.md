@@ -282,14 +282,22 @@ All three endpoints return 502 if the Nova Poshta API call fails.
 
 ### Orders
 
-`POST /orders` accepts a single-product order and inserts it as a row into the `orders` table in PostgreSQL. The
-order id, status (`new`), and timestamps are populated by database defaults.
+`POST /orders` accepts a single-product order and persists it to PostgreSQL via a two-phase flow:
 
-**Payments.** When a customer submits `POST /orders`, the application creates an order in `status='new'`, then issues a
-Monobank acquiring invoice. On success the order transitions to `status='awaiting_payment'` and the response carries
-the Monobank `pageUrl` as `payment_url`. If the Monobank call fails, the order stays in `status='new'` and the
-customer receives HTTP 502; the operator can re-issue an invoice manually. No webhook handling is implemented in this
-version — `awaiting_payment` does not transition automatically based on customer behaviour.
+1. **Transaction 1** — inserts the order header (`orders`), one row per selected attribute (`order_attrs`), and one
+   initial `order_history` row with `status='new'`, all inside a single database transaction. On commit the order
+   exists in `status='new'`.
+2. **Monobank invoice** — the handler calls the Monobank acquiring API to create a hosted-payment invoice. If this call
+   fails, the order stays in `status='new'` and the client receives HTTP 502; the operator can re-issue an invoice
+   manually.
+3. **Transaction 2** — if the invoice is created successfully, a second transaction transitions the order to
+   `status='awaiting_payment'` by appending a second `order_history` row. The response returns HTTP 201 with the
+   Monobank `pageUrl` as `{"payment_url": "<url>"}`.
+
+After a successful request there are always **two** `order_history` rows: one for `new` (written in tx1) and one for
+`awaiting_payment` (written in tx2). HTTP 502 is returned if the DB write, the Monobank call, or the second DB
+transaction fails. No webhook handling is implemented — `awaiting_payment` does not transition automatically based on
+customer behaviour.
 
 **Request body (JSON):**
 
@@ -317,11 +325,10 @@ The supplied `country` must be a key of the `shop.countries` map defined in `sho
 is rejected with HTTP 400 `invalid country`. The server resolves the price from `product.yaml` using the
 request-supplied `country` against `prices.<country>` (falling back to `prices.default` when there is no matching
 key) plus per-attribute add-on prices resolved the same way, converts each amount to integer minor units (cents),
-renders the selected attributes into title pairs in the customer's language, and inserts the order header, one row
-per selected attribute, and one initial `order_history` row inside a single transaction. The `country` column
-receives the request-supplied value verbatim; geo detection is no longer consulted at order time. Returns 201 on
-success, 400 for invalid input (including a missing or disallowed `country`), 404 for an unknown product, and 502
-if the database write fails.
+renders the selected attributes into title pairs in the customer's language, and then executes the two-phase flow
+described above. The `country` column receives the request-supplied value verbatim; geo detection is no longer
+consulted at order time. Returns 201 on success, 400 for invalid input (including a missing or disallowed `country`),
+404 for an unknown product, and 502 if the DB write, the Monobank call, or the second DB transaction fails.
 
 #### Schema
 
@@ -334,12 +341,12 @@ minor units, total = base + sum of attr add-ons), `currency`, `first_name`, `mid
 the per-attribute add-on amount). One row per selected attribute on the order.
 
 `order_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `status` (`order_status`,
-NOT NULL), `note` (nullable), `created_at`. Each newly created order writes one initial row here with
-`status = 'new'` and `note` NULL inside the same transaction as the `orders` and `order_attrs` inserts, so an
-order always has at least one history entry. Future status changes will append further rows carrying the new
-status.
+NOT NULL), `note` (nullable), `created_at`. A successfully created order has exactly two initial rows: one with
+`status = 'new'` written in the first transaction (alongside `orders` and `order_attrs`), and one with
+`status = 'awaiting_payment'` written in the second transaction after the Monobank invoice is confirmed. Future
+status changes will append further rows carrying the new status.
 
-`order_status` enum values: `new`, `paid`, `payment_failed`, `processing`, `cancelled`, `shipped`, `delivered`,
+`order_status` enum values: `new`, `awaiting_payment`, `paid`, `processing`, `cancelled`, `shipped`, `delivered`,
 `refund_requested`, `returned`, `refunded`.
 
 Migrations are embedded under `internal/sql/` and applied automatically at startup.
