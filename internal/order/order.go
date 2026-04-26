@@ -91,6 +91,9 @@ type Writer interface {
 // Reader reads orders from a backing store.
 type Reader interface {
 	List(ctx context.Context) ([]Record, error)
+	// GetStatus returns the current order_status (as text) for the given
+	// order id. Returns ErrNotFound when no row matches.
+	GetStatus(ctx context.Context, orderID string) (string, error)
 }
 
 // InvoiceWriter records an issued payment invoice for an order. Implementations
@@ -101,17 +104,25 @@ type InvoiceWriter interface {
 	AttachInvoice(ctx context.Context, orderID string, inv Invoice) error
 }
 
+// PaymentEventWriter applies a payment-provider event to an order: it updates
+// orders.status and appends an order_history row carrying a human note and
+// the verbatim provider payload. The two writes share a single transaction.
+type PaymentEventWriter interface {
+	ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error
+}
+
 // Service submits orders via a Writer, attaches invoices via an InvoiceWriter,
 // and reads them via a Reader.
 type Service struct {
-	w  Writer
-	r  Reader
-	iw InvoiceWriter
+	w   Writer
+	r   Reader
+	iw  InvoiceWriter
+	pew PaymentEventWriter
 }
 
-// NewService returns a Service backed by w, r, and iw.
-func NewService(w Writer, r Reader, iw InvoiceWriter) *Service {
-	return &Service{w: w, r: r, iw: iw}
+// NewService returns a Service backed by w, r, iw, and pew.
+func NewService(w Writer, r Reader, iw InvoiceWriter, pew PaymentEventWriter) *Service {
+	return &Service{w: w, r: r, iw: iw, pew: pew}
 }
 
 // Submit writes the order to the backing store and returns the assigned id.
@@ -128,4 +139,16 @@ func (s *Service) AttachInvoice(ctx context.Context, orderID string, inv Invoice
 // success (possibly empty).
 func (s *Service) List(ctx context.Context) ([]Record, error) {
 	return s.r.List(ctx)
+}
+
+// GetStatus returns the current order_status for orderID. Returns ErrNotFound
+// when no row matches.
+func (s *Service) GetStatus(ctx context.Context, orderID string) (string, error) {
+	return s.r.GetStatus(ctx, orderID)
+}
+
+// ApplyPaymentEvent updates the order status and appends an order_history row
+// carrying note and payload. Both writes happen in a single transaction.
+func (s *Service) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
+	return s.pew.ApplyPaymentEvent(ctx, orderID, status, note, payload)
 }
