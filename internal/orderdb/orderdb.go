@@ -349,6 +349,9 @@ func (w *Writer) ApplyPaymentEvent(ctx context.Context, orderID, status, note st
 	if err != nil {
 		return fmt.Errorf("update order status: %w", err)
 	}
+	if tag.RowsAffected() == 0 {
+		return order.ErrNotFound
+	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
 	}

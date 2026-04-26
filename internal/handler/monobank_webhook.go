@@ -143,6 +143,13 @@ func (h *Handler) MonobankWebhook(w http.ResponseWriter, r *http.Request) {
 
 	note := buildWebhookNote(payload)
 	if err := h.orders.ApplyPaymentEvent(r.Context(), payload.Reference, target, note, payload.RawBody); err != nil {
+		if stderrors.Is(err, order.ErrNotFound) {
+			h.l.Warn().
+				Str("reference", payload.Reference).
+				Msg("monobank webhook: order vanished between status check and payment event")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		h.l.Error().Err(err).
 			Str("reference", payload.Reference).
 			Str("target", target).
