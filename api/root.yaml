@@ -561,6 +561,26 @@ components:
           type: string
           format: date-time
 
+    OrderInvoice:
+      type: object
+      required:
+        - provider
+        - invoice_id
+        - page_url
+        - amount
+        - currency
+      properties:
+        provider:
+          type: string
+        invoice_id:
+          type: string
+        page_url:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+
     OrderRecord:
       type: object
       required:
@@ -580,6 +600,7 @@ components:
         - updated_at
         - attrs
         - history
+        - invoices
       properties:
         id:
           type: string
@@ -629,3 +650,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderHistoryEntry'
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderInvoice'

@@ -8,25 +8,26 @@ import (
 )
 
 type orderRecordResponse struct {
-	ID           string                 `json:"id"`
-	ProductID    string                 `json:"product_id"`
-	Status       string                 `json:"status"`
-	Email        string                 `json:"email"`
-	Price        int                    `json:"price"`
-	Currency     string                 `json:"currency"`
-	FirstName    string                 `json:"first_name"`
-	MiddleName   *string                `json:"middle_name,omitempty"`
-	LastName     string                 `json:"last_name"`
-	Country      string                 `json:"country"`
-	City         string                 `json:"city"`
-	Phone        string                 `json:"phone"`
-	Address      string                 `json:"address"`
-	AdminNote    *string                `json:"admin_note,omitempty"`
-	CustomerNote *string                `json:"customer_note,omitempty"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
-	Attrs        []orderAttrResponse    `json:"attrs"`
-	History      []orderHistoryResponse `json:"history"`
+	ID           string                   `json:"id"`
+	ProductID    string                   `json:"product_id"`
+	Status       string                   `json:"status"`
+	Email        string                   `json:"email"`
+	Price        int                      `json:"price"`
+	Currency     string                   `json:"currency"`
+	FirstName    string                   `json:"first_name"`
+	MiddleName   *string                  `json:"middle_name,omitempty"`
+	LastName     string                   `json:"last_name"`
+	Country      string                   `json:"country"`
+	City         string                   `json:"city"`
+	Phone        string                   `json:"phone"`
+	Address      string                   `json:"address"`
+	AdminNote    *string                  `json:"admin_note,omitempty"`
+	CustomerNote *string                  `json:"customer_note,omitempty"`
+	CreatedAt    time.Time                `json:"created_at"`
+	UpdatedAt    time.Time                `json:"updated_at"`
+	Attrs        []orderAttrResponse      `json:"attrs"`
+	History      []orderHistoryResponse   `json:"history"`
+	Invoices     []orderInvoiceResponse   `json:"invoices"`
 }
 
 type orderAttrResponse struct {
@@ -40,6 +41,14 @@ type orderHistoryResponse struct {
 	Status    string    `json:"status"`
 	Note      *string   `json:"note,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type orderInvoiceResponse struct {
+	Provider  string `json:"provider"`
+	InvoiceID string `json:"invoice_id"`
+	PageURL   string `json:"page_url"`
+	Amount    int    `json:"amount"`
+	Currency  string `json:"currency"`
 }
 
 // ListOrders returns every persisted order with its attrs and history,
@@ -81,6 +90,16 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 			CreatedAt: h.CreatedAt,
 		}
 	}
+	invoices := make([]orderInvoiceResponse, len(rec.Invoices))
+	for i, inv := range rec.Invoices {
+		invoices[i] = orderInvoiceResponse{
+			Provider:  inv.Provider,
+			InvoiceID: inv.InvoiceID,
+			PageURL:   inv.PageURL,
+			Amount:    inv.Amount,
+			Currency:  inv.Currency,
+		}
+	}
 	return orderRecordResponse{
 		ID:           rec.ID,
 		ProductID:    rec.ProductID,
@@ -101,5 +120,6 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 		UpdatedAt:    rec.UpdatedAt,
 		Attrs:        attrs,
 		History:      history,
+		Invoices:     invoices,
 	}
 }
