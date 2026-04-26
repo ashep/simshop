@@ -199,7 +199,14 @@ func fetchOrderHistory(t *testing.T, dsn, orderID string) []orderHistoryRow {
 func TestCreateOrder(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-existing","pageUrl":"https://pay.example/inv-existing"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
 	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
 		cfg.RateLimit = -1 // disable rate limiting so subtests don't hit 429
 	})
 	a.Start()
@@ -245,13 +252,13 @@ func TestCreateOrder(main *testing.T) {
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"payment_url": "https://foo.bar"}`, string(body))
+		assert.JSONEq(t, `{"payment_url": "https://pay.example/inv-existing"}`, string(body))
 
 		rows := fetchOrders(t, a.DSN())
 		require.Len(t, rows, 1)
 		r := rows[0]
 		assert.Equal(t, "widget", r.ProductID)
-		assert.Equal(t, "new", r.Status)
+		assert.Equal(t, "awaiting_payment", r.Status)
 		assert.Equal(t, "ivan@example.com", r.Email)
 		assert.Equal(t, 4999, r.Price)
 		assert.Equal(t, "USD", r.Currency)
@@ -267,10 +274,13 @@ func TestCreateOrder(main *testing.T) {
 		assert.Empty(t, fetchOrderAttrs(t, a.DSN(), r.ID))
 
 		history := fetchOrderHistory(t, a.DSN(), r.ID)
-		require.Len(t, history, 1)
+		require.Len(t, history, 2)
 		assert.Equal(t, r.ID, history[0].OrderID)
 		assert.Equal(t, "new", history[0].Status)
 		assert.Nil(t, history[0].Note)
+		assert.Equal(t, r.ID, history[1].OrderID)
+		assert.Equal(t, "awaiting_payment", history[1].Status)
+		assert.Nil(t, history[1].Note)
 	})
 
 	main.Run("WithAttributesCalculatesAddOnPriceAndPersistsAttrRow", func(t *testing.T) {
