@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +35,15 @@ func (m *orderServiceMock) List(ctx context.Context) ([]order.Record, error) {
 	args := m.Called(ctx)
 	v, _ := args.Get(0).([]order.Record)
 	return v, args.Error(1)
+}
+
+func (m *orderServiceMock) GetStatus(ctx context.Context, id string) (string, error) {
+	args := m.Called(ctx, id)
+	return args.String(0), args.Error(1)
+}
+
+func (m *orderServiceMock) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
+	return m.Called(ctx, orderID, status, note, payload).Error(0)
 }
 
 type monobankClientMock struct{ mock.Mock }
@@ -75,6 +85,7 @@ func TestCreateOrder(main *testing.T) {
 			geo:         &geoDetectorStub{},
 			dataDir:     dataDir,
 			redirectURL: "https://test.example/thanks",
+			webhookURL:  "https://test.example/monobank/webhook",
 			resp:        resp,
 			l:           zerolog.Nop(),
 		}
@@ -103,7 +114,9 @@ func TestCreateOrder(main *testing.T) {
 				o.City == "Київ" &&
 				o.Address == "Відділення №5"
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
-		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return req.WebHookURL == "https://test.example/monobank/webhook"
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 		w := doRequest(t, baseDataDir, svc, mb, `{
@@ -172,6 +185,7 @@ func TestCreateOrder(main *testing.T) {
 			geo:         &geoDetectorStub{country: "xx"},
 			dataDir:     baseDataDir,
 			redirectURL: "https://test.example/thanks",
+			webhookURL:  "https://test.example/monobank/webhook",
 			resp:        resp,
 			l:           zerolog.Nop(),
 		}

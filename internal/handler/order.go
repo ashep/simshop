@@ -24,6 +24,8 @@ type orderService interface {
 	Submit(ctx context.Context, o order.Order) (string, error)
 	AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error
 	List(ctx context.Context) ([]order.Record, error)
+	GetStatus(ctx context.Context, orderID string) (string, error)
+	ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error
 }
 
 type monobankClient interface {
@@ -227,6 +229,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 			BasketOrder: []monobank.BasketItem{{Name: productTitle, Qty: 1, Sum: totalCents, Code: req.ProductID, Tax: h.taxIDs}},
 		},
 		RedirectURL: redirect,
+		WebHookURL:  h.webhookURL,
 	})
 	if err != nil {
 		h.logMonobankError(err, orderID)

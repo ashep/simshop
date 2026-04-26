@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -57,17 +58,23 @@ type geoDetector interface {
 	Detect(r *http.Request) string
 }
 
+type monobankVerifier interface {
+	Verify(ctx context.Context, body []byte, signatureB64 string) error
+}
+
 type Handler struct {
 	prod        productService
 	pages       pageService
 	shop        shopService
 	np          novaPoshtaClient
 	monobank    monobankClient
+	mbVerifier  monobankVerifier
 	orders      orderService
 	geo         geoDetector
 	resp        *openapi.Responder
 	dataDir     string
 	redirectURL string
+	webhookURL  string
 	taxIDs      []int
 	l           zerolog.Logger
 }
@@ -78,11 +85,13 @@ func NewHandler(
 	shopSvc shopService,
 	np novaPoshtaClient,
 	mb monobankClient,
+	mbVerifier monobankVerifier,
 	orders orderService,
 	geo geoDetector,
 	resp *openapi.Responder,
 	dataDir string,
 	redirectURL string,
+	webhookURL string,
 	taxIDs []int,
 	l zerolog.Logger,
 ) *Handler {
@@ -92,11 +101,13 @@ func NewHandler(
 		shop:        shopSvc,
 		np:          np,
 		monobank:    mb,
+		mbVerifier:  mbVerifier,
 		orders:      orders,
 		geo:         geo,
 		resp:        resp,
 		dataDir:     dataDir,
 		redirectURL: redirectURL,
+		webhookURL:  webhookURL,
 		taxIDs:      taxIDs,
 		l:           l,
 	}
