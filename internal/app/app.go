@@ -38,6 +38,9 @@ func Run(rt *runner.Runtime[Config]) error {
 	if cfg.Monobank.RedirectURL == "" {
 		return fmt.Errorf("monobank redirect url is required")
 	}
+	if cfg.Monobank.WebhookURL == "" {
+		return fmt.Errorf("monobank webhook url is required")
+	}
 
 	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
 	if err != nil {
@@ -67,18 +70,26 @@ func Run(rt *runner.Runtime[Config]) error {
 	shopSvc := shop.NewService(catalog.Shop)
 	npClient := novaposhta.NewClient(cfg.NovaPoshta.APIKey, cfg.NovaPoshta.ServiceURL)
 	mbClient := monobank.NewClient(cfg.Monobank.APIKey, cfg.Monobank.ServiceURL)
+	mbVerifier := monobank.NewVerifier(cfg.Monobank.APIKey, cfg.Monobank.ServiceURL)
+	if err := mbVerifier.Fetch(rt.Ctx); err != nil {
+		return fmt.Errorf("fetch monobank pubkey: %w", err)
+	}
 
 	ordersWriter := orderdb.New(db)
 	ordersReader := orderdb.NewReader(db)
-	// orderdb.Writer implements both order.Writer and order.InvoiceWriter.
-	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter)
+	// orderdb.Writer satisfies Writer, InvoiceWriter, and PaymentEventWriter.
+	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, mbClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Monobank.TaxIDs, l)
+	hdl := handler.NewHandler(
+		prodSvc, pageSvc, shopSvc, npClient, mbClient, mbVerifier, orderSvc,
+		geo.NewDetector(), openAPI.Responder(),
+		cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Monobank.WebhookURL, cfg.Monobank.TaxIDs, l,
+	)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
@@ -119,6 +130,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	}
 	srv.HandleFunc("POST /orders", corsMw(openapiMw(ordersHandler)))
 	srv.HandleFunc("OPTIONS /orders", corsMw(nop))
+	srv.HandleFunc("POST /monobank/webhook", hdl.MonobankWebhook)
 	if cfg.Server.APIKey != "" {
 		apiKeyMw := handler.APIKeyMiddleware(cfg.Server.APIKey)
 		srv.HandleFunc("GET /orders", corsMw(apiKeyMw(openapiMw(hdl.ListOrders))))

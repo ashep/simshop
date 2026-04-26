@@ -3,8 +3,16 @@
 package testapp
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -59,6 +67,31 @@ func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 		cfg.Monobank.APIKey = "test-key"
 	}
 	cfg.Monobank.RedirectURL = "https://test.example/thanks"
+	cfg.Monobank.WebhookURL = "https://test.example/monobank/webhook"
+
+	// Start a default stub Monobank server so Verifier.Fetch succeeds at app startup.
+	// Tests that need custom Monobank behaviour override cfg.Monobank.ServiceURL via opts.
+	priv, privErr := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if privErr != nil {
+		panic(fmt.Sprintf("generate ecdsa key: %s", privErr))
+	}
+	der, derErr := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	if derErr != nil {
+		panic(fmt.Sprintf("marshal pubkey: %s", derErr))
+	}
+	pubKeyPayload := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(
+		pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}),
+	) + `"}`)
+	defaultMBSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-default","pageUrl":"https://pay.example/inv-default"}`))
+	}))
+	t.Cleanup(defaultMBSrv.Close)
+	cfg.Monobank.ServiceURL = defaultMBSrv.URL
 
 	for _, opt := range opts {
 		opt(&cfg)
