@@ -526,3 +526,12 @@ API test orchestration:
 ### Shared helpers location
 
 Keep shared test helpers in `handler_test.go` (not in per-feature test files) so they survive feature removal.
+
+### Webhook handler response policy
+
+`MonobankWebhook` never calls `h.writeError` and never writes a JSON body. Monobank does not read error bodies, so
+the response is **status code only, empty body** via plain `w.WriteHeader(...)`. The status codes are semantically
+driven by retryability: permanent conditions (bad sig, malformed body, unknown reference, informational status,
+idempotent/backwards transition) return 200 or 4xx so Monobank stops retrying. Transient conditions (verifier
+transport error, DB error) return 500 so Monobank retries later. This is the only handler in the codebase that
+deliberately returns 500 as a retry signal rather than as an error indicator.
