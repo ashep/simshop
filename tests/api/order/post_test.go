@@ -5,7 +5,13 @@ package order_test
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,6 +72,14 @@ shop:
         en: USD
       phone_code: "+1"
 `
+
+func encodePubPEM(pub *ecdsa.PublicKey) ([]byte, error) {
+	der, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), nil
+}
 
 func makeDataDir(t *testing.T) string {
 	t.Helper()
@@ -199,7 +213,18 @@ func fetchOrderHistory(t *testing.T, dsn, orderID string) []orderHistoryRow {
 func TestCreateOrder(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(main, err)
+	pubPEM, err := encodePubPEM(&priv.PublicKey)
+	require.NoError(main, err)
+	pubKeyPayload := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM) + `"}`)
+	_ = priv
+
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayload)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"invoiceId":"inv-existing","pageUrl":"https://pay.example/inv-existing"}`))
 	}))
@@ -345,6 +370,13 @@ func TestCreateOrder(main *testing.T) {
 func TestCreateOrder_Monobank(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	priv2, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(main, err)
+	pubPEM2, err := encodePubPEM(&priv2.PublicKey)
+	require.NoError(main, err)
+	pubKeyPayload2 := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM2) + `"}`)
+	_ = priv2
+
 	// Monobank stub: configurable per-subtest via the captured handler var.
 	var (
 		mbHandler   http.HandlerFunc
@@ -352,6 +384,10 @@ func TestCreateOrder_Monobank(main *testing.T) {
 		lastBody    []byte
 	)
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayload2)
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		lastRequest = r.Clone(context.Background())
 		lastBody = body
@@ -506,7 +542,25 @@ func TestCreateOrder_Monobank(main *testing.T) {
 func TestCreateOrder_DBFailure(t *testing.T) {
 	dataDir := makeDataDir(t)
 
+	priv3, err3 := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err3)
+	pubPEM3, err3 := encodePubPEM(&priv3.PublicKey)
+	require.NoError(t, err3)
+	pubKeyPayload3 := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM3) + `"}`)
+	_ = priv3
+
+	mbServer3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayload3)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-db-fail","pageUrl":"https://pay.example/inv-db-fail"}`))
+	}))
+	t.Cleanup(mbServer3.Close)
+
 	a := testapp.New(t, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer3.URL
 		cfg.RateLimit = -1
 	})
 	a.Start()

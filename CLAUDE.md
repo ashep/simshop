@@ -418,8 +418,8 @@ silently skips directories that lack one.
 
 Config keys live under `internal/app/config.go`. Notable required vs optional rules:
 
-- **`Monobank.APIKey`** and **`Monobank.RedirectURL`** are required — `app.Run` returns an error before the migrator
-  if either is empty.
+- **`Monobank.APIKey`**, **`Monobank.RedirectURL`**, and **`Monobank.WebhookURL`** are required — `app.Run` returns an
+  error before the migrator if any is empty.
 - **`Monobank.ServiceURL`** is optional; empty falls back to `https://api.monobank.ua/`. Tests inject a
   `httptest.Server.URL` via `testapp.New` opts.
 - **`Monobank.TaxIDs`** is the list of merchant tax-registration IDs from the Monobank business cabinet (required
@@ -429,8 +429,11 @@ Config keys live under `internal/app/config.go`. Notable required vs optional ru
 - **`RateLimit`** (top-level `rate_limit`): 0 → default 1 RPM; negative → disabled (functional tests use `-1`).
 - **`DataDir`** (top-level `data_dir`): default `./data`.
 
-`testapp.New` defaults `Monobank.APIKey="test-key"` and `Monobank.RedirectURL="https://test.example/thanks"` so
-plain construction works in tests.
+`testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`, and
+`Monobank.WebhookURL="https://test.example/monobank/webhook"` so plain construction works in tests. It also starts a
+built-in `httptest.Server` (registered as `cfg.Monobank.ServiceURL`) that serves `/api/merchant/pubkey` so
+`Verifier.Fetch` succeeds at startup without hitting real Monobank. Tests that need custom Monobank behaviour
+override `cfg.Monobank.ServiceURL` via opts; the built-in stub is then unused but still shut down via `t.Cleanup`.
 
 `uuidv7()` is a built-in PostgreSQL 18 function; the `orders` and `order_history` tables use
 `id uuid PRIMARY KEY DEFAULT uuidv7()`. There is no separate `uuidv7` type. Earlier PG versions need an extension

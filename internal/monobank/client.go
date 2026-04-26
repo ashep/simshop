@@ -136,7 +136,7 @@ type createInvoiceResponseBody struct {
 func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*CreateInvoiceResponse, error) {
 	basket := make([]basketItemPayload, len(req.MerchantPaymInfo.BasketOrder))
 	for i, b := range req.MerchantPaymInfo.BasketOrder {
-		basket[i] = basketItemPayload{Name: b.Name, Qty: b.Qty, Sum: b.Sum, Code: b.Code, Tax: b.Tax}
+		basket[i] = basketItemPayload(b)
 	}
 	payload := createInvoiceBody{
 		Amount: req.Amount,

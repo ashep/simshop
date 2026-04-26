@@ -4,6 +4,10 @@ package order_test
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,8 +28,19 @@ const testAPIKey = "test-api-key"
 func TestListOrders(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(main, err)
+	pubPEM, err := encodePubPEM(&priv.PublicKey)
+	require.NoError(main, err)
+	pubKeyPayload := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM) + `"}`)
+	_ = priv
+
 	var mbCounter atomic.Uint64
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayload)
+			return
+		}
 		n := mbCounter.Add(1)
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintf(w, `{"invoiceId":"inv-existing-%d","pageUrl":"https://pay.example/inv-existing-%d"}`, n, n)
@@ -180,7 +195,25 @@ func TestListOrders(main *testing.T) {
 // and verifies the route is not registered (405).
 func TestListOrders_NoAPIKeyConfigured(t *testing.T) {
 	dataDir := makeDataDir(t)
+
+	privNoKey, errNoKey := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, errNoKey)
+	pubPEMNoKey, errNoKey := encodePubPEM(&privNoKey.PublicKey)
+	require.NoError(t, errNoKey)
+	pubKeyPayloadNoKey := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEMNoKey) + `"}`)
+	_ = privNoKey
+
+	mbServerNoKey := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubKeyPayloadNoKey)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(mbServerNoKey.Close)
+
 	a := testapp.New(t, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServerNoKey.URL
 		cfg.RateLimit = -1
 		cfg.Server.APIKey = "" // explicit
 	})
