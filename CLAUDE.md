@@ -530,6 +530,14 @@ API test orchestration:
 
 Keep shared test helpers in `handler_test.go` (not in per-feature test files) so they survive feature removal.
 
+### Shared ECDSA test key in `tests/api/order/`
+
+The package has a single `testECDSAKey *ecdsa.PrivateKey` generated in `init()`. Two helpers derived from it:
+`pubKeyPayload(t)` returns the PEM-encoded public key wrapped in the Monobank pubkey JSON payload, and
+`signWebhookBody(t, body)` computes the ECDSA-SHA256 signature in the format `POST /monobank/webhook` expects.
+All Monobank stub servers in the package's functional tests use `pubKeyPayload` for `/api/merchant/pubkey`. No test
+function should generate its own ECDSA key — use the shared helpers instead.
+
 ### Webhook handler response policy
 
 `MonobankWebhook` never calls `h.writeError` and never writes a JSON body. Monobank does not read error bodies, so

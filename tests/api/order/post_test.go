@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -79,6 +80,31 @@ func encodePubPEM(pub *ecdsa.PublicKey) ([]byte, error) {
 		return nil, err
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), nil
+}
+
+var testECDSAKey *ecdsa.PrivateKey
+
+func init() {
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	testECDSAKey = k
+}
+
+func pubKeyPayload(t *testing.T) []byte {
+	t.Helper()
+	pemBytes, err := encodePubPEM(&testECDSAKey.PublicKey)
+	require.NoError(t, err)
+	return []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pemBytes) + `"}`)
+}
+
+func signWebhookBody(t *testing.T, body []byte) string {
+	t.Helper()
+	h := sha256.Sum256(body)
+	sig, err := ecdsa.SignASN1(rand.Reader, testECDSAKey, h[:])
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(sig)
 }
 
 func makeDataDir(t *testing.T) string {
@@ -213,16 +239,11 @@ func fetchOrderHistory(t *testing.T, dsn, orderID string) []orderHistoryRow {
 func TestCreateOrder(main *testing.T) {
 	dataDir := makeDataDir(main)
 
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(main, err)
-	pubPEM, err := encodePubPEM(&priv.PublicKey)
-	require.NoError(main, err)
-	pubKeyPayload := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM) + `"}`)
-	_ = priv
+	pubPayload := pubKeyPayload(main)
 
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/merchant/pubkey" {
-			_, _ = w.Write(pubKeyPayload)
+			_, _ = w.Write(pubPayload)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -370,12 +391,7 @@ func TestCreateOrder(main *testing.T) {
 func TestCreateOrder_Monobank(main *testing.T) {
 	dataDir := makeDataDir(main)
 
-	priv2, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(main, err)
-	pubPEM2, err := encodePubPEM(&priv2.PublicKey)
-	require.NoError(main, err)
-	pubKeyPayload2 := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM2) + `"}`)
-	_ = priv2
+	pubPayload2 := pubKeyPayload(main)
 
 	// Monobank stub: configurable per-subtest via the captured handler var.
 	var (
@@ -385,7 +401,7 @@ func TestCreateOrder_Monobank(main *testing.T) {
 	)
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/merchant/pubkey" {
-			_, _ = w.Write(pubKeyPayload2)
+			_, _ = w.Write(pubPayload2)
 			return
 		}
 		body, _ := io.ReadAll(r.Body)
@@ -542,16 +558,11 @@ func TestCreateOrder_Monobank(main *testing.T) {
 func TestCreateOrder_DBFailure(t *testing.T) {
 	dataDir := makeDataDir(t)
 
-	priv3, err3 := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err3)
-	pubPEM3, err3 := encodePubPEM(&priv3.PublicKey)
-	require.NoError(t, err3)
-	pubKeyPayload3 := []byte(`{"key":"` + base64.StdEncoding.EncodeToString(pubPEM3) + `"}`)
-	_ = priv3
+	pubPayload3 := pubKeyPayload(t)
 
 	mbServer3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/merchant/pubkey" {
-			_, _ = w.Write(pubKeyPayload3)
+			_, _ = w.Write(pubPayload3)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
