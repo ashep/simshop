@@ -37,6 +37,7 @@ func TestCreateInvoice(main *testing.T) {
 					Destination string `json:"destination"`
 				} `json:"merchantPaymInfo"`
 				RedirectURL string `json:"redirectUrl"`
+				WebHookURL  string `json:"webHookUrl"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			assert.Equal(t, 12345, body.Amount)
@@ -44,6 +45,7 @@ func TestCreateInvoice(main *testing.T) {
 			assert.Equal(t, "order-1", body.MerchantPaymInfo.Reference)
 			assert.Equal(t, "Acme, order order-1", body.MerchantPaymInfo.Destination)
 			assert.Equal(t, "https://shop.example/thanks?order_id=order-1", body.RedirectURL)
+			assert.Equal(t, "https://shop.example/monobank/webhook", body.WebHookURL)
 
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"invoiceId":"inv-1","pageUrl":"https://pay.example/inv-1"}`))
@@ -58,6 +60,7 @@ func TestCreateInvoice(main *testing.T) {
 				Destination: "Acme, order order-1",
 			},
 			RedirectURL: "https://shop.example/thanks?order_id=order-1",
+			WebHookURL:  "https://shop.example/monobank/webhook",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "inv-1", got.InvoiceID)

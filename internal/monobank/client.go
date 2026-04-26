@@ -26,6 +26,7 @@ type CreateInvoiceRequest struct {
 	Ccy              int
 	MerchantPaymInfo MerchantPaymInfo
 	RedirectURL      string
+	WebHookURL       string // empty → not sent to Monobank
 }
 
 // MerchantPaymInfo is the merchant-side metadata Monobank attaches to the invoice.
@@ -105,6 +106,7 @@ type createInvoiceBody struct {
 	Ccy              int                     `json:"ccy"`
 	MerchantPaymInfo merchantPaymInfoPayload `json:"merchantPaymInfo"`
 	RedirectURL      string                  `json:"redirectUrl,omitempty"`
+	WebHookURL       string                  `json:"webHookUrl,omitempty"`
 }
 
 type merchantPaymInfoPayload struct {
@@ -145,6 +147,7 @@ func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*
 			BasketOrder: basket,
 		},
 		RedirectURL: req.RedirectURL,
+		WebHookURL:  req.WebHookURL,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
