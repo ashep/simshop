@@ -285,6 +285,12 @@ All three endpoints return 502 if the Nova Poshta API call fails.
 `POST /orders` accepts a single-product order and inserts it as a row into the `orders` table in PostgreSQL. The
 order id, status (`new`), and timestamps are populated by database defaults.
 
+**Payments.** When a customer submits `POST /orders`, the application creates an order in `status='new'`, then issues a
+Monobank acquiring invoice. On success the order transitions to `status='awaiting_payment'` and the response carries
+the Monobank `pageUrl` as `payment_url`. If the Monobank call fails, the order stays in `status='new'` and the
+customer receives HTTP 502; the operator can re-issue an invoice manually. No webhook handling is implemented in this
+version — `awaiting_payment` does not transition automatically based on customer behaviour.
+
 **Request body (JSON):**
 
 ```json
@@ -377,6 +383,10 @@ database:
   dsn: "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 nova_poshta:
   api_key: "<your-api-key>"
+monobank:
+  api_key: "<your monobank acquiring X-Token>"
+  service_url: ""                                # empty → use https://api.monobank.ua/
+  redirect_url: "https://shop.example/order/thanks"
 rate_limit: 1
 ```
 
@@ -393,5 +403,10 @@ rate_limit: 1
 - `nova_poshta.api_key` — Nova Poshta API key. Required for the `/nova-poshta/*` endpoints to work.
 - `nova_poshta.service_url` — override the Nova Poshta API base URL (default: `https://api.novaposhta.ua/v2.0/json/`).
   Leave unset in production; used in tests.
+- `monobank.api_key` — Monobank acquiring X-Token. **Required** — the application refuses to start if empty.
+- `monobank.redirect_url` — URL the Monobank payment page redirects to after the customer completes (or cancels)
+  payment. **Required** — the application refuses to start if empty.
+- `monobank.service_url` — override the Monobank API base URL (default: `https://api.monobank.ua/`). Leave unset in
+  production; used in tests.
 - `rate_limit` — requests per minute allowed for `POST /orders` per client IP. `0` defaults to 1 RPM; a negative
   value disables rate limiting.
