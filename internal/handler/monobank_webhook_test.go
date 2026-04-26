@@ -202,6 +202,27 @@ func TestMonobankWebhook(main *testing.T) {
 		svc.AssertNotCalled(t, "ApplyPaymentEvent")
 	})
 
+	main.Run("VerifierTransportErrorReturns500", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		ver := &monobankVerifierMock{}
+		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("transport: connection refused"))
+		h := build(svc, ver)
+		w := doRequest(t, h, bodyFor("success"), "sig")
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		svc.AssertNotCalled(t, "GetStatus")
+	})
+
+	main.Run("GetStatusDBErrorReturns500", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		ver := &monobankVerifierMock{}
+		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		svc.On("GetStatus", mock.Anything, orderID).Return("", errors.New("db: connection reset"))
+		h := build(svc, ver)
+		w := doRequest(t, h, bodyFor("success"), "sig")
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		svc.AssertNotCalled(t, "ApplyPaymentEvent")
+	})
+
 	main.Run("DBErrorReturns500", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
