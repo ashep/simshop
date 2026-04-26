@@ -1,6 +1,8 @@
 CREATE TYPE order_status AS ENUM (
     'new',
     'awaiting_payment',
+    'payment_processing',
+    'payment_hold',
     'paid',
     'processing',
     'cancelled',
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS order_history
     order_id   uuid REFERENCES orders (id) NOT NULL,
     status     order_status                NOT NULL,
     note       TEXT,
+    payload    JSONB,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP
 );
 
