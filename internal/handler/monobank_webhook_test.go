@@ -234,6 +234,17 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 
+	main.Run("OrderVanishedAfterStatusCheckReturns200", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		ver := &monobankVerifierMock{}
+		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
+		svc.On("ApplyPaymentEvent", mock.Anything, orderID, "paid", mock.Anything, mock.Anything).Return(order.ErrNotFound)
+		h := build(svc, ver)
+		w := doRequest(t, h, bodyFor("success"), "sig")
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
 	main.Run("OversizeBodyTriggersJSONErrorReturning400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}

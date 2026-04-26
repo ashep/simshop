@@ -387,6 +387,21 @@ in `app.go` is the single source of truth.
 See also: **internal/orderdb** under Packages for the transactional writer, Reader fan-out, and no-unit-tests
 rationale.
 
+### `POST /monobank/webhook`
+
+`MonobankWebhook` processes Monobank invoice-status webhook deliveries. Authenticated by `X-Sign` (ECDSA over the
+body); no API key, no CORS, no OpenAPI middleware, no rate limiter — Monobank is the sole caller. Reads up to 1 MB,
+verifies via `h.mbVerifier`, parses with `monobank.ParseWebhook`, looks up the order by `payload.Reference`, computes
+the target `order_status` via `monobankStatusToOrderStatus`, and applies the transition only when
+`shouldApply(current, target)` — equal rank or backwards is a silent no-op. On forward transition,
+`order.Service.ApplyPaymentEvent` runs `UPDATE orders.status` + `INSERT order_history` with the verbatim payload in
+one tx. Response codes: 200 for processed/idempotent/informational/unknown reference (permanent — Monobank stops
+retrying); 401 for bad signature; 400 for malformed body; 500 for transient DB errors so Monobank retries.
+
+State-machine ranks live in `orderStatusRank` in `internal/handler/monobank_webhook.go`. `cancelled` and fulfillment
+`processing` deliberately share rank 5 — a late `failure` after the operator has begun fulfillment is informational
+only and must not downgrade the order.
+
 ### `GET /nova-poshta/cities`, `/branches`, `/streets`
 
 Three proxy routes over the Nova Poshta JSON API v2:

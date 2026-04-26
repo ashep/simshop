@@ -383,7 +383,8 @@ exists, just not for `GET`) rather than 404.
 `country`, `city`, `phone`, `address`, `admin_note` (optional), `customer_note` (optional), `created_at`,
 `updated_at`) plus two inlined arrays: `attrs` — the rendered title pairs from `order_attrs` (one entry per selected
 attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
-change, each `{id, status, note (optional), created_at}`). Optional text fields are omitted from JSON when NULL.
+change, each `{id, status, note (optional), payload (optional, JSONB; verbatim Monobank webhook body),
+created_at}`). Optional text fields are omitted from JSON when NULL.
 
 #### Monobank webhook
 
