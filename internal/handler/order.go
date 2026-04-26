@@ -217,12 +217,14 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	productTitle := p.Name[req.Lang]
 	inv, err := h.monobank.CreateInvoice(r.Context(), monobank.CreateInvoiceRequest{
 		Amount: totalCents,
 		Ccy:    ccy,
 		MerchantPaymInfo: monobank.MerchantPaymInfo{
 			Reference:   orderID,
 			Destination: destination,
+			BasketOrder: []monobank.BasketItem{{Name: productTitle, Qty: 1, Sum: totalCents, Code: req.ProductID, Tax: h.taxIDs}},
 		},
 		RedirectURL: redirect,
 	})
@@ -262,7 +264,8 @@ func (h *Handler) logMonobankError(err error, orderID string) {
 	if stderrors.As(err, &apiErr) {
 		ev = ev.Int("monobank_status", apiErr.Status).
 			Str("monobank_err_code", apiErr.ErrCode).
-			Str("monobank_err_text", apiErr.ErrText)
+			Str("monobank_err_text", apiErr.ErrText).
+			Str("monobank_body", apiErr.Body)
 	}
 	ev.Msg("monobank invoice flow failed")
 }

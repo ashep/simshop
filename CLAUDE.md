@@ -379,6 +379,11 @@ this id so the handler can pass it to Monobank as `merchantPaymInfo.reference` a
 `destination` string is built from `shop.Name[req.Lang]` plus the first 8 chars of the order id (e.g.
 `"Acme, order 018f4e3a"`); the redirect URL is `cfg.Monobank.RedirectURL + "?order_id=<id>"`.
 
+`merchantPaymInfo.basketOrder` is mandatory — Monobank rejects invoices without it as `INVALID_MERCHANT_PAYM_INFO`
+because it is required for fiscalization. The handler sends a single line item per invoice: `name = p.Name[req.Lang]`
+(product title in the customer's language), `qty = 1`, `sum = totalCents`. Per Monobank's contract, the sum of all
+basket item `sum` values must equal the invoice `amount`; with one line item this is trivially satisfied.
+
 ### Monobank error policy: generic responses, detailed logs
 
 All Monobank-related failures (HTTP timeout, non-2xx, parse error, application-level error, currency-map miss, tx2

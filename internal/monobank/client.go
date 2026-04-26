@@ -29,9 +29,27 @@ type CreateInvoiceRequest struct {
 }
 
 // MerchantPaymInfo is the merchant-side metadata Monobank attaches to the invoice.
+// BasketOrder must be non-empty: Monobank rejects invoices without it as
+// `INVALID_MERCHANT_PAYM_INFO` because the field is mandatory for fiscalization.
 type MerchantPaymInfo struct {
 	Reference   string // our order id
 	Destination string // shown in the bank app
+	BasketOrder []BasketItem
+}
+
+// BasketItem is a single line item in MerchantPaymInfo.BasketOrder. The sum is
+// the total for this line in minor units (not the unit price); the sum of all
+// BasketItem.Sum values must equal the invoice's Amount. Code is the merchant's
+// internal SKU; Monobank rejects items without it as `INVALID_MERCHANT_PAYM_INFO`
+// when fiscalization is enabled on the merchant account. Tax is the list of
+// tax-registration IDs (merchant-specific, configured in the Monobank business
+// cabinet) — also required when fiscalization is enabled.
+type BasketItem struct {
+	Name string // human-readable, shown on the fiscal receipt
+	Qty  int    // quantity
+	Sum  int    // total for this line in minor units (kopecks/cents)
+	Code string // merchant SKU / internal product code
+	Tax  []int  // merchant-side tax registration IDs
 }
 
 // CreateInvoiceResponse is the parsed Monobank response.
@@ -90,8 +108,17 @@ type createInvoiceBody struct {
 }
 
 type merchantPaymInfoPayload struct {
-	Reference   string `json:"reference,omitempty"`
-	Destination string `json:"destination,omitempty"`
+	Reference   string              `json:"reference,omitempty"`
+	Destination string              `json:"destination,omitempty"`
+	BasketOrder []basketItemPayload `json:"basketOrder,omitempty"`
+}
+
+type basketItemPayload struct {
+	Name string `json:"name"`
+	Qty  int    `json:"qty"`
+	Sum  int    `json:"sum"`
+	Code string `json:"code"`
+	Tax  []int  `json:"tax"`
 }
 
 type createInvoiceResponseBody struct {
@@ -105,12 +132,17 @@ type createInvoiceResponseBody struct {
 // parsed invoiceId/pageUrl. Application-level and HTTP errors are wrapped in
 // *APIError so handlers can extract structured fields with errors.As.
 func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*CreateInvoiceResponse, error) {
+	basket := make([]basketItemPayload, len(req.MerchantPaymInfo.BasketOrder))
+	for i, b := range req.MerchantPaymInfo.BasketOrder {
+		basket[i] = basketItemPayload{Name: b.Name, Qty: b.Qty, Sum: b.Sum, Code: b.Code, Tax: b.Tax}
+	}
 	payload := createInvoiceBody{
 		Amount: req.Amount,
 		Ccy:    req.Ccy,
 		MerchantPaymInfo: merchantPaymInfoPayload{
 			Reference:   req.MerchantPaymInfo.Reference,
 			Destination: req.MerchantPaymInfo.Destination,
+			BasketOrder: basket,
 		},
 		RedirectURL: req.RedirectURL,
 	}
@@ -137,13 +169,25 @@ func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*
 		return nil, fmt.Errorf("read body: %w", readErr)
 	}
 
+	// Try to parse the body for errCode/errText regardless of status — Monobank
+	// returns the structured error envelope on both 200 (application errors) and
+	// non-2xx (validation/auth errors). Parse failures on a non-2xx response are
+	// expected (the body may be HTML/plain text); fall through to the bare-status
+	// APIError in that case.
+	var parsed createInvoiceResponseBody
+	parseErr := json.Unmarshal(raw, &parsed)
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, &APIError{Status: resp.StatusCode, Body: forensicBody(raw)}
+		return nil, &APIError{
+			Status:  resp.StatusCode,
+			ErrCode: parsed.ErrCode,
+			ErrText: parsed.ErrText,
+			Body:    forensicBody(raw),
+		}
 	}
 
-	var parsed createInvoiceResponseBody
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+	if parseErr != nil {
+		return nil, fmt.Errorf("parse response: %w", parseErr)
 	}
 	if parsed.ErrCode != "" {
 		return nil, &APIError{Status: resp.StatusCode, ErrCode: parsed.ErrCode, ErrText: parsed.ErrText, Body: forensicBody(raw)}

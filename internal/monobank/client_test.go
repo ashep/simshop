@@ -96,6 +96,26 @@ func TestCreateInvoice(main *testing.T) {
 		assert.Equal(t, "too many invoices", apiErr.ErrText)
 	})
 
+	main.Run("ErrorOnNon2xxWithJSONBodyExtractsErrCode", func(t *testing.T) {
+		// Monobank returns 400 with the same {errCode, errText} envelope for
+		// validation failures. Verify the client extracts the structured fields
+		// even on non-2xx, so logs and downstream callers see the real cause.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"errCode":"INVALID_MERCHANT_PAYM_INFO","errText":"'code' is required"}`))
+		}))
+		defer srv.Close()
+
+		_, err := newTestClient(srv).CreateInvoice(context.Background(), CreateInvoiceRequest{Amount: 100, Ccy: 980})
+		require.Error(t, err)
+
+		var apiErr *APIError
+		require.True(t, errors.As(err, &apiErr))
+		assert.Equal(t, http.StatusBadRequest, apiErr.Status)
+		assert.Equal(t, "INVALID_MERCHANT_PAYM_INFO", apiErr.ErrCode)
+		assert.Equal(t, "'code' is required", apiErr.ErrText)
+	})
+
 	main.Run("ErrorOnMalformedJSON", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

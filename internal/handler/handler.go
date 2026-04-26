@@ -68,6 +68,7 @@ type Handler struct {
 	resp        *openapi.Responder
 	dataDir     string
 	redirectURL string
+	taxIDs      []int
 	l           zerolog.Logger
 }
 
@@ -82,6 +83,7 @@ func NewHandler(
 	resp *openapi.Responder,
 	dataDir string,
 	redirectURL string,
+	taxIDs []int,
 	l zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -95,6 +97,7 @@ func NewHandler(
 		resp:        resp,
 		dataDir:     dataDir,
 		redirectURL: redirectURL,
+		taxIDs:      taxIDs,
 		l:           l,
 	}
 }
