@@ -204,7 +204,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	ccy, err := monobank.MapCurrency(price.Currency)
 	if err != nil {
-		h.logMonobankError(err, orderID, "")
+		h.logMonobankError(err, orderID)
 		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
 		return
 	}
@@ -227,7 +227,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		RedirectURL: redirect,
 	})
 	if err != nil {
-		h.logMonobankError(err, orderID, "")
+		h.logMonobankError(err, orderID)
 		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
 		return
 	}
@@ -255,13 +255,9 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 // logMonobankError emits a structured error log including any *monobank.APIError
-// fields. invoiceID may be empty when the error happened before/at invoice
-// creation.
-func (h *Handler) logMonobankError(err error, orderID, invoiceID string) {
+// fields.
+func (h *Handler) logMonobankError(err error, orderID string) {
 	ev := h.l.Error().Err(err).Str("order_id", orderID)
-	if invoiceID != "" {
-		ev = ev.Str("invoice_id", invoiceID)
-	}
 	var apiErr *monobank.APIError
 	if stderrors.As(err, &apiErr) {
 		ev = ev.Int("monobank_status", apiErr.Status).

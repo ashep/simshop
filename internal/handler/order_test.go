@@ -58,10 +58,13 @@ func TestCreateOrder(main *testing.T) {
 	require.NoError(main, os.WriteFile(filepath.Join(attrProductDir, "product.yaml"), []byte(testProductWithAttrPricesYAML), 0644))
 
 	resp := buildTestResponder(main)
-	shopStub := &shopServiceStub{shop: &shop.Shop{Countries: map[string]*shop.Country{
-		"ua": {Name: map[string]string{"en": "Ukraine"}, PhoneCode: "+380"},
-		"us": {Name: map[string]string{"en": "United States"}, PhoneCode: "+1"},
-	}}}
+	shopStub := &shopServiceStub{shop: &shop.Shop{
+		Name: map[string]string{"en": "Test Shop"},
+		Countries: map[string]*shop.Country{
+			"ua": {Name: map[string]string{"en": "Ukraine"}, PhoneCode: "+380"},
+			"us": {Name: map[string]string{"en": "United States"}, PhoneCode: "+1"},
+		},
+	}}
 
 	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, mb *monobankClientMock, body string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -384,6 +387,7 @@ prices:
 			return req.Amount == 4999 &&
 				req.Ccy == 840 &&
 				req.MerchantPaymInfo.Reference == "018f4e3a-0000-7000-8000-000000000099" &&
+				req.MerchantPaymInfo.Destination == "Test Shop, order 018f4e3a" &&
 				req.RedirectURL == "https://test.example/thanks?order_id=018f4e3a-0000-7000-8000-000000000099"
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000099", mock.MatchedBy(func(inv order.Invoice) bool {
