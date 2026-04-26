@@ -3,6 +3,7 @@ package orderdb
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -167,7 +168,7 @@ const listAttrsSQL = `SELECT order_id::text, attr_name, attr_value, attr_price
 FROM order_attrs
 WHERE order_id = ANY($1::uuid[])`
 
-const listHistorySQL = `SELECT id::text, order_id::text, status::text, note, created_at
+const listHistorySQL = `SELECT id::text, order_id::text, status::text, note, payload, created_at
 FROM order_history
 WHERE order_id = ANY($1::uuid[])
 ORDER BY created_at ASC`
@@ -176,6 +177,15 @@ const listInvoicesSQL = `SELECT order_id::text, provider, id, page_url, amount, 
 	FROM order_invoices
 	WHERE order_id = ANY($1::uuid[])
 	ORDER BY created_at ASC`
+
+const getOrderStatusSQL = `SELECT status::text FROM orders WHERE id = $1::uuid`
+
+const updateOrderStatusSQL = `UPDATE orders
+	SET status = $2::order_status, updated_at = CURRENT_TIMESTAMP
+	WHERE id = $1::uuid`
+
+const insertHistoryWithPayloadSQL = `INSERT INTO order_history
+	(order_id, status, note, payload) VALUES ($1::uuid, $2::order_status, $3, $4)`
 
 // List returns all orders, newest first, each populated with its attrs and
 // history. Always returns a non-nil slice on success (possibly empty).
@@ -261,13 +271,17 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 		var entry order.HistoryEntry
 		var orderID string
 		var note pgtype.Text
-		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &entry.CreatedAt); err != nil {
+		var payload []byte
+		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &payload, &entry.CreatedAt); err != nil {
 			hRows.Close()
 			return nil, fmt.Errorf("scan order_history: %w", err)
 		}
 		if note.Valid {
 			v := note.String
 			entry.Note = &v
+		}
+		if len(payload) > 0 {
+			entry.Payload = json.RawMessage(payload)
 		}
 		if rec, ok := indexByID[orderID]; ok {
 			rec.History = append(rec.History, entry)
@@ -299,4 +313,60 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 	}
 
 	return out, nil
+}
+
+// GetStatus returns the current order_status for orderID. Returns
+// order.ErrNotFound when no row matches.
+func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) {
+	var status string
+	err := r.db.QueryRow(ctx, getOrderStatusSQL, orderID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", order.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("query order status: %w", err)
+	}
+	return status, nil
+}
+
+// ApplyPaymentEvent updates the order status and appends an order_history
+// row carrying note and payload. Runs both writes in a single transaction so
+// a crash between them cannot leave the order with an updated status but no
+// history row (or vice versa).
+func (w *Writer) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			_ = rbErr
+		}
+	}()
+
+	tag, err := tx.Exec(ctx, updateOrderStatusSQL, orderID, status)
+	if err != nil {
+		return fmt.Errorf("update order status: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
+	}
+
+	var noteArg any = note
+	if note == "" {
+		noteArg = nil
+	}
+	var payloadArg any = []byte(payload)
+	if len(payload) == 0 {
+		payloadArg = nil
+	}
+	if _, err := tx.Exec(ctx, insertHistoryWithPayloadSQL, orderID, status, noteArg, payloadArg); err != nil {
+		return fmt.Errorf("insert order_history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }
