@@ -402,7 +402,7 @@ func TestCreateOrder_Monobank(main *testing.T) {
 		var invoiceID, pageURL, currency string
 		var amount int
 		require.NoError(t, pool.QueryRow(t.Context(),
-			`SELECT invoice_id, page_url, amount, currency FROM order_invoices WHERE order_id = $1`, orderID,
+			`SELECT id, page_url, amount, currency FROM order_invoices WHERE order_id = $1`, orderID,
 		).Scan(&invoiceID, &pageURL, &amount, &currency))
 		assert.Equal(t, "inv-1", invoiceID)
 		assert.Equal(t, "https://pay.example/inv-1", pageURL)

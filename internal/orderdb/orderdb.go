@@ -44,7 +44,7 @@ const insertAttrSQL = `INSERT INTO order_attrs
 const insertHistorySQL = `INSERT INTO order_history (order_id, status) VALUES ($1, 'new')`
 
 const insertInvoiceSQL = `INSERT INTO order_invoices
-	(order_id, provider, invoice_id, page_url, amount, currency)
+	(order_id, provider, id, page_url, amount, currency)
 	VALUES ($1, $2, $3, $4, $5, $6)`
 
 const updateOrderStatusAwaitingPaymentSQL = `UPDATE orders
@@ -114,7 +114,7 @@ func (w *Writer) AttachInvoice(ctx context.Context, orderID string, inv order.In
 	}()
 
 	if _, err := tx.Exec(ctx, insertInvoiceSQL,
-		orderID, inv.Provider, inv.InvoiceID, inv.PageURL, inv.Amount, inv.Currency,
+		orderID, inv.Provider, inv.ID, inv.PageURL, inv.Amount, inv.Currency,
 	); err != nil {
 		return fmt.Errorf("insert order_invoice: %w", err)
 	}
@@ -172,7 +172,7 @@ FROM order_history
 WHERE order_id = ANY($1::uuid[])
 ORDER BY created_at ASC`
 
-const listInvoicesSQL = `SELECT order_id::text, provider, invoice_id, page_url, amount, currency
+const listInvoicesSQL = `SELECT order_id::text, provider, id, page_url, amount, currency
 	FROM order_invoices
 	WHERE order_id = ANY($1::uuid[])
 	ORDER BY created_at ASC`
@@ -285,7 +285,7 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 	for iRows.Next() {
 		var orderID string
 		var inv order.Invoice
-		if err := iRows.Scan(&orderID, &inv.Provider, &inv.InvoiceID, &inv.PageURL, &inv.Amount, &inv.Currency); err != nil {
+		if err := iRows.Scan(&orderID, &inv.Provider, &inv.ID, &inv.PageURL, &inv.Amount, &inv.Currency); err != nil {
 			iRows.Close()
 			return nil, fmt.Errorf("scan order_invoice: %w", err)
 		}

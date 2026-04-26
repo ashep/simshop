@@ -391,7 +391,7 @@ prices:
 				req.RedirectURL == "https://test.example/thanks?order_id=018f4e3a-0000-7000-8000-000000000099"
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000099", mock.MatchedBy(func(inv order.Invoice) bool {
-			return inv.Provider == "monobank" && inv.InvoiceID == "inv-1" && inv.PageURL == "https://pay.example/inv-1" && inv.Amount == 4999 && inv.Currency == "USD"
+			return inv.Provider == "monobank" && inv.ID == "inv-1" && inv.PageURL == "https://pay.example/inv-1" && inv.Amount == 4999 && inv.Currency == "USD"
 		})).Return(nil)
 
 		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)

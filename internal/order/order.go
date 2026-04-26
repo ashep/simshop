@@ -16,11 +16,11 @@ type Attr struct {
 // Invoice is the result of issuing a payment invoice with a provider, ready
 // to be persisted into order_invoices.
 type Invoice struct {
-	Provider  string // e.g. "monobank"
-	InvoiceID string // provider's invoice id
-	PageURL   string // hosted payment page URL
-	Amount    int    // minor units, mirrors the order total at issue time
-	Currency  string // alpha-3 (e.g. "UAH")
+	Provider string // e.g. "monobank"
+	ID       string // provider's invoice id; stored in the row's primary key
+	PageURL  string // hosted payment page URL
+	Amount   int    // minor units, mirrors the order total at issue time
+	Currency string // alpha-3 (e.g. "UAH")
 }
 
 // Order is a customer order ready to be persisted.

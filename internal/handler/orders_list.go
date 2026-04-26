@@ -44,11 +44,11 @@ type orderHistoryResponse struct {
 }
 
 type orderInvoiceResponse struct {
-	Provider  string `json:"provider"`
-	InvoiceID string `json:"invoice_id"`
-	PageURL   string `json:"page_url"`
-	Amount    int    `json:"amount"`
-	Currency  string `json:"currency"`
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+	PageURL  string `json:"page_url"`
+	Amount   int    `json:"amount"`
+	Currency string `json:"currency"`
 }
 
 // ListOrders returns every persisted order with its attrs and history,
@@ -93,11 +93,11 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 	invoices := make([]orderInvoiceResponse, len(rec.Invoices))
 	for i, inv := range rec.Invoices {
 		invoices[i] = orderInvoiceResponse{
-			Provider:  inv.Provider,
-			InvoiceID: inv.InvoiceID,
-			PageURL:   inv.PageURL,
-			Amount:    inv.Amount,
-			Currency:  inv.Currency,
+			Provider: inv.Provider,
+			ID:       inv.ID,
+			PageURL:  inv.PageURL,
+			Amount:   inv.Amount,
+			Currency: inv.Currency,
 		}
 	}
 	return orderRecordResponse{

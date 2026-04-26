@@ -63,7 +63,7 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		inv := Invoice{Provider: "monobank", InvoiceID: "inv-1", PageURL: "https://pay/inv-1", Amount: 100, Currency: "UAH"}
+		inv := Invoice{Provider: "monobank", ID: "inv-1", PageURL: "https://pay/inv-1", Amount: 100, Currency: "UAH"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(nil)
 
 		svc := NewService(w, r, iw)

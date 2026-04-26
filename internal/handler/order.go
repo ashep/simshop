@@ -235,11 +235,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.orders.AttachInvoice(r.Context(), orderID, order.Invoice{
-		Provider:  "monobank",
-		InvoiceID: inv.InvoiceID,
-		PageURL:   inv.PageURL,
-		Amount:    totalCents,
-		Currency:  price.Currency,
+		Provider: "monobank",
+		ID:       inv.InvoiceID,
+		PageURL:  inv.PageURL,
+		Amount:   totalCents,
+		Currency: price.Currency,
 	}); err != nil {
 		h.l.Error().Err(err).
 			Str("order_id", orderID).

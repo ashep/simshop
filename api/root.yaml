@@ -565,14 +565,14 @@ components:
       type: object
       required:
         - provider
-        - invoice_id
+        - id
         - page_url
         - amount
         - currency
       properties:
         provider:
           type: string
-        invoice_id:
+        id:
           type: string
         page_url:
           type: string
