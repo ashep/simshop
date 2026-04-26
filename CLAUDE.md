@@ -202,6 +202,18 @@ re-encoding even if the caller reuses the buffer. `WebhookPayload` carries no JS
 type; only the unexported `webhookBody` wire struct carries tags. Empty date strings produce zero `time.Time` (not an
 error), tolerating future Monobank contract changes. Dates are parsed with `time.RFC3339`.
 
+`monobank.Verifier` verifies Monobank webhook `X-Sign` headers. The merchant ECDSA-P256 public key is fetched from
+`/api/merchant/pubkey` via `Fetch(ctx)` at startup and cached under `sync.RWMutex`. `Verify(ctx, body, sigB64)`
+hashes the body with SHA-256 and verifies the base64-encoded ASN.1 ECDSA signature. On a verification failure the
+key is refetched once and the check is retried — this auto-recovers from Monobank key rotation without operator
+intervention. `ErrInvalidSignature` is the sentinel returned on persistent mismatch; callers map it to HTTP 401. A
+transport or parse error during the lazy refetch is returned as-is (not collapsed to `ErrInvalidSignature`) so the
+caller can distinguish a bad signature from an upstream failure. Concurrent refetches are deduped via an
+`atomic.Bool` (`refetching`): only the first failing caller fetches; others spin on 10 ms ticks until the flag
+clears, then re-verify against the freshly cached key. `NewVerifier(apiKey, serviceURL)` is the production
+constructor (pass `""` for `serviceURL` to use the default). Tests construct `*Verifier` directly to inject an
+`httptest.Server` URL, mirroring the `Client` / `geo.Detector` pattern.
+
 ### internal/orderdb
 
 `orderdb.Writer` and `orderdb.Reader` own a `*pgxpool.Pool` (concrete, not an interface). The pool is created in
