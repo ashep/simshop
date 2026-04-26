@@ -258,6 +258,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/nova-poshta/streets?city_ref=<ref>&q=<query>`  | Search Nova Poshta streets in a city     |
 | `POST`   | `/orders`                          | Submit a customer order (persisted to PostgreSQL)     |
 | `GET`    | `/orders`                          | List persisted orders (requires API key)              |
+| `POST`   | `/monobank/webhook`                | Receive Monobank invoice-status callbacks (ECDSA auth)|
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -296,8 +297,15 @@ All three endpoints return 502 if the Nova Poshta API call fails.
 
 After a successful request there are always **two** `order_history` rows: one for `new` (written in tx1) and one for
 `awaiting_payment` (written in tx2). HTTP 502 is returned if the DB write, the Monobank call, or the second DB
-transaction fails. No webhook handling is implemented — `awaiting_payment` does not transition automatically based on
-customer behaviour.
+transaction fails.
+
+Once Monobank delivers a webhook (`POST /monobank/webhook`, authenticated via ECDSA `X-Sign`), the order status
+transitions automatically along the lifecycle: `awaiting_payment → payment_processing → payment_hold → paid`, with
+terminal-failure (`failure`/`expired`) mapping to `cancelled` and `reversed` mapping to `refunded`. Each delivery
+appends a row to `order_history` carrying a short human note (e.g. `monobank: success, finalAmount=3200`) and the
+verbatim webhook body in the `payload` JSONB column. Replays and out-of-order deliveries are silent no-ops: the state
+machine refuses to go backwards through the lifecycle. Unknown references and informational `created` events return
+HTTP 200 without any DB write; transient DB errors return 500 so Monobank retries.
 
 **Request body (JSON):**
 
@@ -341,13 +349,16 @@ minor units, total = base + sum of attr add-ons), `currency`, `first_name`, `mid
 the per-attribute add-on amount). One row per selected attribute on the order.
 
 `order_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `status` (`order_status`,
-NOT NULL), `note` (nullable), `created_at`. A successfully created order has exactly two initial rows: one with
-`status = 'new'` written in the first transaction (alongside `orders` and `order_attrs`), and one with
-`status = 'awaiting_payment'` written in the second transaction after the Monobank invoice is confirmed. Future
-status changes will append further rows carrying the new status.
+NOT NULL), `note` (nullable), `payload` (jsonb, nullable; populated by the webhook handler with the verbatim Monobank
+delivery body), `created_at`. A successfully created order has exactly two initial rows: one with `status = 'new'`
+written in the first transaction (alongside `orders` and `order_attrs`), and one with `status = 'awaiting_payment'`
+written in the second transaction after the Monobank invoice is confirmed. Further rows are appended by the webhook
+handler as the payment progresses.
 
-`order_status` enum values: `new`, `awaiting_payment`, `paid`, `processing`, `cancelled`, `shipped`, `delivered`,
-`refund_requested`, `returned`, `refunded`.
+`order_status` enum values: `new`, `awaiting_payment`, `payment_processing`, `payment_hold`, `paid`, `processing`,
+`cancelled`, `shipped`, `delivered`, `refund_requested`, `returned`, `refunded`. The two `payment_*` values are
+written by the webhook handler when Monobank reports the corresponding intermediate states; `paid` is the terminal
+success state, `cancelled` covers `failure`/`expired`, and `refunded` is set on `reversed`.
 
 Migrations are embedded under `internal/sql/` and applied automatically at startup.
 
@@ -374,6 +385,17 @@ exists, just not for `GET`) rather than 404.
 attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
 change, each `{id, status, note (optional), created_at}`). Optional text fields are omitted from JSON when NULL.
 
+#### Monobank webhook
+
+`POST /monobank/webhook` receives Monobank invoice-status deliveries. Authenticated via the `X-Sign` ECDSA signature
+header verified against the merchant public key fetched from `/api/merchant/pubkey` at startup (refetched once on a
+verification failure to recover from key rotation). The route does not pass through CORS, OpenAPI validation, or the
+rate limiter.
+
+Response codes: 200 for processed/idempotent/informational/unknown reference (Monobank stops retrying); 401 for an
+invalid signature; 400 for malformed JSON; 500 for transient DB errors so Monobank retries. The handler never writes
+a JSON error body — Monobank does not consume them.
+
 ## Configuration
 
 Config is loaded from `config.yml`:
@@ -394,6 +416,7 @@ monobank:
   api_key: "<your monobank acquiring X-Token>"
   service_url: ""                                # empty → use https://api.monobank.ua/
   redirect_url: "https://shop.example/order/thanks"
+  webhook_url: "https://shop.example/monobank/webhook"
 rate_limit: 1
 ```
 
@@ -413,6 +436,9 @@ rate_limit: 1
 - `monobank.api_key` — Monobank acquiring X-Token. **Required** — the application refuses to start if empty.
 - `monobank.redirect_url` — URL the Monobank payment page redirects to after the customer completes (or cancels)
   payment. **Required** — the application refuses to start if empty.
+- `monobank.webhook_url` — full HTTPS URL Monobank posts invoice-status webhooks to (e.g.
+  `https://shop.example/monobank/webhook`). **Required** — empty value causes a startup error. Wired through to
+  Monobank as `webHookUrl` on every `CreateInvoice` call so each invoice records where to deliver status updates.
 - `monobank.service_url` — override the Monobank API base URL (default: `https://api.monobank.ua/`). Leave unset in
   production; used in tests.
 - `rate_limit` — requests per minute allowed for `POST /orders` per client IP. `0` defaults to 1 RPM; a negative
