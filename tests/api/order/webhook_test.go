@@ -4,11 +4,11 @@ package order_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -131,8 +131,11 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
 		require.Equal(t, "cancelled", rows[0].Status)
 		hist := fetchOrderHistoryFull(t, a.DSN(), id)
+		require.Len(t, hist, 3)
+		assert.Equal(t, "cancelled", hist[2].Status)
 		require.NotNil(t, hist[2].Note)
 		assert.Equal(t, "monobank: failure (LIMIT_EXCEEDED)", *hist[2].Note)
 	})
@@ -147,6 +150,7 @@ func TestMonobankWebhook(main *testing.T) {
 		require.Equal(t, http.StatusOK, postWebhook(t, rev).StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
 		require.Equal(t, "refunded", rows[0].Status)
 	})
 
@@ -160,6 +164,7 @@ func TestMonobankWebhook(main *testing.T) {
 		require.Equal(t, http.StatusOK, postWebhook(t, ok).StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
 		require.Equal(t, "paid", rows[0].Status)
 		hist := fetchOrderHistoryFull(t, a.DSN(), id)
 		require.Len(t, hist, 4)
@@ -177,6 +182,7 @@ func TestMonobankWebhook(main *testing.T) {
 		require.Equal(t, http.StatusOK, postWebhook(t, late).StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
 		require.Equal(t, "paid", rows[0].Status)
 		hist := fetchOrderHistoryFull(t, a.DSN(), id)
 		require.Len(t, hist, 3)
@@ -207,6 +213,7 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
 		require.Equal(t, "awaiting_payment", rows[0].Status)
 	})
 
@@ -222,14 +229,19 @@ func TestMonobankWebhook(main *testing.T) {
 
 	main.Run("WebhookURLPropagatedToCreateInvoice", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
-		var captured map[string]any
+		var (
+			capturedMu sync.Mutex
+			captured   map[string]any
+		)
 		captureSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/api/merchant/pubkey":
 				_, _ = w.Write(pubPayload)
 			case "/api/merchant/invoice/create":
 				b, _ := io.ReadAll(r.Body)
+				capturedMu.Lock()
 				_ = json.Unmarshal(b, &captured)
+				capturedMu.Unlock()
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte(`{"invoiceId":"inv-cap","pageUrl":"https://pay.example/inv-cap"}`))
 			}
@@ -242,12 +254,14 @@ func TestMonobankWebhook(main *testing.T) {
 		})
 		captureApp.Start()
 		body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, captureApp.URL("/orders"), bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, captureApp.URL("/orders"), bytes.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
+		capturedMu.Lock()
+		defer capturedMu.Unlock()
 		require.NotNil(t, captured)
 		assert.Equal(t, "https://capture.example/monobank/webhook", captured["webHookUrl"])
 	})
