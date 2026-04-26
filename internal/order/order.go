@@ -2,8 +2,14 @@ package order
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 )
+
+// ErrNotFound is returned by Reader implementations when the requested
+// order does not exist.
+var ErrNotFound = errors.New("order not found")
 
 // Attr is a single selected attribute on an order, ready to be persisted as a
 // row in the order_attrs table.
@@ -47,7 +53,8 @@ type Order struct {
 type HistoryEntry struct {
 	ID        string
 	Status    string
-	Note      *string // nil when SQL NULL
+	Note      *string         // nil when SQL NULL
+	Payload   json.RawMessage // nil when SQL NULL
 	CreatedAt time.Time
 }
 
