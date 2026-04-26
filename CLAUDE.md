@@ -137,9 +137,16 @@ The same rule applies to other internal packages (e.g. `internal/geo`, `internal
 implementation packages.
 
 `NewHandler` parameter order (see `internal/handler/handler.go`):
-`prod, pages, shopSvc, np, mb, orders, geo, resp, dataDir, redirectURL, taxIDs, l`. The trailing scalars
-(`dataDir`, `redirectURL`, `taxIDs`) are read out of `cfg` in `app.Run` and passed in flat — handler must not import
-`internal/app` to read them.
+`prod, pages, shopSvc, np, mb, mbVerifier, orders, geo, resp, dataDir, redirectURL, webhookURL, taxIDs, l`. The
+trailing scalars (`dataDir`, `redirectURL`, `webhookURL`, `taxIDs`) are read out of `cfg` in `app.Run` and passed in
+flat — handler must not import `internal/app` to read them.
+
+`monobankVerifier` is a local interface in `handler.go` with one method `Verify(ctx, body, sigB64) error`. It is
+satisfied by `*monobank.Verifier` and is used by the webhook handler to authenticate incoming Monobank callbacks.
+
+The `orderService` interface in `order.go` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`,
+`ApplyPaymentEvent`. The last two are needed by the webhook handler to query current order state and record payment
+events.
 
 ### internal/geo
 
