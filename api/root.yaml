@@ -201,6 +201,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /monobank/webhook:
+    post:
+      operationId: monobankWebhook
+      description: |
+        Receives Monobank invoice-status webhook deliveries. Authenticated
+        via ECDSA signature in the X-Sign header. Not intended for direct
+        external calls — handler bypasses the OpenAPI validator.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Processed, idempotent, informational, or unknown reference
+        "400":
+          description: Malformed body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Invalid X-Sign signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /orders:
     get:
       operationId: listOrders
@@ -557,6 +586,10 @@ components:
         note:
           type: string
           nullable: true
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
         created_at:
           type: string
           format: date-time
