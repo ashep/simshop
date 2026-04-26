@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,14 @@ const testAPIKey = "test-api-key"
 func TestListOrders(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-existing","pageUrl":"https://pay.example/inv-existing"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
 	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
 		cfg.RateLimit = -1
 		cfg.Server.APIKey = testAPIKey
 	})
@@ -128,19 +136,38 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, "Red", bobAttrs[0].(map[string]any)["value"])
 		assert.Equal(t, float64(1000), bobAttrs[0].(map[string]any)["price"])
 
-		// Both have one history entry of status "new" from the writer's initial insert.
+		// Both have two history entries: "new" (initial) + "awaiting_payment" (after Monobank invoice).
 		bobHistory, ok := got[0]["history"].([]any)
 		require.True(t, ok)
-		require.Len(t, bobHistory, 1)
+		require.Len(t, bobHistory, 2)
 		assert.Equal(t, "new", bobHistory[0].(map[string]any)["status"])
+		assert.Equal(t, "awaiting_payment", bobHistory[1].(map[string]any)["status"])
 
-		// Alice has no attrs and one history entry.
+		// Bob has one invoice from Monobank.
+		bobInvoices, ok := got[0]["invoices"].([]any)
+		require.True(t, ok)
+		require.Len(t, bobInvoices, 1)
+		assert.Equal(t, "monobank", bobInvoices[0].(map[string]any)["provider"])
+		assert.Equal(t, "inv-existing", bobInvoices[0].(map[string]any)["invoice_id"])
+		assert.Equal(t, "https://pay.example/inv-existing", bobInvoices[0].(map[string]any)["page_url"])
+
+		// Alice has no attrs and two history entries.
 		aliceAttrs, ok := got[1]["attrs"].([]any)
 		require.True(t, ok)
 		assert.Empty(t, aliceAttrs)
 		aliceHistory, ok := got[1]["history"].([]any)
 		require.True(t, ok)
-		require.Len(t, aliceHistory, 1)
+		require.Len(t, aliceHistory, 2)
+		assert.Equal(t, "new", aliceHistory[0].(map[string]any)["status"])
+		assert.Equal(t, "awaiting_payment", aliceHistory[1].(map[string]any)["status"])
+
+		// Alice has one invoice from Monobank.
+		aliceInvoices, ok := got[1]["invoices"].([]any)
+		require.True(t, ok)
+		require.Len(t, aliceInvoices, 1)
+		assert.Equal(t, "monobank", aliceInvoices[0].(map[string]any)["provider"])
+		assert.Equal(t, "inv-existing", aliceInvoices[0].(map[string]any)["invoice_id"])
+		assert.Equal(t, "https://pay.example/inv-existing", aliceInvoices[0].(map[string]any)["page_url"])
 	})
 }
 
