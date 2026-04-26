@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,7 +83,7 @@ func truncateOrders(t *testing.T, dsn string) {
 	pool, err := pgxpool.New(t.Context(), dsn)
 	require.NoError(t, err)
 	defer pool.Close()
-	_, err = pool.Exec(t.Context(), "TRUNCATE order_attrs, order_history, orders RESTART IDENTITY CASCADE")
+	_, err = pool.Exec(t.Context(), "TRUNCATE order_attrs, order_invoices, order_history, orders RESTART IDENTITY CASCADE")
 	require.NoError(t, err)
 }
 
@@ -328,6 +329,167 @@ func TestCreateOrder(main *testing.T) {
 	main.Run("UnknownLangReturns400", func(t *testing.T) {
 		resp := do(t, validBody(map[string]any{"lang": "fr"}))
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+}
+
+func TestCreateOrder_Monobank(main *testing.T) {
+	dataDir := makeDataDir(main)
+
+	// Monobank stub: configurable per-subtest via the captured handler var.
+	var (
+		mbHandler   http.HandlerFunc
+		lastRequest *http.Request
+		lastBody    []byte
+	)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		lastRequest = r.Clone(context.Background())
+		lastBody = body
+		// Re-attach the body for the inner handler.
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		if mbHandler != nil {
+			mbHandler(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-default","pageUrl":"https://pay.example/inv-default"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.RateLimit = -1
+	})
+	a.Start()
+
+	const reqBody = `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`
+
+	main.Run("HappyPath", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"invoiceId":"inv-1","pageUrl":"https://pay.example/inv-1"}`))
+		}
+
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(reqBody)))
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		assert.JSONEq(t, `{"payment_url":"https://pay.example/inv-1"}`, string(body))
+
+		// DB assertions.
+		pool, err := pgxpool.New(t.Context(), a.DSN())
+		require.NoError(t, err)
+		defer pool.Close()
+
+		var status string
+		var orderID string
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT id::text, status::text FROM orders`).Scan(&orderID, &status))
+		assert.Equal(t, "awaiting_payment", status)
+
+		var invoiceID, pageURL, currency string
+		var amount int
+		require.NoError(t, pool.QueryRow(t.Context(),
+			`SELECT invoice_id, page_url, amount, currency FROM order_invoices WHERE order_id = $1`, orderID,
+		).Scan(&invoiceID, &pageURL, &amount, &currency))
+		assert.Equal(t, "inv-1", invoiceID)
+		assert.Equal(t, "https://pay.example/inv-1", pageURL)
+		assert.Equal(t, 4999, amount)
+		assert.Equal(t, "USD", currency)
+
+		var historyCount int
+		require.NoError(t, pool.QueryRow(t.Context(),
+			`SELECT COUNT(*) FROM order_history WHERE order_id = $1`, orderID,
+		).Scan(&historyCount))
+		assert.Equal(t, 2, historyCount)
+	})
+
+	main.Run("MonobankReturns500", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(reqBody)))
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		assert.JSONEq(t, `{"error":"bad gateway"}`, string(body))
+
+		pool, err := pgxpool.New(t.Context(), a.DSN())
+		require.NoError(t, err)
+		defer pool.Close()
+
+		var status string
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT status::text FROM orders`).Scan(&status))
+		assert.Equal(t, "new", status)
+
+		var invCount int
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT COUNT(*) FROM order_invoices`).Scan(&invCount))
+		assert.Equal(t, 0, invCount)
+
+		var historyCount int
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT COUNT(*) FROM order_history`).Scan(&historyCount))
+		assert.Equal(t, 1, historyCount)
+	})
+
+	main.Run("MonobankReturnsErrCode", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"errCode":"limit_exceeded","errText":"too many"}`))
+		}
+
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(reqBody)))
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		assert.JSONEq(t, `{"error":"bad gateway"}`, string(body))
+
+		pool, err := pgxpool.New(t.Context(), a.DSN())
+		require.NoError(t, err)
+		defer pool.Close()
+
+		var status string
+		require.NoError(t, pool.QueryRow(t.Context(), `SELECT status::text FROM orders`).Scan(&status))
+		assert.Equal(t, "new", status)
+	})
+
+	main.Run("RequestShape", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"invoiceId":"inv-rs","pageUrl":"https://pay.example/inv-rs"}`))
+		}
+
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(reqBody)))
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		// Inspect what the handler sent to the Monobank stub.
+		require.NotNil(t, lastRequest)
+		assert.Equal(t, "test-key", lastRequest.Header.Get("X-Token"))
+		var body struct {
+			Amount           int    `json:"amount"`
+			Ccy              int    `json:"ccy"`
+			RedirectURL      string `json:"redirectUrl"`
+			MerchantPaymInfo struct {
+				Reference   string `json:"reference"`
+				Destination string `json:"destination"`
+			} `json:"merchantPaymInfo"`
+		}
+		require.NoError(t, json.Unmarshal(lastBody, &body))
+		assert.Equal(t, 4999, body.Amount)
+		assert.Equal(t, 840, body.Ccy)
+		assert.NotEmpty(t, body.MerchantPaymInfo.Reference)
+		assert.Contains(t, body.RedirectURL, "order_id=")
 	})
 }
 
