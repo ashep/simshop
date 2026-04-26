@@ -5,9 +5,11 @@ package order_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,9 +24,11 @@ const testAPIKey = "test-api-key"
 func TestListOrders(main *testing.T) {
 	dataDir := makeDataDir(main)
 
+	var mbCounter atomic.Uint64
 	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := mbCounter.Add(1)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"invoiceId":"inv-existing","pageUrl":"https://pay.example/inv-existing"}`))
+		_, _ = fmt.Fprintf(w, `{"invoiceId":"inv-existing-%d","pageUrl":"https://pay.example/inv-existing-%d"}`, n, n)
 	}))
 	main.Cleanup(mbServer.Close)
 
@@ -87,6 +91,7 @@ func TestListOrders(main *testing.T) {
 
 	main.Run("PopulatedDBReturnsRecords", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
+		mbCounter.Store(0)
 
 		// Seed two orders via the POST endpoint to exercise the writer side too.
 		// The second one carries an attribute so we can assert the attrs payload.
@@ -148,8 +153,8 @@ func TestListOrders(main *testing.T) {
 		require.True(t, ok)
 		require.Len(t, bobInvoices, 1)
 		assert.Equal(t, "monobank", bobInvoices[0].(map[string]any)["provider"])
-		assert.Equal(t, "inv-existing", bobInvoices[0].(map[string]any)["invoice_id"])
-		assert.Equal(t, "https://pay.example/inv-existing", bobInvoices[0].(map[string]any)["page_url"])
+		assert.Equal(t, "inv-existing-2", bobInvoices[0].(map[string]any)["id"])
+		assert.Equal(t, "https://pay.example/inv-existing-2", bobInvoices[0].(map[string]any)["page_url"])
 
 		// Alice has no attrs and two history entries.
 		aliceAttrs, ok := got[1]["attrs"].([]any)
@@ -166,8 +171,8 @@ func TestListOrders(main *testing.T) {
 		require.True(t, ok)
 		require.Len(t, aliceInvoices, 1)
 		assert.Equal(t, "monobank", aliceInvoices[0].(map[string]any)["provider"])
-		assert.Equal(t, "inv-existing", aliceInvoices[0].(map[string]any)["invoice_id"])
-		assert.Equal(t, "https://pay.example/inv-existing", aliceInvoices[0].(map[string]any)["page_url"])
+		assert.Equal(t, "inv-existing-1", aliceInvoices[0].(map[string]any)["id"])
+		assert.Equal(t, "https://pay.example/inv-existing-1", aliceInvoices[0].(map[string]any)["page_url"])
 	})
 }
 
