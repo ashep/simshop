@@ -14,6 +14,7 @@ type MonobankConfig struct {
 	APIKey      string `yaml:"api_key"`      // X-Token; empty → startup error
 	ServiceURL  string `yaml:"service_url"`  // overridden in tests; empty means use production URL
 	RedirectURL string `yaml:"redirect_url"` // post-payment customer landing page; empty → startup error
+	TaxIDs      []int  `yaml:"tax_ids"`      // merchant tax registration IDs from the Monobank business cabinet; required when fiscalization is enabled
 }
 
 type DBConfig struct {

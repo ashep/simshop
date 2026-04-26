@@ -78,7 +78,7 @@ func Run(rt *runner.Runtime[Config]) error {
 		return fmt.Errorf("create openapi: %w", err)
 	}
 
-	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, mbClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, cfg.Monobank.RedirectURL, l)
+	hdl := handler.NewHandler(prodSvc, pageSvc, shopSvc, npClient, mbClient, orderSvc, geo.NewDetector(), openAPI.Responder(), cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Monobank.TaxIDs, l)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
