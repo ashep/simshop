@@ -74,6 +74,7 @@ func TestListOrders(main *testing.T) {
 						CreatedAt: time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
 					},
 				},
+				Invoices: []order.Invoice{},
 			},
 		}
 		svc.On("List", mock.Anything).Return(records, nil)
@@ -123,6 +124,7 @@ func TestListOrders(main *testing.T) {
 				UpdatedAt: time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
 				Attrs:     []order.Attr{},
 				History:   []order.HistoryEntry{},
+				Invoices:  []order.Invoice{},
 			},
 		}
 		svc.On("List", mock.Anything).Return(records, nil)
