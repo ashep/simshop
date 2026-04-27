@@ -97,39 +97,36 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	nop := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusMethodNotAllowed) }
 
-	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
-	srv.HandleFunc("OPTIONS /products", corsMw(nop))
-	srv.HandleFunc("GET /products/{id}/{lang}", corsMw(openapiMw(hdl.ServeProductContent)))
-	srv.HandleFunc("OPTIONS /products/{id}/{lang}", corsMw(nop))
-	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
-	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
-	srv.HandleFunc("GET /pages", corsMw(openapiMw(hdl.ListPages)))
-	srv.HandleFunc("OPTIONS /pages", corsMw(nop))
-	srv.HandleFunc("GET /pages/{id}/{lang}", corsMw(hdl.ServePage))
-	srv.HandleFunc("OPTIONS /pages/{id}/{lang}", corsMw(nop))
-	srv.HandleFunc("GET /shop", corsMw(openapiMw(hdl.ServeShop)))
 	srv.HandleFunc("OPTIONS /shop", corsMw(nop))
-	srv.HandleFunc("GET /nova-poshta/cities", corsMw(openapiMw(hdl.SearchNPCities)))
-	srv.HandleFunc("OPTIONS /nova-poshta/cities", corsMw(nop))
-	srv.HandleFunc("GET /nova-poshta/branches", corsMw(openapiMw(hdl.SearchNPBranches)))
-	srv.HandleFunc("OPTIONS /nova-poshta/branches", corsMw(nop))
-	srv.HandleFunc("GET /nova-poshta/streets", corsMw(openapiMw(hdl.SearchNPStreets)))
-	srv.HandleFunc("OPTIONS /nova-poshta/streets", corsMw(nop))
+	srv.HandleFunc("GET /shop", corsMw(openapiMw(hdl.ServeShop)))
 
-	var ordersHandler http.HandlerFunc
-	if cfg.RateLimit < 0 {
-		// Negative rate limit disables rate limiting
-		ordersHandler = hdl.CreateOrder
-	} else {
-		rateLimit := cfg.RateLimit
-		if rateLimit == 0 {
-			rateLimit = 1 // default: 1 request per minute
-		}
-		rateLimitMw := handler.RateLimitMiddleware(rateLimit)
-		ordersHandler = rateLimitMw(hdl.CreateOrder)
-	}
-	srv.HandleFunc("POST /orders", corsMw(openapiMw(ordersHandler)))
+	srv.HandleFunc("OPTIONS /pages", corsMw(nop))
+	srv.HandleFunc("GET /pages", corsMw(openapiMw(hdl.ListPages)))
+
+	srv.HandleFunc("OPTIONS /products", corsMw(nop))
+	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
+	srv.HandleFunc("OPTIONS /products/{id}/{lang}", corsMw(nop))
+	srv.HandleFunc("GET /products/{id}/{lang}", corsMw(openapiMw(hdl.ServeProductContent)))
+	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
+	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
+
+	srv.HandleFunc("OPTIONS /pages/{id}/{lang}", corsMw(nop))
+	srv.HandleFunc("GET /pages/{id}/{lang}", corsMw(hdl.ServePage))
+
+	srv.HandleFunc("OPTIONS /nova-poshta/cities", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/cities", corsMw(openapiMw(hdl.SearchNPCities)))
+	srv.HandleFunc("OPTIONS /nova-poshta/branches", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/branches", corsMw(openapiMw(hdl.SearchNPBranches)))
+	srv.HandleFunc("OPTIONS /nova-poshta/streets", corsMw(nop))
+	srv.HandleFunc("GET /nova-poshta/streets", corsMw(openapiMw(hdl.SearchNPStreets)))
+
 	srv.HandleFunc("OPTIONS /orders", corsMw(nop))
+	createOrderHandler := hdl.CreateOrder
+	if cfg.RateLimit > 0 {
+		rateLimitMw := handler.RateLimitMiddleware(cfg.RateLimit)
+		createOrderHandler = rateLimitMw(createOrderHandler)
+	}
+	srv.HandleFunc("POST /orders", corsMw(openapiMw(createOrderHandler)))
 	srv.HandleFunc("POST /monobank/webhook", hdl.MonobankWebhook)
 	if cfg.Server.APIKey != "" {
 		apiKeyMw := handler.APIKeyMiddleware(cfg.Server.APIKey)
