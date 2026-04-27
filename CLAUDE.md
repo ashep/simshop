@@ -71,9 +71,9 @@ Rate limiting is provided by `handler.RateLimitMiddleware(rpm int)`: per-client-
 sweeping expired entries in a background goroutine. Excess requests get HTTP 429 with `Retry-After`. Client IP comes
 from the first `X-Forwarded-For` entry (Cloudflare) falling back to `RemoteAddr`.
 
-The `POST /orders` endpoint is rate-limited via `cfg.RateLimit` (`rate_limit` in YAML). `0` uses the default of
-1 RPM. **A negative value disables rate limiting entirely.** Functional tests set `cfg.RateLimit = -1` so multiple
-requests can be made synchronously from the same IP without hitting the limit.
+The `POST /orders` endpoint is rate-limited via `cfg.RateLimit` (`rate_limit` in YAML). A **positive** value sets
+the per-IP RPM ceiling; **`0` or any negative value disables rate limiting entirely** (functional tests use `-1` to
+allow synchronous bursts from the same IP).
 
 API key auth is provided by `handler.APIKeyMiddleware(apiKey string)`: requires `Authorization: Bearer <token>` and
 compares with `crypto/subtle.ConstantTimeCompare` to defeat timing attacks. Two distinct 401 reasons are emitted —
@@ -441,7 +441,8 @@ Config keys live under `internal/app/config.go`. Notable required vs optional ru
   when fiscalization is enabled). Wired into `NewHandler` as `taxIDs []int` and emitted on every basket item.
 - **`Server.APIKey`** is optional; empty disables `GET /orders` via conditional route registration (see Routes).
 - **`NovaPoshta.ServiceURL`** is optional; empty falls back to the production NP URL.
-- **`RateLimit`** (top-level `rate_limit`): 0 → default 1 RPM; negative → disabled (functional tests use `-1`).
+- **`RateLimit`** (top-level `rate_limit`): positive → that many RPM per IP; `0` or negative → rate limiting
+  disabled (functional tests use `-1`).
 - **`DataDir`** (top-level `data_dir`): default `./data`.
 
 `testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`, and

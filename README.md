@@ -442,5 +442,5 @@ rate_limit: 1
   Monobank as `webHookUrl` on every `CreateInvoice` call so each invoice records where to deliver status updates.
 - `monobank.service_url` — override the Monobank API base URL (default: `https://api.monobank.ua/`). Leave unset in
   production; used in tests.
-- `rate_limit` — requests per minute allowed for `POST /orders` per client IP. `0` defaults to 1 RPM; a negative
-  value disables rate limiting.
+- `rate_limit` — requests per minute allowed for `POST /orders` per client IP (positive integer). `0` or a negative
+  value disables rate limiting entirely.
