@@ -128,6 +128,8 @@ func Run(rt *runner.Runtime[Config]) error {
 	}
 	srv.HandleFunc("POST /orders", corsMw(openapiMw(createOrderHandler)))
 	srv.HandleFunc("POST /monobank/webhook", hdl.MonobankWebhook)
+	srv.HandleFunc("OPTIONS /orders/{id}", corsMw(nop))
+	srv.HandleFunc("GET /orders/{id}", corsMw(openapiMw(hdl.GetOrderStatus)))
 	if cfg.Server.APIKey != "" {
 		apiKeyMw := handler.APIKeyMiddleware(cfg.Server.APIKey)
 		srv.HandleFunc("GET /orders", corsMw(apiKeyMw(openapiMw(hdl.ListOrders))))
