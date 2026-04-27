@@ -284,6 +284,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /orders/{id}:
+    get:
+      operationId: getOrderStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Order status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusResponse'
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -484,6 +508,14 @@ components:
         - payment_url
       properties:
         payment_url:
+          type: string
+
+    OrderStatusResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
           type: string
 
     ErrorResponse:

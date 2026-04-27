@@ -258,6 +258,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/nova-poshta/streets?city_ref=<ref>&q=<query>`  | Search Nova Poshta streets in a city     |
 | `POST`   | `/orders`                          | Submit a customer order (persisted to PostgreSQL)     |
 | `GET`    | `/orders`                          | List persisted orders (requires API key)              |
+| `GET`    | `/orders/{id}`                     | Get an order's status (public)                        |
 | `POST`   | `/monobank/webhook`                | Receive Monobank invoice-status callbacks (ECDSA auth)|
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
@@ -385,6 +386,19 @@ exists, just not for `GET`) rather than 404.
 attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
 change, each `{id, status, note (optional), payload (optional, JSONB; verbatim Monobank webhook body),
 created_at}`). Optional text fields are omitted from JSON when NULL.
+
+#### Order status
+
+`GET /orders/{id}` returns `{"status": "<order_status>"}` for a single order identified by its UUIDv7. The endpoint is
+public — no API key, no rate limit. The `id` value is the same UUID the storefront receives in the Monobank
+`redirectUrl` query string after a customer completes (or cancels) payment, so the post-payment confirmation page can
+poll the order's current state.
+
+The path parameter is validated by the OpenAPI request middleware as `format: uuid`; a malformed value returns HTTP
+400 with the standard validator body before the handler runs. A valid UUID with no matching row returns HTTP 404 with
+`{"error": "order not found"}`. The `status` value is the raw `order_status` enum (`new`, `awaiting_payment`,
+`payment_processing`, `payment_hold`, `paid`, `cancelled`, etc.) — clients are responsible for mapping it to a
+user-facing message in their own language.
 
 #### Monobank webhook
 

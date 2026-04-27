@@ -387,6 +387,14 @@ in `app.go` is the single source of truth.
 See also: **internal/orderdb** under Packages for the transactional writer, Reader fan-out, and no-unit-tests
 rationale.
 
+### `GET /orders/{id}`
+
+`GetOrderStatus` returns `{"status": "<order_status>"}` for a single order identified by its UUIDv7. The path
+parameter is validated by the OpenAPI request middleware as `format: uuid` — a malformed value returns 400 before the
+handler runs. A valid UUID not present in the DB returns 404 with `{"error": "order not found"}`. No API key is
+required (public endpoint). The handler maps `order.ErrNotFound` (from `orderdb.Reader.GetStatus`) to
+`&NotFoundError{Reason: "order not found"}` via `errors.Is`.
+
 ### `POST /monobank/webhook`
 
 `MonobankWebhook` processes Monobank invoice-status webhook deliveries. Authenticated by `X-Sign` (ECDSA over the
