@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -38,11 +37,10 @@ type orderAttrResponse struct {
 }
 
 type orderHistoryResponse struct {
-	ID        string          `json:"id"`
-	Status    string          `json:"status"`
-	Note      *string         `json:"note,omitempty"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
+	Note      *string   `json:"note,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type orderInvoiceResponse struct {
@@ -89,7 +87,6 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 			ID:        h.ID,
 			Status:    h.Status,
 			Note:      h.Note,
-			Payload:   h.Payload,
 			CreatedAt: h.CreatedAt,
 		}
 	}

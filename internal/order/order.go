@@ -7,6 +7,17 @@ import (
 	"time"
 )
 
+// Invoice status enum values, kept in sync with the invoice_status PostgreSQL
+// enum. The webhook handler maps provider-specific status strings (e.g.
+// Monobank's "success"/"failure") onto these values.
+const (
+	InvoiceStatusProcessing = "processing"
+	InvoiceStatusHold       = "hold"
+	InvoiceStatusPaid       = "paid"
+	InvoiceStatusFailed     = "failed"
+	InvoiceStatusReversed   = "reversed"
+)
+
 // ErrNotFound is returned by Reader implementations when the requested
 // order does not exist.
 var ErrNotFound = errors.New("order not found")
@@ -53,9 +64,21 @@ type Order struct {
 type HistoryEntry struct {
 	ID        string
 	Status    string
-	Note      *string         // nil when SQL NULL
-	Payload   json.RawMessage // nil when SQL NULL
+	Note      *string // nil when SQL NULL
 	CreatedAt time.Time
+}
+
+// InvoiceEvent is one provider-side event for an invoice (typically a
+// webhook delivery). It is the input to RecordInvoiceEvent. The persisted
+// timeline is later used to derive the order's payment status.
+type InvoiceEvent struct {
+	OrderID   string
+	InvoiceID string
+	Provider  string          // e.g. "monobank"
+	Status    string          // one of the InvoiceStatus* constants
+	Note      string          // human-readable summary (rendered by the caller)
+	Payload   json.RawMessage // verbatim provider payload, persisted as JSONB
+	EventAt   time.Time       // provider's modifiedDate / event timestamp
 }
 
 // Record is a fully-populated order read from the store, including DB-generated
@@ -104,11 +127,16 @@ type InvoiceWriter interface {
 	AttachInvoice(ctx context.Context, orderID string, inv Invoice) error
 }
 
-// PaymentEventWriter applies a payment-provider event to an order: it updates
-// orders.status and appends an order_history row carrying a human note and
-// the verbatim provider payload. The two writes share a single transaction.
-type PaymentEventWriter interface {
-	ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error
+// InvoiceEventWriter persists a provider-side invoice event and, in the same
+// transaction, recomputes the order's payment status from the latest event in
+// the invoice timeline (ordered by EventAt). When the latest event implies a
+// forward order_status transition, the order row and order_history are
+// updated; otherwise the row is recorded but the order is left untouched.
+//
+// Inserting an event with the same (InvoiceID, Provider, Status, EventAt) as
+// an existing row is a silent no-op (idempotent webhook replay).
+type InvoiceEventWriter interface {
+	RecordInvoiceEvent(ctx context.Context, evt InvoiceEvent) error
 }
 
 // Service submits orders via a Writer, attaches invoices via an InvoiceWriter,
@@ -117,12 +145,12 @@ type Service struct {
 	w   Writer
 	r   Reader
 	iw  InvoiceWriter
-	pew PaymentEventWriter
+	iew InvoiceEventWriter
 }
 
-// NewService returns a Service backed by w, r, iw, and pew.
-func NewService(w Writer, r Reader, iw InvoiceWriter, pew PaymentEventWriter) *Service {
-	return &Service{w: w, r: r, iw: iw, pew: pew}
+// NewService returns a Service backed by w, r, iw, and iew.
+func NewService(w Writer, r Reader, iw InvoiceWriter, iew InvoiceEventWriter) *Service {
+	return &Service{w: w, r: r, iw: iw, iew: iew}
 }
 
 // Submit writes the order to the backing store and returns the assigned id.
@@ -147,8 +175,8 @@ func (s *Service) GetStatus(ctx context.Context, orderID string) (string, error)
 	return s.r.GetStatus(ctx, orderID)
 }
 
-// ApplyPaymentEvent updates the order status and appends an order_history row
-// carrying note and payload. Both writes happen in a single transaction.
-func (s *Service) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
-	return s.pew.ApplyPaymentEvent(ctx, orderID, status, note, payload)
+// RecordInvoiceEvent persists a provider-side invoice event and recomputes
+// the order's payment status. See InvoiceEventWriter for the full contract.
+func (s *Service) RecordInvoiceEvent(ctx context.Context, evt InvoiceEvent) error {
+	return s.iew.RecordInvoiceEvent(ctx, evt)
 }

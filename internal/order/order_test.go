@@ -37,10 +37,10 @@ func (m *invoiceWriterMock) AttachInvoice(ctx context.Context, orderID string, i
 	return m.Called(ctx, orderID, inv).Error(0)
 }
 
-type paymentEventWriterMock struct{ mock.Mock }
+type invoiceEventWriterMock struct{ mock.Mock }
 
-func (m *paymentEventWriterMock) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
-	return m.Called(ctx, orderID, status, note, payload).Error(0)
+func (m *invoiceEventWriterMock) RecordInvoiceEvent(ctx context.Context, evt InvoiceEvent) error {
+	return m.Called(ctx, evt).Error(0)
 }
 
 func TestService(main *testing.T) {
@@ -48,11 +48,11 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		id, err := svc.Submit(context.Background(), o)
 		require.NoError(t, err)
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000001", id)
@@ -63,11 +63,11 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("", errors.New("write failed"))
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		_, err := svc.Submit(context.Background(), o)
 		assert.EqualError(t, err, "write failed")
 		w.AssertExpectations(t)
@@ -77,11 +77,11 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		inv := Invoice{Provider: "monobank", ID: "inv-1", PageURL: "https://pay/inv-1", Amount: 100, Currency: "UAH"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(nil)
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		require.NoError(t, svc.AttachInvoice(context.Background(), "order-1", inv))
 		iw.AssertExpectations(t)
 	})
@@ -90,11 +90,11 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		inv := Invoice{Provider: "monobank"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(errors.New("attach failed"))
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		assert.EqualError(t, svc.AttachInvoice(context.Background(), "order-1", inv), "attach failed")
 		iw.AssertExpectations(t)
 	})
@@ -103,11 +103,11 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000001", ProductID: "widget"}}
 		r.On("List", mock.Anything).Return(want, nil)
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		got, err := svc.List(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
@@ -118,10 +118,10 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		r.On("List", mock.Anything).Return(([]Record)(nil), errors.New("read failed"))
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		_, err := svc.List(context.Background())
 		assert.EqualError(t, err, "read failed")
 		r.AssertExpectations(t)
@@ -131,10 +131,10 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		r.On("GetStatus", mock.Anything, "order-1").Return("awaiting_payment", nil)
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		got, err := svc.GetStatus(context.Background(), "order-1")
 		require.NoError(t, err)
 		assert.Equal(t, "awaiting_payment", got)
@@ -145,37 +145,45 @@ func TestService(main *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
+		iew := &invoiceEventWriterMock{}
 		r.On("GetStatus", mock.Anything, "missing").Return("", ErrNotFound)
 
-		svc := NewService(w, r, iw, pew)
+		svc := NewService(w, r, iw, iew)
 		_, err := svc.GetStatus(context.Background(), "missing")
 		assert.ErrorIs(t, err, ErrNotFound)
 		r.AssertExpectations(t)
 	})
 
-	main.Run("ApplyPaymentEventDelegatesToWriter", func(t *testing.T) {
+	main.Run("RecordInvoiceEventDelegatesToWriter", func(t *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
-		payload := json.RawMessage(`{"status":"success"}`)
-		pew.On("ApplyPaymentEvent", mock.Anything, "order-1", "paid", "monobank: success", payload).Return(nil)
+		iew := &invoiceEventWriterMock{}
+		evt := InvoiceEvent{
+			OrderID:   "order-1",
+			InvoiceID: "inv-1",
+			Provider:  "monobank",
+			Status:    InvoiceStatusPaid,
+			Note:      "monobank: success",
+			Payload:   json.RawMessage(`{"status":"success"}`),
+		}
+		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return(nil)
 
-		svc := NewService(w, r, iw, pew)
-		require.NoError(t, svc.ApplyPaymentEvent(context.Background(), "order-1", "paid", "monobank: success", payload))
-		pew.AssertExpectations(t)
+		svc := NewService(w, r, iw, iew)
+		require.NoError(t, svc.RecordInvoiceEvent(context.Background(), evt))
+		iew.AssertExpectations(t)
 	})
 
-	main.Run("ApplyPaymentEventReturnsWriterError", func(t *testing.T) {
+	main.Run("RecordInvoiceEventReturnsWriterError", func(t *testing.T) {
 		w := &writerMock{}
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
-		pew := &paymentEventWriterMock{}
-		pew.On("ApplyPaymentEvent", mock.Anything, "order-1", "paid", "", json.RawMessage(nil)).Return(errors.New("apply failed"))
+		iew := &invoiceEventWriterMock{}
+		evt := InvoiceEvent{OrderID: "order-1", Status: InvoiceStatusPaid}
+		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return(errors.New("record failed"))
 
-		svc := NewService(w, r, iw, pew)
-		assert.EqualError(t, svc.ApplyPaymentEvent(context.Background(), "order-1", "paid", "", nil), "apply failed")
-		pew.AssertExpectations(t)
+		svc := NewService(w, r, iw, iew)
+		assert.EqualError(t, svc.RecordInvoiceEvent(context.Background(), evt), "record failed")
+		iew.AssertExpectations(t)
 	})
 }

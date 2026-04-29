@@ -77,7 +77,7 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	ordersWriter := orderdb.New(db)
 	ordersReader := orderdb.NewReader(db)
-	// orderdb.Writer satisfies Writer, InvoiceWriter, and PaymentEventWriter.
+	// orderdb.Writer satisfies Writer, InvoiceWriter, and InvoiceEventWriter.
 	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter)
 
 	openAPI, err := openapi.New(api.Spec)

@@ -300,13 +300,21 @@ After a successful request there are always **two** `order_history` rows: one fo
 `awaiting_payment` (written in tx2). HTTP 502 is returned if the DB write, the Monobank call, or the second DB
 transaction fails.
 
-Once Monobank delivers a webhook (`POST /monobank/webhook`, authenticated via ECDSA `X-Sign`), the order status
-transitions automatically along the lifecycle: `awaiting_payment → payment_processing → payment_hold → paid`, with
-terminal-failure (`failure`/`expired`) mapping to `cancelled` and `reversed` mapping to `refunded`. Each delivery
-appends a row to `order_history` carrying a short human note (e.g. `monobank: success, finalAmount=3200`) and the
-verbatim webhook body in the `payload` JSONB column. Replays and out-of-order deliveries are silent no-ops: the state
-machine refuses to go backwards through the lifecycle. Unknown references and informational `created` events return
-HTTP 200 without any DB write; transient DB errors return 500 so Monobank retries.
+Once Monobank delivers a webhook (`POST /monobank/webhook`, authenticated via ECDSA `X-Sign`), the event is appended
+to the `invoice_history` table — keyed by `(invoice_id, provider, status, event_at)` so duplicate deliveries are a
+silent no-op — and the order's payment status is **re-derived from the latest event in the timeline** (ordered by
+the provider's own `modifiedDate`, not by our receive time). The order moves along the payment lifecycle
+`awaiting_payment → payment_processing → payment_hold → paid`, with `failure`/`expired` mapping to `cancelled` and
+`reversed` mapping to `refunded`. Because state is derived from the latest event by `modifiedDate`, **out-of-order
+webhook delivery is tolerated**: a late-arriving event with an older timestamp inserts behind the latest and does not
+move the order. **Retry-after-failure is also supported**: a customer who hits "Retry" on a cancelled order — Monobank
+reuses the same `invoiceId` — drives the order out of `cancelled` back into `payment_processing` and onward, because
+`cancelled` is treated as re-enterable by the lifecycle rule.
+
+Unknown references and informational `created` events return HTTP 200 without any DB write. Transient DB errors return
+500 so Monobank retries. Once an operator moves an order into a fulfillment state (`processing`, `shipped`, etc.),
+later invoice events become informational and do not roll the order backwards — except for `reversed → refunded`,
+which always wins because the customer's money was returned.
 
 **Request body (JSON):**
 
@@ -350,16 +358,28 @@ minor units, total = base + sum of attr add-ons), `currency`, `first_name`, `mid
 the per-attribute add-on amount). One row per selected attribute on the order.
 
 `order_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `status` (`order_status`,
-NOT NULL), `note` (nullable), `payload` (jsonb, nullable; populated by the webhook handler with the verbatim Monobank
-delivery body), `created_at`. A successfully created order has exactly two initial rows: one with `status = 'new'`
-written in the first transaction (alongside `orders` and `order_attrs`), and one with `status = 'awaiting_payment'`
-written in the second transaction after the Monobank invoice is confirmed. Further rows are appended by the webhook
-handler as the payment progresses.
+NOT NULL), `note` (nullable), `created_at`. A successfully created order has exactly two initial rows: one with
+`status = 'new'` written in the first transaction (alongside `orders` and `order_attrs`), and one with
+`status = 'awaiting_payment'` written in the second transaction after the Monobank invoice is confirmed. Further rows
+are appended whenever a webhook event drives the order to a new payment state. `order_history` is the order-state
+transition log; the verbatim webhook body lives on `invoice_history.payload` instead, where it serves as the audit
+trail for "what the provider told us."
+
+`invoice_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `invoice_id` (text — the
+provider's own invoice id), `provider` (text, e.g. `monobank`), `status` (`invoice_status`, NOT NULL), `note`
+(nullable; pre-rendered human summary like `monobank: success, finalAmount=3200`), `payload` (jsonb, NOT NULL;
+verbatim provider webhook body), `event_at` (timestamp; populated from the provider's `modifiedDate`, not our
+receive time), `created_at`. A `UNIQUE (invoice_id, provider, status, event_at)` constraint dedupes idempotent
+webhook replays. The "current" invoice status for an order is the row with the largest `event_at` (with `created_at`
+as a tiebreaker for the pathological case of two distinct rows sharing a `modifiedDate`).
+
+`invoice_status` enum values: `processing`, `hold`, `paid`, `failed`, `reversed`. Monobank's webhook statuses map onto
+these via `monobankStatusToInvoiceStatus` (`success → paid`, `failure | expired → failed`, `created → no row`).
 
 `order_status` enum values: `new`, `awaiting_payment`, `payment_processing`, `payment_hold`, `paid`, `processing`,
 `cancelled`, `shipped`, `delivered`, `refund_requested`, `returned`, `refunded`. The two `payment_*` values are
-written by the webhook handler when Monobank reports the corresponding intermediate states; `paid` is the terminal
-success state, `cancelled` covers `failure`/`expired`, and `refunded` is set on `reversed`.
+written when the latest invoice event is `processing` / `hold`; `paid` is the terminal success state, `cancelled`
+covers `failed`, and `refunded` is set on `reversed`.
 
 Migrations are embedded under `internal/sql/` and applied automatically at startup.
 
@@ -384,8 +404,9 @@ exists, just not for `GET`) rather than 404.
 `country`, `city`, `phone`, `address`, `admin_note` (optional), `customer_note` (optional), `created_at`,
 `updated_at`) plus two inlined arrays: `attrs` — the rendered title pairs from `order_attrs` (one entry per selected
 attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
-change, each `{id, status, note (optional), payload (optional, JSONB; verbatim Monobank webhook body),
-created_at}`). Optional text fields are omitted from JSON when NULL.
+change, each `{id, status, note (optional), created_at}`). Optional text fields are omitted from JSON when NULL.
+The verbatim provider payloads are not surfaced through this endpoint; they live on `invoice_history` for forensic
+inspection via the database.
 
 #### Order status
 

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -42,8 +41,8 @@ func (m *orderServiceMock) GetStatus(ctx context.Context, id string) (string, er
 	return args.String(0), args.Error(1)
 }
 
-func (m *orderServiceMock) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
-	return m.Called(ctx, orderID, status, note, payload).Error(0)
+func (m *orderServiceMock) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) error {
+	return m.Called(ctx, evt).Error(0)
 }
 
 type monobankClientMock struct{ mock.Mock }

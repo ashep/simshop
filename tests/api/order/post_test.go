@@ -117,13 +117,15 @@ func makeDataDir(t *testing.T) string {
 	return dir
 }
 
-// truncateOrders wipes orders and order_history so each subtest starts clean.
+// truncateOrders wipes orders, invoice_history, and order_history so each
+// subtest starts clean.
 func truncateOrders(t *testing.T, dsn string) {
 	t.Helper()
 	pool, err := pgxpool.New(t.Context(), dsn)
 	require.NoError(t, err)
 	defer pool.Close()
-	_, err = pool.Exec(t.Context(), "TRUNCATE order_attrs, order_invoices, order_history, orders RESTART IDENTITY CASCADE")
+	_, err = pool.Exec(t.Context(),
+		"TRUNCATE invoice_history, order_attrs, order_invoices, order_history, orders RESTART IDENTITY CASCADE")
 	require.NoError(t, err)
 }
 

@@ -25,7 +25,7 @@ type orderService interface {
 	AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error
 	List(ctx context.Context) ([]order.Record, error)
 	GetStatus(ctx context.Context, orderID string) (string, error)
-	ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error
+	RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) error
 }
 
 type monobankClient interface {

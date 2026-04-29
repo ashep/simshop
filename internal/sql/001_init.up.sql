@@ -13,6 +13,14 @@ CREATE TYPE order_status AS ENUM (
     'refunded'
     );
 
+CREATE TYPE invoice_status AS ENUM (
+    'processing',
+    'hold',
+    'paid',
+    'failed',
+    'reversed'
+    );
+
 CREATE TABLE IF NOT EXISTS orders
 (
     id            uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
@@ -48,7 +56,6 @@ CREATE TABLE IF NOT EXISTS order_history
     order_id   uuid REFERENCES orders (id) NOT NULL,
     status     order_status                NOT NULL,
     note       TEXT,
-    payload    JSONB,
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -68,3 +75,21 @@ CREATE TABLE IF NOT EXISTS order_invoices
 );
 
 CREATE INDEX IF NOT EXISTS order_invoices_order_id_idx ON order_invoices (order_id);
+
+CREATE TABLE IF NOT EXISTS invoice_history
+(
+    id         uuid                        NOT NULL PRIMARY KEY DEFAULT uuidv7(),
+    order_id   uuid                        NOT NULL REFERENCES orders (id),
+    invoice_id TEXT                        NOT NULL,
+    provider   TEXT                        NOT NULL,
+    status     invoice_status              NOT NULL,
+    note       TEXT,
+    payload    JSONB                       NOT NULL,
+    event_at   TIMESTAMP WITHOUT TIME ZONE NOT NULL, -- modifiedDate from webhook
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (invoice_id, provider, status, event_at)
+);
+
+CREATE INDEX IF NOT EXISTS invoice_history_order_idx
+    ON invoice_history (order_id, event_at DESC);

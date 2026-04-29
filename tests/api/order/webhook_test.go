@@ -26,18 +26,14 @@ func fetchOrderHistoryFull(t *testing.T, dsn, orderID string) []orderHistoryFull
 	require.NoError(t, err)
 	defer pool.Close()
 	rows, err := pool.Query(t.Context(), `
-		SELECT status::text, note, payload
+		SELECT status::text, note
 		FROM order_history WHERE order_id = $1::uuid ORDER BY created_at`, orderID)
 	require.NoError(t, err)
 	defer rows.Close()
 	var out []orderHistoryFull
 	for rows.Next() {
 		var r orderHistoryFull
-		var payload []byte
-		require.NoError(t, rows.Scan(&r.Status, &r.Note, &payload))
-		if len(payload) > 0 {
-			r.Payload = json.RawMessage(payload)
-		}
+		require.NoError(t, rows.Scan(&r.Status, &r.Note))
 		out = append(out, r)
 	}
 	require.NoError(t, rows.Err())
@@ -45,9 +41,40 @@ func fetchOrderHistoryFull(t *testing.T, dsn, orderID string) []orderHistoryFull
 }
 
 type orderHistoryFull struct {
-	Status  string
-	Note    *string
-	Payload json.RawMessage
+	Status string
+	Note   *string
+}
+
+func fetchInvoiceHistory(t *testing.T, dsn, orderID string) []invoiceHistoryRow {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), dsn)
+	require.NoError(t, err)
+	defer pool.Close()
+	rows, err := pool.Query(t.Context(), `
+		SELECT invoice_id, provider, status::text, note, payload, event_at
+		FROM invoice_history WHERE order_id = $1::uuid
+		ORDER BY event_at, created_at`, orderID)
+	require.NoError(t, err)
+	defer rows.Close()
+	var out []invoiceHistoryRow
+	for rows.Next() {
+		var r invoiceHistoryRow
+		var payload []byte
+		require.NoError(t, rows.Scan(&r.InvoiceID, &r.Provider, &r.Status, &r.Note, &payload, &r.EventAt))
+		r.Payload = json.RawMessage(payload)
+		out = append(out, r)
+	}
+	require.NoError(t, rows.Err())
+	return out
+}
+
+type invoiceHistoryRow struct {
+	InvoiceID string
+	Provider  string
+	Status    string
+	Note      *string
+	Payload   json.RawMessage
+	EventAt   time.Time
 }
 
 func TestMonobankWebhook(main *testing.T) {
@@ -118,8 +145,15 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, "paid", hist[2].Status)
 		require.NotNil(t, hist[2].Note)
 		assert.Equal(t, "monobank: success, finalAmount=4999", *hist[2].Note)
-		require.NotNil(t, hist[2].Payload)
-		assert.JSONEq(t, string(body), string(hist[2].Payload))
+
+		ih := fetchInvoiceHistory(t, a.DSN(), id)
+		require.Len(t, ih, 1)
+		assert.Equal(t, "inv-1", ih[0].InvoiceID)
+		assert.Equal(t, "monobank", ih[0].Provider)
+		assert.Equal(t, "paid", ih[0].Status)
+		require.NotNil(t, ih[0].Note)
+		assert.Equal(t, "monobank: success, finalAmount=4999", *ih[0].Note)
+		assert.JSONEq(t, string(body), string(ih[0].Payload))
 	})
 
 	main.Run("FailureTransitionsToCancelledWithReason", func(t *testing.T) {
@@ -172,13 +206,47 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, "paid", hist[3].Status)
 	})
 
-	main.Run("OutOfOrderDeliveryDoesNotDowngrade", func(t *testing.T) {
+	main.Run("RetryAfterFailureSucceeds", func(t *testing.T) {
+		// Customer initiates payment (processing@t1), it fails (failure@t2), then
+		// they retry on Monobank's side (Monobank reuses the same invoiceId) — a
+		// fresh processing@t3 followed by success@t4 must drive the order to paid.
 		truncateOrders(t, a.DSN())
 		id := createOrder(t)
-		ts := time.Now().UTC().Format(time.RFC3339)
-		ok := []byte(`{"invoiceId":"inv-1","status":"success","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + ts + `","modifiedDate":"` + ts + `"}`)
+		t1 := time.Now().UTC().Truncate(time.Second)
+		t2 := t1.Add(1 * time.Second)
+		t3 := t1.Add(2 * time.Second)
+		t4 := t1.Add(3 * time.Second)
+		mkBody := func(status string, ts time.Time) []byte {
+			return []byte(`{"invoiceId":"inv-1","status":"` + status + `","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + t1.Format(time.RFC3339) + `","modifiedDate":"` + ts.Format(time.RFC3339) + `"}`)
+		}
+		require.Equal(t, http.StatusOK, postWebhook(t, mkBody("processing", t1)).StatusCode)
+		require.Equal(t, http.StatusOK, postWebhook(t, mkBody("failure", t2)).StatusCode)
+		require.Equal(t, http.StatusOK, postWebhook(t, mkBody("processing", t3)).StatusCode)
+		require.Equal(t, http.StatusOK, postWebhook(t, mkBody("success", t4)).StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		assert.Equal(t, "paid", rows[0].Status)
+
+		ih := fetchInvoiceHistory(t, a.DSN(), id)
+		require.Len(t, ih, 4)
+		assert.Equal(t, "processing", ih[0].Status)
+		assert.Equal(t, "failed", ih[1].Status)
+		assert.Equal(t, "processing", ih[2].Status)
+		assert.Equal(t, "paid", ih[3].Status)
+	})
+
+	main.Run("OutOfOrderDeliveryDoesNotDowngrade", func(t *testing.T) {
+		// success@t2 arrives before processing@t1 (delayed network). The order
+		// must end up paid: latest event by event_at wins, and the late
+		// processing event is recorded but does not downgrade the order.
+		truncateOrders(t, a.DSN())
+		id := createOrder(t)
+		t1 := time.Now().UTC().Truncate(time.Second)
+		t2 := t1.Add(1 * time.Second)
+		ok := []byte(`{"invoiceId":"inv-1","status":"success","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + t1.Format(time.RFC3339) + `","modifiedDate":"` + t2.Format(time.RFC3339) + `"}`)
 		require.Equal(t, http.StatusOK, postWebhook(t, ok).StatusCode)
-		late := []byte(`{"invoiceId":"inv-1","status":"processing","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + ts + `","modifiedDate":"` + ts + `"}`)
+		late := []byte(`{"invoiceId":"inv-1","status":"processing","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + t1.Format(time.RFC3339) + `","modifiedDate":"` + t1.Format(time.RFC3339) + `"}`)
 		require.Equal(t, http.StatusOK, postWebhook(t, late).StatusCode)
 
 		rows := fetchOrders(t, a.DSN())
@@ -186,6 +254,11 @@ func TestMonobankWebhook(main *testing.T) {
 		require.Equal(t, "paid", rows[0].Status)
 		hist := fetchOrderHistoryFull(t, a.DSN(), id)
 		require.Len(t, hist, 3)
+
+		ih := fetchInvoiceHistory(t, a.DSN(), id)
+		require.Len(t, ih, 2)
+		assert.Equal(t, "processing", ih[0].Status) // older event_at
+		assert.Equal(t, "paid", ih[1].Status)       // newer event_at
 	})
 
 	main.Run("IdempotentReplay", func(t *testing.T) {
@@ -197,6 +270,9 @@ func TestMonobankWebhook(main *testing.T) {
 		require.Equal(t, http.StatusOK, postWebhook(t, body).StatusCode)
 		hist := fetchOrderHistoryFull(t, a.DSN(), id)
 		require.Len(t, hist, 3)
+		// Same (invoice_id, provider, status, event_at) tuple → no duplicate row.
+		ih := fetchInvoiceHistory(t, a.DSN(), id)
+		require.Len(t, ih, 1)
 	})
 
 	main.Run("BadSignatureReturns401", func(t *testing.T) {

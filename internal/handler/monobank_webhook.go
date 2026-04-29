@@ -12,53 +12,28 @@ import (
 
 const webhookMaxBodySize = 1 << 20 // 1 MB, mirrors monobank.Client
 
-// monobankStatusToOrderStatus maps a Monobank invoice status to the
-// order_status this server should transition to. ok=false means the status
-// is informational only (`created`) or not recognized — callers no-op and log.
-func monobankStatusToOrderStatus(s string) (status string, ok bool) {
+// monobankStatusToInvoiceStatus maps a Monobank invoice webhook status onto
+// the persisted invoice_status enum. ok=false means the status is purely
+// informational (`created`) or unrecognized — callers no-op.
+func monobankStatusToInvoiceStatus(s string) (status string, ok bool) {
 	switch s {
 	case "processing":
-		return "payment_processing", true
+		return order.InvoiceStatusProcessing, true
 	case "hold":
-		return "payment_hold", true
+		return order.InvoiceStatusHold, true
 	case "success":
-		return "paid", true
+		return order.InvoiceStatusPaid, true
 	case "failure", "expired":
-		return "cancelled", true
+		return order.InvoiceStatusFailed, true
 	case "reversed":
-		return "refunded", true
+		return order.InvoiceStatusReversed, true
 	}
 	return "", false
 }
 
-// orderStatusRank assigns a monotonic rank to each order_status so the
-// webhook handler can reject backwards transitions. cancelled and the
-// fulfillment processing status share rank 5 because they are parallel
-// branches off paid/awaiting_payment — a late `failure` after the operator
-// has started fulfillment must NOT downgrade the order.
-var orderStatusRank = map[string]int{
-	"new":                0,
-	"awaiting_payment":   1,
-	"payment_processing": 2,
-	"payment_hold":       3,
-	"paid":               4,
-	"processing":         5,
-	"cancelled":          5,
-	"shipped":            6,
-	"delivered":          7,
-	"refund_requested":   8,
-	"returned":           9,
-	"refunded":           10,
-}
-
-// shouldApply reports whether target is strictly ahead of current in the
-// payment lifecycle. Equal rank → idempotent no-op.
-func shouldApply(current, target string) bool {
-	return orderStatusRank[target] > orderStatusRank[current]
-}
-
 // buildWebhookNote renders a short, human-readable summary of a webhook
-// payload for storage in order_history.note.
+// payload for storage in invoice_history.note (and propagated into
+// order_history.note when the order's status moves forward).
 func buildWebhookNote(p *monobank.WebhookPayload) string {
 	switch p.Status {
 	case "success":
@@ -109,19 +84,7 @@ func (h *Handler) MonobankWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current, err := h.orders.GetStatus(r.Context(), payload.Reference)
-	if err != nil {
-		if stderrors.Is(err, order.ErrNotFound) {
-			h.l.Warn().Str("reference", payload.Reference).Msg("monobank webhook for unknown order")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		h.l.Error().Err(err).Str("reference", payload.Reference).Msg("monobank webhook: get status failed")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	target, ok := monobankStatusToOrderStatus(payload.Status)
+	invStatus, ok := monobankStatusToInvoiceStatus(payload.Status)
 	if !ok {
 		h.l.Info().
 			Str("reference", payload.Reference).
@@ -131,37 +94,33 @@ func (h *Handler) MonobankWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !shouldApply(current, target) {
-		h.l.Info().
-			Str("reference", payload.Reference).
-			Str("current", current).
-			Str("target", target).
-			Msg("monobank webhook: idempotent or backwards, no transition")
-		w.WriteHeader(http.StatusOK)
-		return
+	evt := order.InvoiceEvent{
+		OrderID:   payload.Reference,
+		InvoiceID: payload.InvoiceID,
+		Provider:  "monobank",
+		Status:    invStatus,
+		Note:      buildWebhookNote(payload),
+		Payload:   payload.RawBody,
+		EventAt:   payload.ModifiedDate,
 	}
-
-	note := buildWebhookNote(payload)
-	if err := h.orders.ApplyPaymentEvent(r.Context(), payload.Reference, target, note, payload.RawBody); err != nil {
+	if err := h.orders.RecordInvoiceEvent(r.Context(), evt); err != nil {
 		if stderrors.Is(err, order.ErrNotFound) {
-			h.l.Warn().
-				Str("reference", payload.Reference).
-				Msg("monobank webhook: order vanished between status check and payment event")
+			h.l.Warn().Str("reference", payload.Reference).Msg("monobank webhook for unknown order")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		h.l.Error().Err(err).
 			Str("reference", payload.Reference).
-			Str("target", target).
-			Msg("monobank webhook: apply payment event failed")
+			Str("invoice_status", invStatus).
+			Msg("monobank webhook: record invoice event failed")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	h.l.Info().
 		Str("reference", payload.Reference).
-		Str("from", current).
-		Str("to", target).
-		Msg("monobank webhook: transition applied")
+		Str("invoice_status", invStatus).
+		Time("event_at", payload.ModifiedDate).
+		Msg("monobank webhook: event recorded")
 	w.WriteHeader(http.StatusOK)
 }

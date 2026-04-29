@@ -618,10 +618,6 @@ components:
         note:
           type: string
           nullable: true
-        payload:
-          type: object
-          nullable: true
-          additionalProperties: true
         created_at:
           type: string
           format: date-time
