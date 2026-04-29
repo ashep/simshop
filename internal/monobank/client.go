@@ -49,6 +49,7 @@ type BasketItem struct {
 	Name string // human-readable, shown on the fiscal receipt
 	Qty  int    // quantity
 	Sum  int    // total for this line in minor units (kopecks/cents)
+	Icon string // optional public https URL to an item image shown in the bank app
 	Code string // merchant SKU / internal product code
 	Tax  []int  // merchant-side tax registration IDs
 }
@@ -119,6 +120,7 @@ type basketItemPayload struct {
 	Name string `json:"name"`
 	Qty  int    `json:"qty"`
 	Sum  int    `json:"sum"`
+	Icon string `json:"icon,omitempty"`
 	Code string `json:"code"`
 	Tax  []int  `json:"tax"`
 }

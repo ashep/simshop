@@ -441,6 +441,7 @@ debug: false
 server:
   addr: ":9000"
   api_key: "<operator-api-key>"
+  public_url: "https://shop.example"
   cors_origins:
     - "https://example.com"
 data_dir: "./data"
@@ -452,7 +453,6 @@ monobank:
   api_key: "<your monobank acquiring X-Token>"
   service_url: ""                                # empty → use https://api.monobank.ua/
   redirect_url: "https://shop.example/order/thanks"
-  webhook_url: "https://shop.example/monobank/webhook"
 rate_limit: 1
 ```
 
@@ -462,6 +462,12 @@ rate_limit: 1
   entirely; in that case `GET /orders` is not registered and responds with HTTP 405 Method Not Allowed (because
   `POST /orders` is registered on the same path).
 - `server.cors_origins` — list of allowed CORS origins. Use `["*"]` to allow all origins.
+- `server.public_url` — public HTTPS base URL of this service (e.g. `https://shop.example`). **Required** — empty
+  value causes a startup error. Used to derive (a) the Monobank webhook URL, posted as `webHookUrl` on every
+  `CreateInvoice` so each invoice records where to deliver status updates, fixed at
+  `<public_url>/monobank/webhook`; and (b) the Monobank basket-item `icon`, pointing at
+  `<public_url>/images/<product_id>/<preview>` when the product has at least one image with a non-empty `preview`,
+  which the bank app renders next to the line on the payment screen. A trailing slash on `public_url` is trimmed.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
 - `database.dsn` — PostgreSQL DSN for the orders database. Required: the service runs the embedded migrations
   against this DSN at startup and refuses to start if the connection fails. PostgreSQL 18 or newer is required
@@ -472,9 +478,6 @@ rate_limit: 1
 - `monobank.api_key` — Monobank acquiring X-Token. **Required** — the application refuses to start if empty.
 - `monobank.redirect_url` — URL the Monobank payment page redirects to after the customer completes (or cancels)
   payment. **Required** — the application refuses to start if empty.
-- `monobank.webhook_url` — full HTTPS URL Monobank posts invoice-status webhooks to (e.g.
-  `https://shop.example/monobank/webhook`). **Required** — empty value causes a startup error. Wired through to
-  Monobank as `webHookUrl` on every `CreateInvoice` call so each invoice records where to deliver status updates.
 - `monobank.service_url` — override the Monobank API base URL (default: `https://api.monobank.ua/`). Leave unset in
   production; used in tests.
 - `rate_limit` — requests per minute allowed for `POST /orders` per client IP (positive integer). `0` or a negative

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -220,13 +221,26 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	productTitle := p.Name[req.Lang]
+	if len(attrs) > 0 {
+		parts := make([]string, 0, len(attrs))
+		for _, a := range attrs {
+			parts = append(parts, fmt.Sprintf("%s: %s", a.Name, a.Value))
+		}
+		productTitle = fmt.Sprintf("%s (%s)", productTitle, strings.Join(parts, ", "))
+	}
+
+	var icon string
+	if len(p.Images) > 0 && p.Images[0].Preview != "" {
+		icon = fmt.Sprintf("%s/images/%s/%s", h.publicURL, req.ProductID, p.Images[0].Preview)
+	}
+
 	inv, err := h.monobank.CreateInvoice(r.Context(), monobank.CreateInvoiceRequest{
 		Amount: totalCents,
 		Ccy:    ccy,
 		MerchantPaymInfo: monobank.MerchantPaymInfo{
 			Reference:   orderID,
 			Destination: destination,
-			BasketOrder: []monobank.BasketItem{{Name: productTitle, Qty: 1, Sum: totalCents, Code: req.ProductID, Tax: h.taxIDs}},
+			BasketOrder: []monobank.BasketItem{{Name: productTitle, Qty: 1, Sum: totalCents, Icon: icon, Code: req.ProductID, Tax: h.taxIDs}},
 		},
 		RedirectURL: redirect,
 		WebHookURL:  h.webhookURL,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ashep/simshop/internal/openapi"
 	"github.com/rs/zerolog"
@@ -75,6 +76,7 @@ type Handler struct {
 	dataDir     string
 	redirectURL string
 	webhookURL  string
+	publicURL   string
 	taxIDs      []int
 	l           zerolog.Logger
 }
@@ -91,10 +93,11 @@ func NewHandler(
 	resp *openapi.Responder,
 	dataDir string,
 	redirectURL string,
-	webhookURL string,
+	publicURL string,
 	taxIDs []int,
 	l zerolog.Logger,
 ) *Handler {
+	publicURL = strings.TrimRight(publicURL, "/")
 	return &Handler{
 		prod:        prod,
 		pages:       pages,
@@ -107,7 +110,8 @@ func NewHandler(
 		resp:        resp,
 		dataDir:     dataDir,
 		redirectURL: redirectURL,
-		webhookURL:  webhookURL,
+		webhookURL:  publicURL + "/monobank/webhook",
+		publicURL:   publicURL,
 		taxIDs:      taxIDs,
 		l:           l,
 	}

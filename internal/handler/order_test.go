@@ -84,6 +84,7 @@ func TestCreateOrder(main *testing.T) {
 			geo:         &geoDetectorStub{},
 			dataDir:     dataDir,
 			redirectURL: "https://test.example/thanks",
+			publicURL:   "https://test.example",
 			webhookURL:  "https://test.example/monobank/webhook",
 			resp:        resp,
 			l:           zerolog.Nop(),
@@ -159,6 +160,147 @@ func TestCreateOrder(main *testing.T) {
 			"phone": "1",
 			"email": "a@example.com",
 			"country": "us",
+			"city": "C",
+			"address": "D"
+		}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("BasketItemNameIncludesAttrs", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return len(req.MerchantPaymInfo.BasketOrder) == 1 &&
+				req.MerchantPaymInfo.BasketOrder[0].Name == "Widget (Display color: Red)"
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, attrDataDir, svc, mb, `{
+			"product_id": "widget",
+			"lang": "en",
+			"attributes": {"display_color": "red"},
+			"first_name": "A",
+			"last_name": "B",
+			"phone": "1",
+			"email": "a@example.com",
+			"country": "us",
+			"city": "C",
+			"address": "D"
+		}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("BasketItemIconWhenPublicURLSet", func(t *testing.T) {
+		// Product YAML with images, no attrs.
+		imgDir := main.TempDir()
+		imgProductDir := filepath.Join(imgDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(imgProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(imgProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: USD
+    value: 49.99
+images:
+  - preview: thumb.jpg
+    full: full.jpg
+`), 0644))
+
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return len(req.MerchantPaymInfo.BasketOrder) == 1 &&
+				req.MerchantPaymInfo.BasketOrder[0].Icon == "https://shop.example/images/widget/thumb.jpg"
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		h := &Handler{
+			orders:      svc,
+			monobank:    mb,
+			shop:        shopStub,
+			geo:         &geoDetectorStub{},
+			dataDir:     imgDir,
+			redirectURL: "https://test.example/thanks",
+			webhookURL:  "https://test.example/monobank/webhook",
+			publicURL:   "https://shop.example",
+			resp:        resp,
+			l:           zerolog.Nop(),
+		}
+		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
+			"product_id": "widget", "lang": "en",
+			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com",
+			"country": "ua", "city": "C", "address": "D"
+		}`))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.CreateOrder(w, r)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("BasketItemNoIconWhenProductHasNoImages", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return req.MerchantPaymInfo.BasketOrder[0].Icon == ""
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		// baseDataDir uses testProductYAML which has no images; publicURL is set but should not produce icon.
+		h := &Handler{
+			orders:      svc,
+			monobank:    mb,
+			shop:        shopStub,
+			geo:         &geoDetectorStub{},
+			dataDir:     baseDataDir,
+			redirectURL: "https://test.example/thanks",
+			webhookURL:  "https://test.example/monobank/webhook",
+			publicURL:   "https://shop.example",
+			resp:        resp,
+			l:           zerolog.Nop(),
+		}
+		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
+			"product_id": "widget", "lang": "en",
+			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com",
+			"country": "ua", "city": "C", "address": "D"
+		}`))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.CreateOrder(w, r)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("BasketItemNameWithoutAttrsIsBareTitle", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return len(req.MerchantPaymInfo.BasketOrder) == 1 &&
+				req.MerchantPaymInfo.BasketOrder[0].Name == "Widget"
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, baseDataDir, svc, mb, `{
+			"product_id": "widget",
+			"lang": "en",
+			"first_name": "A",
+			"last_name": "B",
+			"phone": "1",
+			"email": "a@example.com",
+			"country": "ua",
 			"city": "C",
 			"address": "D"
 		}`)

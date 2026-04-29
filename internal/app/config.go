@@ -1,8 +1,9 @@
 package app
 
 type Server struct {
-	Addr   string `yaml:"addr"`
-	APIKey string `yaml:"api_key"` // bearer token required for protected admin routes; empty disables them
+	Addr      string `yaml:"addr"`
+	APIKey    string `yaml:"api_key"`    // bearer token required for protected admin routes; empty disables them
+	PublicURL string `yaml:"public_url"` // public https base URL of this service; required, used to build absolute URLs (Monobank webhook target, basket-item icon)
 }
 
 type NovaPoshtaConfig struct {
@@ -14,7 +15,6 @@ type MonobankConfig struct {
 	APIKey      string `yaml:"api_key"`      // X-Token; empty → startup error
 	ServiceURL  string `yaml:"service_url"`  // overridden in tests; empty means use production URL
 	RedirectURL string `yaml:"redirect_url"` // post-payment customer landing page; empty → startup error
-	WebhookURL  string `yaml:"webhook_url"`  // public https URL Monobank posts invoice-status webhooks to; empty → startup error
 	TaxIDs      []int  `yaml:"tax_ids"`      // merchant tax registration IDs from the Monobank business cabinet; required when fiscalization is enabled
 }
 
