@@ -3,633 +3,473 @@
 ## Meta
 
 After completing any task, reflect on what was learned. If a decision, pattern, or constraint is non-obvious and likely
-to recur, add it to this file under the appropriate section. Do not record things already derivable from reading the
-code.
+to recur, add it here under the appropriate section. Do not record things derivable from reading the code. **This is
+mandatory** — update this file as the final step of every task before responding with a summary.
 
-**This is mandatory, not optional.** Do not wait for the user to ask. Update this file as the final step of every task,
-before responding with a summary.
+After implementing or changing a feature, update `README.md` if business logic worth describing changed (new entities,
+concepts, endpoints, behavior). Wrap `README.md` lines at 120 characters.
 
-After implementing a new feature or changing an existing one, update `README.md` if the change affects business logic
-worth describing (new entities, new concepts, new endpoints, changed behavior). This is mandatory — do not skip it.
-When editing `README.md`, always wrap lines at 120 characters.
-
-Never run `git commit` or `git push` unless the user explicitly asks. When dispatching subagents, include an explicit
-"do not commit" instruction at the top of every subagent prompt.
+Never run `git commit` or `git push` unless the user explicitly asks. When dispatching subagents, include "do not
+commit" at the top of every subagent prompt.
 
 When adding a field to an existing struct or method, read the current state of the file first and preserve all
-existing fields and logic — including any that were added by the user outside of the tracked plan. Never use
-`replace_all` to propagate a new field into test bodies without first auditing every match: a "missing X" test
-must not have X added to its body.
+existing fields and logic — including any added by the user outside of the tracked plan. Never use `replace_all` to
+propagate a new field into test bodies without auditing every match: a "missing X" test must not have X added to it.
+
+The `Write` tool requires the target file to have been `Read` at least once in the same session before overwriting.
+When writing many files in one pass, `Read` each target first.
 
 ## Project overview
 
-`simshop` is a Go HTTP API service (`github.com/ashep/simshop`). Stack: filesystem catalog (products loaded from YAML
-at startup, no product database), PostgreSQL for orders, zerolog for structured logging, the `go-app` framework
-(`github.com/ashep/go-app`) for app lifecycle/config, and an OpenAPI spec in `api/` for request/response validation.
+`simshop` is a Go HTTP API service (`github.com/ashep/simshop`). Stack: filesystem catalog (products from YAML at
+startup, no product DB), PostgreSQL for orders, zerolog, the `go-app` framework (`github.com/ashep/go-app`), and an
+OpenAPI spec in `api/` for request/response validation.
 
 Key directories: `internal/` (app, handler, geo, loader, monobank, novaposhta, openapi, order, orderdb, page, product,
-shop, sql), `api/` (OpenAPI spec), `tests/` (functional tests, build tag `functest`), `vendor/` (vendored deps). Config
-is loaded from `config.yml` and environment variables; data is read from `data_dir` (default `./data`). When asked to
-implement a new feature, use `api/` as additional context.
+shop, sql), `api/`, `tests/` (build tag `functest`), `vendor/`. Config from `config.yml` + env; data from `data_dir`
+(default `./data`). When implementing a new feature, use `api/` as additional context.
 
 ## Conventions
 
 ### Errors and status codes
 
-Handlers map domain errors to HTTP responses via `h.writeError(w, err)`. The handler defines four typed errors in
-`internal/handler/handler.go`: `BadRequestError` (400), `NotFoundError` (404), `BadGatewayError` (502), and
-`UnauthorizedError` (401). Each carries a `Reason string` field — always populate it with a human-readable message
-(e.g. `&BadRequestError{Reason: "invalid language code"}`). The reason is written directly into the JSON body as
-`{"error": "<reason>"}`, so it is client-visible. `BadGatewayError` is used when an upstream service (Nova Poshta,
-Monobank) fails.
+Handlers map domain errors to HTTP via `h.writeError(w, err)`. Four typed errors in `internal/handler/handler.go`:
+`BadRequestError` (400), `NotFoundError` (404), `BadGatewayError` (502, upstream failures), `UnauthorizedError` (401).
+Each has a `Reason string` field — always populate it; it's written client-visibly as `{"error": "<reason>"}`.
 
-Domain errors are defined in the service package; the handler maps them to HTTP error types using `errors.Is`.
-
-Always use the most semantically appropriate HTTP status code. Examples: 404 Not Found for a missing resource — not a
-generic 400 Bad Request.
+Domain errors are defined in service packages; the handler maps them via `errors.Is`. Always use the most semantically
+appropriate status (e.g. 404 for missing resource, not 400).
 
 ### OpenAPI
 
-The OpenAPI validator (`kin-openapi`) runs in OpenAPI 3.0 compatibility mode. Do **not** use OpenAPI 3.1 array type
-syntax (`type: ["string", "null"]`) — it causes `unsupported 'type' value "null"` at startup. Use 3.0 style:
-`type: string` + `nullable: true`.
+The validator (`kin-openapi`) runs in OpenAPI 3.0 compatibility mode:
 
-For path parameters that hold UUID values, always write `type: string` + `format: uuid`, never `type: uuid`. Using
-`type: uuid` causes an `unsupported 'type' value "uuid"` panic at startup.
+- Don't use 3.1 array-type syntax (`type: ["string", "null"]`); use `type: string` + `nullable: true`.
+- For UUID path params, use `type: string` + `format: uuid`, never `type: uuid` (panics at startup).
 
 ### HTTP middleware
 
-Routes are registered with Go 1.22+ stdlib pattern syntax: `"METHOD /path"` (e.g. `"GET /products"`). The middleware
-chain wrapping a handler, innermost to outermost, is: `content-type → openapi validation → handler`.
+Routes use Go 1.22+ stdlib pattern syntax (`"GET /products"`). Middleware chain (innermost → outermost):
+`content-type → openapi validation → handler`.
 
-CORS is provided by `handler.CORSMiddleware()`, which unconditionally sets `Access-Control-Allow-Origin: *`. OPTIONS
-preflight requests (detected by `Access-Control-Request-Method`) are intercepted and answered with 204 before `next`
-is called. There is no per-origin configuration. **Explicit `OPTIONS` routes must be registered alongside each `GET`
-route in `app.go`** — Go 1.22+ stdlib mux does not implicitly handle OPTIONS for registered methods.
+- **CORS** (`handler.CORSMiddleware`): unconditionally sets `Access-Control-Allow-Origin: *`. OPTIONS preflight (via
+  `Access-Control-Request-Method`) is intercepted with 204. **Explicit `OPTIONS` routes must be registered alongside
+  each `GET` route in `app.go`** — Go 1.22+ stdlib mux does not implicitly handle OPTIONS.
+- **Rate limit** (`handler.RateLimitMiddleware(rpm)`): per-IP sliding window `60s/rpm`, 429 + `Retry-After`. Client IP
+  from first `X-Forwarded-For` (Cloudflare) falling back to `RemoteAddr`. `cfg.RateLimit` (`rate_limit`): positive →
+  RPM ceiling; **`0` or negative → disabled** (functests use `-1`).
+- **API key** (`handler.APIKeyMiddleware`): requires `Authorization: Bearer <token>`, compared with
+  `crypto/subtle.ConstantTimeCompare`. Two distinct 401 reasons (`"missing or invalid authorization header"`,
+  `"invalid api key"`) written via the local `writeUnauthorized` helper, not `writeError`. Empty `apiKey` is a
+  programmer error — only register protected routes in `app.go` when `cfg.Server.APIKey != ""`; do not push the empty
+  check into the middleware.
 
-Rate limiting is provided by `handler.RateLimitMiddleware(rpm int)`: per-client-IP sliding window of `60s/rpm`,
-sweeping expired entries in a background goroutine. Excess requests get HTTP 429 with `Retry-After`. Client IP comes
-from the first `X-Forwarded-For` entry (Cloudflare) falling back to `RemoteAddr`.
+### Money
 
-The `POST /orders` endpoint is rate-limited via `cfg.RateLimit` (`rate_limit` in YAML). A **positive** value sets
-the per-IP RPM ceiling; **`0` or any negative value disables rate limiting entirely** (functional tests use `-1` to
-allow synchronous bursts from the same IP).
-
-API key auth is provided by `handler.APIKeyMiddleware(apiKey string)`: requires `Authorization: Bearer <token>` and
-compares with `crypto/subtle.ConstantTimeCompare` to defeat timing attacks. Two distinct 401 reasons are emitted —
-`"missing or invalid authorization header"` (header absent or wrong scheme) and `"invalid api key"` (token mismatch);
-both are written directly via the local `writeUnauthorized` helper, not via `writeError(&UnauthorizedError{...})`.
-Passing an empty `apiKey` to the constructor is a programmer error — the middleware would accept any empty bearer.
-Only register the protected route in `app.go` when `cfg.Server.APIKey != ""`; do not push that check into the
-middleware.
-
-### Money values
-
-Prices crossing the domain boundary are integer minor units (cents) — never float — to match the DB column type and
-avoid float drift. The handler does the conversion: `int(math.Round(value * 100))` for both the base price and each
-attribute add-on. **Round once per amount; do not multiply totals**, because the rounding bias would compound.
+Prices crossing the domain boundary are integer minor units (cents) — never float. Conversion:
+`int(math.Round(value * 100))` for both base price and each attribute add-on. **Round once per amount; do not multiply
+totals**, or rounding bias compounds.
 
 ### Country codes
 
-Country codes are lowercase ISO 3166-1 alpha-2 throughout. Two distinct sets are involved:
+Lowercase ISO 3166-1 alpha-2 throughout. Two distinct sets:
 
-- **Allow-list** — `shop.Countries` (loaded from `shop.yaml`). Authoritative for which countries can place orders.
-  Validated by `CreateOrder` before the product YAML is read.
-- **Price keys** — `prices.<country>` in each `product.yaml`. Independent of the allow-list. The literal `"default"`
-  key is required and is **not** an allowed country — it is only a price-resolution fallback.
+- **Allow-list** — `shop.Countries` (from `shop.yaml`). Authoritative for who can place orders. Validated by
+  `CreateOrder` before reading product YAML.
+- **Price keys** — `prices.<country>` in each `product.yaml`. Independent of allow-list. The literal `"default"` key
+  is required and is **not** an allowed country — only a price-resolution fallback.
 
-A country may exist in `shop.Countries` without appearing in any product's `prices` map; the price falls back to
-`prices.default`. To exercise the fallback in a test, pass an allowed country with no matching `prices` entry.
+A country can be allowed without a per-product price; it falls back to `prices.default`. To exercise the fallback in a
+test, pass an allowed country with no matching `prices` entry.
 
 ### Image path transformation
 
-Image paths in YAML are bare filenames (`"thumb.jpg"`) and must be rewritten to URL-ready paths
-(`"/images/{id}/thumb.jpg"`) before returning to the client. This must happen in **two** places:
+Image paths in YAML are bare filenames; clients receive `/images/{id}/<filename>`. Rewriting must happen in **two**
+places:
 
-1. **Loader** (`loadProduct`): rewrites paths after `validate` so `catalog.Products` has downloadable URLs.
-   Validation runs against the bare filenames first (so `os.Stat` works).
-2. **`ServeProductContent` handler**: reads `product.yaml` directly at request time (bypassing the loader), so it must
-   apply the same transformation inline after YAML parsing, before building `ProductDetail`.
+1. **Loader** (`loadProduct`): rewrites paths after `validate` (validation needs bare filenames for `os.Stat`).
+2. **`ServeProductContent` handler**: reads `product.yaml` directly at request time (bypasses the loader), so it
+   applies the same transformation inline before building `ProductDetail`.
 
-Any new handler that reads `product.yaml` directly must apply this transformation — do not assume the loader has
-already rewritten the paths.
-
-The same rule applies to `attr_images`: the loader stores bare filenames; `ServeProductContent` rewrites to
-`/images/{id}/{filename}` when building `ProductDetail.AttrImages`. Path rewriting happens in the handler, not the
-loader.
-
-### File writes
-
-The `Write` tool requires that the target file has been `Read` at least once in the same session before overwriting.
-When writing many files in a single pass, `Read` each target first — even for files that will be completely replaced.
+Same rule for `attr_images`. Any new handler that reads `product.yaml` directly must apply this transformation.
 
 ## Packages
 
 ### internal/handler
 
 `internal/app` imports `internal/handler`; therefore **`internal/handler` must never import `internal/app`**. When the
-handler or service needs config values from `app.Config`, pass scalar values at construction time instead of passing
-the config struct.
+handler needs config, pass scalar values at construction time. Same rule for other internal packages
+(`internal/geo`, `internal/monobank`, `internal/novaposhta`, `internal/order`): define a local interface in `handler`
+(e.g. `geoDetector`, `monobankClient`, `monobankVerifier`, `novaPoshtaClient`, `orderService`) satisfied by the
+concrete type, and wire it in `internal/app`.
 
-The same rule applies to other internal packages (e.g. `internal/geo`, `internal/monobank`, `internal/novaposhta`,
-`internal/order`): define a local interface in `handler` (e.g. `geoDetector`, `monobankClient`, `novaPoshtaClient`,
-`orderService`) satisfied by the concrete type, and wire it in `internal/app`. This keeps handler decoupled from
-implementation packages.
+`NewHandler` trims the trailing slash from `publicURL` once and stores `webhookURL = publicURL + "/monobank/webhook"`
+on the handler — the Monobank webhook URL is **always derived**, never read from config.
 
-`NewHandler` parameter order (see `internal/handler/handler.go`):
-`prod, pages, shopSvc, np, mb, mbVerifier, orders, geo, resp, dataDir, redirectURL, publicURL, taxIDs, l`.
-The trailing scalars (`dataDir`, `redirectURL`, `publicURL`, `taxIDs`) are read out of `cfg` in `app.Run` and
-passed in flat — handler must not import `internal/app` to read them. `NewHandler` trims the trailing slash from
-`publicURL` once and stores `webhookURL = publicURL + "/monobank/webhook"` on the handler — the Monobank webhook
-URL is **always derived**, never read from config.
-
-`monobankVerifier` is a local interface in `handler.go` with one method `Verify(ctx, body, sigB64) error`. It is
-satisfied by `*monobank.Verifier` and is used by the webhook handler to authenticate incoming Monobank callbacks.
-
-The `orderService` interface in `order.go` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`,
-`RecordInvoiceEvent`. `GetStatus` powers `GET /orders/{id}`; `RecordInvoiceEvent` is called by the Monobank webhook
-handler to persist a provider event and recompute the order's payment status from the latest event in the invoice
-timeline (see `internal/orderdb` and the **POST /monobank/webhook** route).
+`orderService` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`, `RecordInvoiceEvent`.
 
 ### internal/geo
 
-`geo.Detector.Detect(r)` resolves a country code in two steps:
+`Detector.Detect(r)` resolves a country code in two steps:
 
-1. **Header shortcut**: `CF-IPCountry` is validated as exactly two ASCII letters by `isAlpha2`. Any other value
-   (multi-character, empty, garbage) is ignored and falls through to IP lookup. This prevents header spoofing from
-   poisoning pricing decisions with garbage values.
-2. **IP lookup**: extract client IP, check the in-memory cache (TTL 1h), and on a miss call
-   `https://ipinfo.io/{ip}/country`. Result is lowercased and trimmed.
+1. **Header shortcut**: `CF-IPCountry`, validated as exactly two ASCII letters by `isAlpha2`. Anything else falls
+   through. Prevents header spoofing.
+2. **IP lookup**: client IP → in-memory cache (TTL 1h) → `https://ipinfo.io/{ip}/country` on miss. Lowercased and
+   trimmed. Body capped at 16 bytes via `io.LimitReader`.
 
-Cache writes only occur on success (non-empty country). A service error (non-200 or network failure) returns `""` and
-is **not** cached, so the next call retries — a transient error must not silence retries for an hour. The lookup body
-is capped at 16 bytes via `io.LimitReader` (a country code is at most 2 chars; the headroom protects against runaway
-responses).
+Cache writes only on success. Errors return `""` and are **not** cached, so retries aren't silenced for an hour.
+`clientIP` uses `X-Forwarded-For` only when `CF-IPCountry` is absent (XFF is spoofable without Cloudflare).
 
-`clientIP` uses `X-Forwarded-For` only when `CF-IPCountry` is absent. In production behind Cloudflare the XFF path is
-never reached; without Cloudflare, XFF is caller-controlled and can be spoofed.
-
-`geo.NewDetector()` is the production constructor. Tests construct `*Detector` directly (same package) to inject a
-`httptest.Server` URL via the unexported `httpClient` and `serviceURL` fields. The `errcheck` linter requires
-`defer func() { _ = resp.Body.Close() }()` (not bare `defer resp.Body.Close()`).
+`NewDetector()` is the production constructor. Tests construct `*Detector` directly to inject `httpClient` and
+`serviceURL`. `errcheck` requires `defer func() { _ = resp.Body.Close() }()`.
 
 ### internal/novaposhta
 
-`novaposhta.Client` wraps the Nova Poshta JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). Methods:
-`SearchCities` (`Address.searchSettlements`), `SearchBranches` (`Address.getWarehouses`), `SearchStreets`
+`Client` wraps NP JSON API v2 (`POST https://api.novaposhta.ua/v2.0/json/`). Methods: `SearchCities`
+(`Address.searchSettlements`), `SearchBranches` (`Address.getWarehouses`), `SearchStreets`
 (`Address.searchSettlementStreets`).
 
-**Branches and streets must use `SettlementRef`, not `CityRef`** — the `Ref` returned by `searchSettlements` is a
-settlement ref, and the old `getCities` API uses a different ref that returns "City not found".
+**Branches and streets must use `SettlementRef`, not `CityRef`** — the old `getCities` API uses a different ref that
+returns "City not found".
 
-`NewClient(apiKey, serviceURL)` is the production constructor; pass `""` for `serviceURL` to use the default. Tests
-construct `*Client` directly (same package) to inject `httptest.Server` via the unexported `httpClient` and
-`serviceURL` fields — same pattern as `geo.Detector`. Response body capped at 1 MB via `io.LimitReader`.
-`success=false` in the response is treated as an error regardless of HTTP status.
+`NewClient(apiKey, serviceURL)` is the production constructor (empty `serviceURL` → default). Tests construct
+`*Client` directly to inject `httpClient`/`serviceURL`. Body capped at 1 MB. `success=false` is treated as an error
+regardless of HTTP status.
 
 ### internal/monobank
 
-`monobank.Client` wraps the Monobank acquiring API. `CreateInvoice(ctx, CreateInvoiceRequest)` posts to
-`/api/merchant/invoice/create`. `NewClient(apiKey, serviceURL)` is the production constructor; pass `""` for
-`serviceURL` to use the default. Tests construct `*Client` directly to inject a `httptest.Server` via the unexported
-`httpClient` and `serviceURL` fields — same pattern as `geo.Detector` and `novaposhta.Client`. Response body capped
-at 1 MB.
+`Client.CreateInvoice` posts to `/api/merchant/invoice/create`. `NewClient(apiKey, serviceURL)` is the production
+constructor (empty `serviceURL` → default); tests inject via `httpClient`/`serviceURL`. Body capped at 1 MB.
 
-`monobank.MapCurrency(code)` maps alpha-3 currency codes (case-insensitive) to ISO-4217 numeric. Unknown codes return
-`*monobank.APIError{ErrCode: "unsupported_currency"}` so the handler can treat them like any other Monobank failure.
+`MapCurrency(code)` maps alpha-3 (case-insensitive) to ISO-4217 numeric. Unknown codes return
+`*APIError{ErrCode: "unsupported_currency"}` so the handler treats them like any Monobank failure.
 
-**Error policy: generic responses, detailed logs.** All Monobank-related failures (HTTP timeout, non-2xx, parse error,
-application-level error, currency-map miss, tx2 failure) return HTTP 502 with body `{"error":"bad gateway"}` — never
-the underlying detail. The handler logs the full detail with structured fields (`order_id`, `monobank_status`,
-`monobank_err_code`, `monobank_err_text`, `monobank_body`, and where applicable `invoice_id`, `page_url`) using
-`errors.As(err, &apiErr)` to extract `*monobank.APIError`. HTTP non-2xx and `errCode`/`errText` body fields both
-produce `*monobank.APIError`.
+**Error policy: generic responses, detailed logs.** All Monobank failures (timeout, non-2xx, parse, app-level error,
+unsupported currency, tx2 failure) return HTTP 502 with body `{"error":"bad gateway"}` — never the underlying detail.
+The handler logs full detail with structured fields (`order_id`, `monobank_status`, `monobank_err_code`,
+`monobank_err_text`, `monobank_body`, plus `invoice_id`/`page_url` where applicable) using `errors.As` to extract
+`*APIError`. Both HTTP non-2xx and `errCode`/`errText` body fields produce `*APIError`.
 
-`monobank.ParseWebhook(body []byte)` decodes a Monobank invoice-status webhook delivery. It validates that
-`invoiceId`, `status`, and `reference` are non-empty and returns a `*WebhookPayload`. `WebhookPayload.RawBody` is a
-**defensive copy** of the input bytes (via `append(json.RawMessage(nil), body...)`), safe to store as JSONB without
-re-encoding even if the caller reuses the buffer. `WebhookPayload` carries no JSON struct tags — it is a domain
-type; only the unexported `webhookBody` wire struct carries tags. Empty date strings produce zero `time.Time` (not an
-error), tolerating future Monobank contract changes. Dates are parsed with `time.RFC3339`.
+`ParseWebhook(body []byte)` decodes a Monobank invoice-status webhook. It validates `invoiceId`, `status`, and
+`reference` are non-empty. `WebhookPayload.RawBody` is a **defensive copy** (`append(json.RawMessage(nil), body...)`),
+safe to store as JSONB. `WebhookPayload` has no JSON struct tags (domain type); only the unexported wire struct does.
+Empty date strings produce zero `time.Time` (not an error). Dates parsed with `time.RFC3339`.
 
-`monobank.Verifier` verifies Monobank webhook `X-Sign` headers. The merchant ECDSA-P256 public key is fetched from
-`/api/merchant/pubkey` via `Fetch(ctx)` at startup and cached under `sync.RWMutex`. `Verify(ctx, body, sigB64)`
-hashes the body with SHA-256 and verifies the base64-encoded ASN.1 ECDSA signature. On a verification failure the
-key is refetched once and the check is retried — this auto-recovers from Monobank key rotation without operator
-intervention. `ErrInvalidSignature` is the sentinel returned on persistent mismatch; callers map it to HTTP 401. A
-transport or parse error during the lazy refetch is returned as-is (not collapsed to `ErrInvalidSignature`) so the
-caller can distinguish a bad signature from an upstream failure. Concurrent refetches are deduped via an
-`atomic.Bool` (`refetching`): only the first failing caller fetches; others spin on 10 ms ticks until the flag
-clears, then re-verify against the freshly cached key. `NewVerifier(apiKey, serviceURL)` is the production
-constructor (pass `""` for `serviceURL` to use the default). Tests construct `*Verifier` directly to inject an
-`httptest.Server` URL, mirroring the `Client` / `geo.Detector` pattern.
+`Verifier` verifies webhook `X-Sign` (ECDSA-P256 over SHA-256, base64 ASN.1). Pubkey fetched from
+`/api/merchant/pubkey` at startup, cached under `sync.RWMutex`. **On verification failure the key is refetched once
+and the check retried** — auto-recovers from key rotation. `ErrInvalidSignature` is returned on persistent mismatch
+(handler maps to 401). Transport/parse errors during refetch are returned as-is so callers can distinguish bad sig
+from upstream failure. Concurrent refetches deduped via `atomic.Bool` (`refetching`); other callers spin on 10 ms
+ticks until the flag clears, then re-verify. `NewVerifier(apiKey, serviceURL)` is production; tests construct
+directly.
 
 ### internal/orderdb
 
-`orderdb.Writer` and `orderdb.Reader` own a `*pgxpool.Pool` (concrete, not an interface). The pool is created in
-`internal/app/app.go` via `pgxpool.New(rt.Ctx, cfg.Database.DSN)` after `dbmigrator.RunPostgres` has applied the
-embedded migrations from `internal/sql/`.
+`Writer` and `Reader` own a `*pgxpool.Pool` (concrete, not interface). The pool is created in `app.Run` after
+`dbmigrator.RunPostgres` applies migrations from `internal/sql/`.
 
-`Writer.Write` (called as `Submit` through `order.Service`) is **transactional**: order header + order_attrs + initial
-`order_history (status='new')` all in one tx. A half-written order — header without attrs, or attrs/history without
-header — would leave the customer's record ambiguous and reconciliation harder; atomicity is the whole reason these
-inserts share a transaction. The deferred `Rollback` after a successful `Commit` is a no-op (`pgx.ErrTxClosed`,
-ignored).
+`Writer.Write` (called as `Submit` through `order.Service`) is **transactional**: order header + order_attrs +
+initial `order_history (status='new')` in one tx. The deferred `Rollback` after `Commit` is a no-op.
 
-`MiddleName == ""` and `CustomerNote == ""` are converted to SQL NULL via the `nullIfEmpty` helper so the nullable
-columns store NULL rather than the empty string.
+Empty `MiddleName`/`CustomerNote` are converted to SQL NULL via `nullIfEmpty` so nullable columns store NULL.
 
 `Attr.Name` and `Attr.Value` store **rendered titles** in the customer's language (e.g. `"Display color"` → `"Red"`),
-not raw attribute/value IDs. This makes orders self-documenting and immutable to later product YAML renames; it is
-the reason `handler.CreateOrder` resolves `attrLang.Title` and `attrVal.Title` before appending to the slice.
+not raw IDs. Orders are self-documenting and immutable to later YAML renames; this is why `handler.CreateOrder`
+resolves `attrLang.Title` and `attrVal.Title` before appending.
 
-`order.Order` (write side) carries only what the writer must INSERT. `order.Record` (read side, returned by
-`GET /orders`) adds the DB-generated columns (`ID`, `Status`, `CreatedAt`, `UpdatedAt`) and inline `Attrs`,
-`History`, `Invoices`. The two are intentionally separate — different lifetimes, different fields, unifying them
-would muddy both. Nullable text columns (`MiddleName`, `AdminNote`, `CustomerNote`, `HistoryEntry.Note`) are
-`*string` so SQL NULL becomes JSON omission via `json:",omitempty"` rather than serialising as an empty string;
-read-side scans use `pgtype.Text` and convert to `*string`.
+`order.Order` (write side) carries only INSERT fields; `order.Record` (read side, from `GET /orders`) adds DB-generated
+columns and inline `Attrs`/`History`/`Invoices`. The two are intentionally separate. Nullable text columns are
+`*string` (with `json:",omitempty"`) so SQL NULL becomes JSON omission; read-side scans use `pgtype.Text` and convert.
 
-#### `Writer.RecordInvoiceEvent` and the invoice timeline
+#### `RecordInvoiceEvent` and the invoice timeline
 
-`RecordInvoiceEvent(ctx, evt)` is the single entry point for provider-side invoice events (today, Monobank
-webhooks). It runs in one transaction:
+`RecordInvoiceEvent(ctx, evt)` is the single entry point for provider invoice events. One transaction:
 
-1. `SELECT … FOR UPDATE` on the `orders` row — serializes concurrent webhook deliveries for the same order. Missing
-   row → `order.ErrNotFound` (handler maps to HTTP 200, since the order will never appear).
-2. `INSERT INTO invoice_history (order_id, invoice_id, provider, status, note, payload, event_at) ON CONFLICT
-   (invoice_id, provider, status, event_at) DO NOTHING` — idempotent on the provider's own dedupe key. A duplicate
-   webhook delivery silently no-ops here.
+1. `SELECT … FOR UPDATE` on `orders` — serializes concurrent webhooks for the same order. Missing → `order.ErrNotFound`.
+2. `INSERT invoice_history (...) ON CONFLICT (invoice_id, provider, status, event_at) DO NOTHING` — idempotent on the
+   provider's dedupe key. Duplicate webhook silently no-ops.
 3. `SELECT status, note FROM invoice_history WHERE order_id = … ORDER BY event_at DESC, created_at DESC LIMIT 1` —
-   re-derives the *current* invoice status from the timeline (not just from the row we may have just inserted).
-   This is what gives the system "out-of-order webhook" tolerance: a late-arriving event with an older `event_at`
-   inserts behind the latest and does not move the order.
-4. Map `invoice_status → order_status` candidate via `order.InvoiceStatusToOrderStatus`. Apply the candidate iff
-   `order.ShouldApplyInvoiceTransition(currentStatus, candidate)` returns true; the apply writes
-   `UPDATE orders.status` and `INSERT INTO order_history` carrying the latest event's note.
+   re-derives current invoice status from the timeline (not just the row we may have inserted). This gives
+   out-of-order webhook tolerance.
+4. Map `invoice_status → order_status` via `order.InvoiceStatusToOrderStatus`. Apply iff
+   `order.ShouldApplyInvoiceTransition(current, candidate)` returns true; the apply does
+   `UPDATE orders.status` + `INSERT order_history` carrying the latest event's note.
 
-`evt.Payload` must be non-empty (sanity check: a payload-less webhook event is meaningless and would also break
-forensics); `RecordInvoiceEvent` returns an error before begining the tx.
+`evt.Payload` must be non-empty (sanity check); `RecordInvoiceEvent` errors before opening the tx otherwise.
 
-`order_history.payload` was removed in this iteration — payloads now live exclusively on `invoice_history.payload`,
-where they serve as the audit trail for "what Monobank told us." `order_history` is the order-state transition log
-and is therefore note-only. To inspect the verbatim provider payload that triggered an order_status change, query
-`invoice_history` ordered by `event_at`.
+`order_history.payload` was removed — payloads live exclusively on `invoice_history.payload` (audit trail). To inspect
+the verbatim provider payload that triggered an order_status change, query `invoice_history` ordered by `event_at`.
 
-The `invoice_status` enum has five values: `processing, hold, paid, failed, reversed`. Monobank's webhook statuses
-map onto them via `monobankStatusToInvoiceStatus` in `internal/handler/monobank_webhook.go` (`success → paid`,
-`failure|expired → failed`, `created → no row` informational).
+The `invoice_status` enum: `processing, hold, paid, failed, reversed`. Monobank webhook statuses map via
+`monobankStatusToInvoiceStatus` (`success → paid`, `failure|expired → failed`, `created → no row` informational).
 
 #### No unit tests in `internal/orderdb`
 
-The transactional writer needs `*pgxpool.Pool.Begin → pgx.Tx`. `pgx.Tx` is a wide interface (Exec, Query, QueryRow,
-Commit, Rollback, CopyFrom, SendBatch, Prepare, …) that is impractical to stub by hand, and no mock package
-(e.g. `pgxmock`) is vendored. Rather than introduce a leaky narrow interface or a heavy dep just for unit coverage,
-both `Writer` and `Reader` are exercised end-to-end by `tests/api/order/{post,get}_test.go` against the real
-PostgreSQL instance from `docker-compose.tests.yaml`. Don't reintroduce a stub-based unit test for this package
-without also providing a real `pgx.Tx` implementation.
-
-See also: **POST /orders, GET /orders** under Routes for the two-phase Monobank flow.
+`pgx.Tx` is a wide interface impractical to stub by hand, and no mock package is vendored. Both `Writer` and `Reader`
+are exercised end-to-end by `tests/api/order/` against the real PG instance from `docker-compose.tests.yaml`. Don't
+reintroduce a stub-based unit test without a real `pgx.Tx`.
 
 ### internal/loader
 
-A missing `data_dir` or a missing `products/` subdirectory is **not** an error — they yield an empty catalog. A
-malformed YAML file or a validation error is **fatal** at startup. Validation runs inside `loadProduct` immediately
-after YAML parsing. Product subdirectories that lack `product.yaml` are silently skipped, so extra directories can
-coexist in the `products/` tree.
+A missing `data_dir` or `products/` subdir is **not** an error (empty catalog). Malformed YAML or validation failure
+is **fatal at startup**. Validation runs inside `loadProduct` immediately after parsing. Product subdirs without
+`product.yaml` are silently skipped.
 
-`{data_dir}/shop.yaml` is **mandatory**: a missing file is a fatal startup error, and `shop.countries` must be a
-non-empty map. The wrapper struct `shopFile` is needed because the YAML root key is `shop:`, not the struct fields
-directly. Functional and loader tests must therefore lay down a valid `shop.yaml` with at least one `countries`
-entry, or the app refuses to boot.
+`{data_dir}/shop.yaml` is **mandatory**: missing → fatal startup error, and `shop.countries` must be non-empty.
+Functional and loader tests must lay down a valid `shop.yaml` with at least one `countries` entry.
 
-`{data_dir}/products/products.yaml` is a flat list of `product.Item` entries (id, title, description) loaded by
-`loadProductsList` into `catalog.ProductItems`. A missing file returns an empty slice — not an error. This is
-separate from per-directory loading by `loadProducts`; `ProductItems` and `Products` coexist in `Catalog`.
-`joinProductImages` then sets each `Item.Image` to the first preview URL of the matching `Product` (already
-rewritten to `/images/{id}/{file}`), or leaves it nil.
+`{data_dir}/products/products.yaml` is a flat list of `product.Item` entries (id, title, description), loaded into
+`catalog.ProductItems`. A missing file → empty slice. Separate from per-directory `loadProducts`; both coexist in
+`Catalog`. `joinProductImages` then sets each `Item.Image` to the first preview URL of the matching `Product`
+(already rewritten), or leaves it nil.
 
-Product validation lives in `internal/loader/loader.go:validate`. Rules are fatal at startup:
+Product validation in `validate` (fatal at startup):
 
-1. `name` must be non-empty.
-2. `description` must be non-empty.
+1. `name` non-empty.
+2. `description` non-empty.
 3. Language sets of `name` and `description` must be identical.
 4. Every spec entry must cover exactly the languages in `name`.
-5. `prices` must contain a `"default"` key.
-6. Every attr entry must cover exactly the languages in `name`, and each language entry must have ≥ 1 value.
-7. Every image `preview` and `full` path must exist on disk relative to `{productDir}/images/` (`os.Stat`,
-   `errors.Is(err, fs.ErrNotExist)`). Same check is applied to every `attr_images` filename.
+5. `prices` must contain `"default"`.
+6. Every attr entry must cover exactly the languages in `name`, with ≥ 1 value per language.
+7. Every image `preview`/`full` and every `attr_images` filename must exist on disk relative to
+   `{productDir}/images/`.
 
-The `loadProducts` per-directory loader is no longer wired into any handler — it exists solely to enforce product
-YAML integrity at startup.
+`loadProducts` is no longer wired into any handler — it exists solely to enforce YAML integrity at startup.
 
 ## Routes
 
 ### `GET /products`, `GET /products/{id}/{lang}`
 
-`ListProducts` returns the metadata loaded from `products/products.yaml` as a JSON array of
-`{id, title, description, image?}`. The optional `image` is the URL of the first preview from the matching
-`product.yaml`; `image` is omitted when nil. A missing `products.yaml` returns `[]`, not an error. The route goes
-through the OpenAPI response middleware. `product.NewService` normalises a nil slice to `[]*Item{}` so the response
-is a valid empty array (required by the OpenAPI response validator).
+`ListProducts` returns `products/products.yaml` metadata as `[{id, title, description, image?}]`. `image` is the URL of
+the first preview from the matching `product.yaml`; omitted when nil. Missing `products.yaml` → `[]`. `product.NewService`
+normalises a nil slice to `[]*Item{}` (required by the OpenAPI response validator).
 
-`ServeProductContent` reads `{data_dir}/products/{id}/product.yaml` directly at request time and returns a
-lang-filtered `ProductDetail`. Both `id` and `lang` are validated with the reject pattern
-`if v != filepath.Base(v) || v == "" || v == "."`. Missing product directory or `product.yaml` → 404; missing
-language key in `p.Name` → 404.
+`ServeProductContent` reads `{data_dir}/products/{id}/product.yaml` directly and returns a lang-filtered
+`ProductDetail`. `id` and `lang` are validated with `if v != filepath.Base(v) || v == "" || v == "."`. Missing
+directory/file → 404; missing language key in `p.Name` → 404.
 
-Price selection uses `h.geo.Detect(r)` to get the country code, then looks up `p.Prices[country]` with
-`p.Prices["default"]` as fallback. `ProductDetail.Prices` is a single `PriceItem`, not a map.
+Price selection: `h.geo.Detect(r)` → country, then `p.Prices[country]` with `p.Prices["default"]` fallback.
+`ProductDetail.Prices` is a single `PriceItem`, not a map.
 
-**Price field naming gotcha:** the YAML key is `prices:` and the Go field is `Product.Prices`, but the API response
-serialises the resolved single-country price as `"price"` — `ProductDetail.Prices` carries the JSON tag
-`json:"price"`.
-The YAML key and JSON key are intentionally different.
+**Price field naming gotcha:** YAML key is `prices:`, Go field is `Product.Prices`, but the API response serialises
+the resolved single-country price as `"price"` — `ProductDetail.Prices` carries `json:"price"`. The YAML key and JSON
+key are intentionally different.
 
 ### `GET /pages`, `GET /pages/{id}/{lang}`
 
-`ListPages` returns the entries from `pages/pages.yaml` as a JSON array of `{id, title}`. Missing file → `[]`. Goes
-through the OpenAPI response middleware.
+`ListPages` returns `pages/pages.yaml` entries as `[{id, title}]`. Missing → `[]`.
 
-`ServePage` reads `{data_dir}/pages/{id}/{lang}.md` and returns it as `text/plain; charset=utf-8`. Both path values
-use the same reject pattern as `ServeProductContent`. **The route does NOT go through the OpenAPI response
-middleware** (plain text, not JSON), but is declared in the spec for documentation. Missing file → 404.
+`ServePage` reads `{data_dir}/pages/{id}/{lang}.md` as `text/plain; charset=utf-8`. Same path-reject pattern as
+`ServeProductContent`. **Does NOT go through OpenAPI response middleware** (plain text, not JSON), but is declared in
+the spec for documentation. Missing → 404.
 
 ### `GET /shop`
 
-Returns the `shop.yaml` content (`*shop.Shop`) as JSON via the OpenAPI response middleware.
+Returns `shop.yaml` content (`*shop.Shop`) as JSON.
 
 ### `POST /orders`, `GET /orders`
 
-`CreateOrder` validates the request, resolves the product and price, then runs a **two-phase committed flow**:
+`CreateOrder` validates the request, resolves product/price, then runs a **two-phase committed flow**:
 
-1. **tx1 (`Submit`)** — `INSERT orders (status='new')` + `order_attrs` + initial `order_history (new)`. The DB is
-   the source of truth before Monobank knows about the order.
-2. **Monobank call** — `monobank.CreateInvoice(...)`. On failure the order stays in `status='new'`; the caller gets
-   HTTP 502 with body `{"error":"bad gateway"}`. Any orphan state (Monobank invoice without our row, or vice versa)
-   is reconciled out of band — manually for now.
-3. **tx2 (`AttachInvoice`)** — `INSERT order_invoices` + `UPDATE orders SET status='awaiting_payment'` +
-   `INSERT order_history (awaiting_payment)`, all in one transaction.
+1. **tx1 (`Submit`)** — `INSERT orders (status='new')` + `order_attrs` + `order_history (new)`. DB is the source of
+   truth before Monobank knows about the order.
+2. **Monobank call** — `monobank.CreateInvoice`. On failure the order stays `new`; caller gets 502. Orphan state
+   (Monobank invoice without our row, or vice versa) is reconciled out of band — manually for now.
+3. **tx2 (`AttachInvoice`)** — `INSERT order_invoices` + `UPDATE orders SET status='awaiting_payment'` + `INSERT
+   order_history (awaiting_payment)`, in one transaction.
 
-Required request fields: `product_id, lang, first_name, last_name, phone, email, country, city, address`. Returns
-201 `{"payment_url": "<monobank-page-url>"}` on success; 400 on missing/invalid fields; 404 on unknown product or
-path traversal; 502 on tx1 failure, Monobank failure, or tx2 failure (always with body `{"error":"bad gateway"}`).
+Required fields: `product_id, lang, first_name, last_name, phone, email, country, city, address`. Returns
+`201 {"payment_url": ...}`; 400 on missing/invalid; 404 on unknown product or path traversal; 502 on tx1/Monobank/tx2
+failure (always `{"error":"bad gateway"}`).
 
-`country` is **request-supplied at order time, not geo-detected**. The same value drives both price resolution and
-the `orders.country` column, so the stored country always matches the price tier the customer was quoted. Geo
-detection (`h.geo`) is wired into the handler for `ServeProductContent` (browsing) but is not consulted by
-`CreateOrder`. To exercise the `default` price fallback in tests, send an allowed country with no matching
-`prices.<country>` key (empty values are rejected with 400).
+`country` is **request-supplied, not geo-detected**. Drives both price resolution and the `orders.country` column, so
+the stored country always matches the price tier the customer was quoted. Geo (`h.geo`) is wired for
+`ServeProductContent` only. To exercise the `default` fallback in tests, pass an allowed country with no matching
+`prices.<country>` (empty values are 400-rejected).
 
-`req.Country` is validated against `shop.Shop.Countries` (loaded from `shop.yaml`) by
-`_, ok := s.Countries[req.Country]` **before the product YAML is read** so disallowed countries fail fast. A country
-not in the allow-list returns 400 with `{"error": "invalid country"}`.
+`req.Country` is validated against `shop.Countries` **before reading product YAML** (`_, ok := s.Countries[req.Country]`).
+Disallowed → 400 `{"error": "invalid country"}`.
 
-Total price = base price (`p.Prices[country]` with `default` fallback) + sum of per-attribute add-ons. Both base
-and add-on use `int(math.Round(value * 100))` to convert to cents (see Conventions / Money values).
+Total = base price (`p.Prices[country]` with `default` fallback) + sum of per-attribute add-ons. Both use
+`int(math.Round(value * 100))` (see Money).
 
-The Monobank `merchantPaymInfo.basketOrder` is **mandatory** — Monobank rejects invoices without it as
-`INVALID_MERCHANT_PAYM_INFO` (required for fiscalization). The handler sends a single line item per invoice with
-`name = "<product title>"` when no attrs are selected, and `name = "<product title> (<Attr1>: <Val1>, <Attr2>:
-<Val2>)"` when attrs are present (titles in `req.Lang`, attrs in the same alphabetical order as the persisted
-`order.Attrs` slice). The remaining basket fields are `qty = 1`, `sum = totalCents`, `code = req.ProductID`, and
-`tax = h.taxIDs` (loaded from `cfg.Monobank.TaxIDs`). `Code` and `Tax` are also required when fiscalization is
-enabled on the merchant account. Per Monobank's contract, the sum of all basket-item `sum` values must equal the
-invoice `amount`; with one line item this is trivially satisfied.
+The Monobank `merchantPaymInfo.basketOrder` is **mandatory** (`INVALID_MERCHANT_PAYM_INFO` otherwise). One line item
+per invoice: `name = "<product title>"` when no attrs, or `name = "<product title> (<Attr1>: <Val1>, <Attr2>:
+<Val2>)"` (titles in `req.Lang`, attrs in the same alphabetical order as the persisted `order.Attrs` slice). Other
+fields: `qty = 1`, `sum = totalCents`, `code = req.ProductID`, `tax = h.taxIDs` (from `cfg.Monobank.TaxIDs`). Per
+Monobank's contract, sum of basket-item `sum` values must equal invoice `amount`.
 
-The optional basket-item `icon` is emitted as `<server.public_url>/images/<product_id>/<images[0].preview>` when
-the product has at least one image with a non-empty `preview` (`len(p.Images) > 0 && p.Images[0].Preview != ""`).
-`server.public_url` is required at startup, so the handler does not re-check it. The trailing slash on
-`server.public_url` is trimmed once in `NewHandler`. Missing images silently omit `icon` — Monobank treats it as
-optional. The icon URL is built from the bare filename in YAML — the same path the
-`GET /images/{product_id}/{file_name}` route serves — so the public URL must point at this service.
+The optional basket-item `icon` is `<server.public_url>/images/<product_id>/<images[0].preview>` when
+`len(p.Images) > 0 && p.Images[0].Preview != ""`. Missing images silently omit `icon`. The icon URL is built from the
+bare filename — same path the `GET /images/{product_id}/{file_name}` route serves — so `public_url` must point at this
+service.
 
-Other Monobank invoice fields built per request: `merchantPaymInfo.reference = orderID`,
-`destination = "<shop name in req.Lang>, order <orderID first 8 chars>"` (e.g. `"Acme, order 018f4e3a"`),
+Other Monobank invoice fields per request: `merchantPaymInfo.reference = orderID`,
+`destination = "<shop name in req.Lang>, order <orderID first 8 chars>"`,
 `redirectUrl = cfg.Monobank.RedirectURL + "?order_id=<orderID>"`.
 
-`order.id` is generated by PostgreSQL `DEFAULT uuidv7()` and surfaced via `RETURNING id`; `Submit` returns this id
-so the handler can pass it to Monobank as `merchantPaymInfo.reference` and to `AttachInvoice`.
+`order.id` is generated by PostgreSQL `DEFAULT uuidv7()`, surfaced via `RETURNING id`.
 
-The `order_invoices` table has **no unique constraint on `order_id`**, leaving room for re-issued invoices in a
-future iteration. Its primary key is `(id, provider)` where `id TEXT` is the **provider's** invoice id (e.g. the
-Monobank `invoiceId`) — there is no separate `invoice_id` column. `order.Invoice.ID` carries that value. The
-composite PK means a test mocking a provider must return distinct ids per call when seeding multiple orders,
-otherwise the second `AttachInvoice` insert violates the PK and the handler returns 502; see the counter-based mock
-in `tests/api/order/get_test.go`.
+`order_invoices` has **no unique constraint on `order_id`** (room for re-issued invoices). PK is `(id, provider)`
+where `id TEXT` is the **provider's** invoice id — no separate `invoice_id` column. A test mocking a provider must
+return distinct ids per call when seeding multiple orders, or the second `AttachInvoice` violates the PK and the
+handler returns 502; see the counter-based mock in `tests/api/order/get_test.go`.
 
-`GET /orders` returns every persisted order with its attrs, history, and invoices — newest first. **It is registered
-only when `cfg.Server.APIKey != ""`**; the handler itself does not check for an empty key. Because `POST /orders`
-is registered unconditionally on the same path, an unregistered `GET /orders` produces HTTP 405 Method Not Allowed
-(not 404) — Go 1.22+ stdlib mux returns 405 when a path is registered for some methods but not the requested one.
-This is acceptable: the user-facing requirement is that the endpoint be unavailable when the key is unset, and 405
-fits that. Do not add a runtime "401 / 404 if key empty" branch inside the handler — the conditional registration
-in `app.go` is the single source of truth.
-
-See also: **internal/orderdb** under Packages for the transactional writer, Reader fan-out, and no-unit-tests
-rationale.
+`GET /orders` returns every order with attrs/history/invoices, newest first. **Registered only when
+`cfg.Server.APIKey != ""`**; the handler does not check the key. Because `POST /orders` is registered unconditionally
+on the same path, an unregistered `GET /orders` produces HTTP 405 (Go 1.22+ stdlib mux returns 405 when a path is
+registered for some methods but not the requested one). Acceptable. Do not push the empty-key check into the handler;
+the conditional registration in `app.go` is the single source of truth.
 
 ### `GET /orders/{id}`
 
-`GetOrderStatus` returns `{"status": "<order_status>"}` for a single order identified by its UUIDv7. The path
-parameter is validated by the OpenAPI request middleware as `format: uuid` — a malformed value returns 400 before the
-handler runs. A valid UUID not present in the DB returns 404 with `{"error": "order not found"}`. No API key is
-required (public endpoint). The handler maps `order.ErrNotFound` (from `orderdb.Reader.GetStatus`) to
-`&NotFoundError{Reason: "order not found"}` via `errors.Is`.
+`GetOrderStatus` returns `{"status": "<order_status>"}` for one order by UUIDv7. The path param is validated by the
+OpenAPI request middleware (`format: uuid`) — malformed → 400 before the handler. Valid UUID not in DB → 404
+`{"error": "order not found"}`. No API key (public endpoint). Maps `order.ErrNotFound` to `&NotFoundError{...}`.
 
 ### `POST /monobank/webhook`
 
-`MonobankWebhook` processes Monobank invoice-status webhook deliveries. Authenticated by `X-Sign` (ECDSA over the
-body); no API key, no CORS, no OpenAPI middleware, no rate limiter — Monobank is the sole caller. Reads up to 1 MB,
-verifies via `h.mbVerifier`, parses with `monobank.ParseWebhook`, then maps `payload.Status` → `invoice_status` via
-`monobankStatusToInvoiceStatus` (`created` is informational and short-circuits to 200 with no DB write). The handler
-builds an `order.InvoiceEvent{OrderID: payload.Reference, InvoiceID, Provider: "monobank", Status, Note: buildWebhookNote(...),
+`MonobankWebhook` processes invoice-status webhooks. Authenticated by `X-Sign`; no API key, no CORS, no OpenAPI
+middleware, no rate limiter — Monobank is the sole caller. Reads up to 1 MB, verifies via `h.mbVerifier`, parses with
+`monobank.ParseWebhook`, then maps `payload.Status` → `invoice_status` via `monobankStatusToInvoiceStatus`
+(`created` is informational and short-circuits to 200 with no DB write). Builds an `order.InvoiceEvent{...,
 Payload: payload.RawBody, EventAt: payload.ModifiedDate}` and calls `orders.RecordInvoiceEvent`. The service /
-`internal/orderdb` does the rest (insert event idempotently, derive from latest, apply forward transition) — see
-**internal/orderdb** for the full flow.
+`internal/orderdb` does the rest.
 
-Response codes: 200 for processed/idempotent/informational/unknown-reference outcomes (permanent — Monobank stops
-retrying); 401 for bad signature; 400 for malformed body; 500 for transient DB or verifier-transport errors so
-Monobank retries. The handler emits status-only responses (empty body) — Monobank does not read error bodies, so
-JSON error envelopes are unnecessary noise.
+**Response policy: status code only, empty body** via `w.WriteHeader(...)`. Never calls `h.writeError`. Codes are
+driven by retryability: 200 for processed/idempotent/informational/unknown-reference (permanent — Monobank stops
+retrying); 401 for bad signature; 400 for malformed body; **500 for transient DB or verifier-transport errors so
+Monobank retries**. This is the only handler that deliberately returns 500 as a retry signal rather than an error.
 
-`event_at` is populated from Monobank's `modifiedDate` (not from our `CURRENT_TIMESTAMP`), which is what gives the
-system order-independence: webhooks delivered out of order resolve correctly because "latest event" is decided by
-the provider's authoritative timestamp, not by our receive time. This is also what lets retry-after-failure work:
-`processing@t1 → failure@t2 → processing@t3 → success@t4` correctly drives the order to `paid`, even though `paid`
-arrives after `cancelled` was applied.
+`event_at` comes from Monobank's `modifiedDate` (not our `CURRENT_TIMESTAMP`) — gives order-independence: out-of-order
+webhooks resolve correctly because "latest event" is decided by the provider's authoritative timestamp. Lets
+retry-after-failure work: `processing@t1 → failure@t2 → processing@t3 → success@t4` correctly drives to `paid`.
 
-The order/invoice lifecycle rule is `order.ShouldApplyInvoiceTransition(current, candidate)` in
-`internal/order/lifecycle.go`. Summary: invoice events freely drive the pre-paid cluster
-{`new`, `awaiting_payment`, `payment_processing`, `payment_hold`, `cancelled`}; `cancelled` is re-enterable on retry;
-`paid` is stable against payment_* and `cancelled` (only `refunded` moves it forward); fulfillment states
-(`processing`, `shipped`, `delivered`, `refund_requested`, `returned`) are operator-owned and ignore invoice events
-except for `refunded`, which always wins because the customer's money was returned.
+The lifecycle rule is `order.ShouldApplyInvoiceTransition(current, candidate)` in `internal/order/lifecycle.go`.
+Summary: invoice events freely drive the pre-paid cluster {`new`, `awaiting_payment`, `payment_processing`,
+`payment_hold`, `cancelled`}; `cancelled` is re-enterable on retry; `paid` is stable against payment_* and `cancelled`
+(only `refunded` moves it forward); fulfillment states (`processing`, `shipped`, `delivered`, `refund_requested`,
+`returned`) are operator-owned and ignore invoice events except for `refunded`, which always wins.
 
 ### `GET /nova-poshta/cities`, `/branches`, `/streets`
 
-Three proxy routes over the Nova Poshta JSON API v2:
+Three proxy routes:
 
 - `GET /nova-poshta/cities?q=<query>` → `Address.searchSettlements`
 - `GET /nova-poshta/branches?city_ref=<ref>&q=<query>` → `Address.getWarehouses`
 - `GET /nova-poshta/streets?city_ref=<ref>&q=<query>` → `Address.searchSettlementStreets`
 
-`q` is required everywhere; `city_ref` is required for branches and streets — missing returns 400. NP API failure
-returns 502 via `BadGatewayError`. The API key is read from `config.yaml` under `nova_poshta.api_key`.
-`nova_poshta.service_url` is empty in production (uses the real NP URL) and set to a `httptest.Server` URL in
-functional tests via `testapp.New` opts.
-
-See also: **internal/novaposhta** under Packages for the SettlementRef-vs-CityRef gotcha.
+`q` is required everywhere; `city_ref` is required for branches and streets — missing → 400. NP failure → 502 via
+`BadGatewayError`.
 
 ### `GET /images/{product_id}/{file_name}`
 
-Served by `handler.ServeImage`. Reads from `{data_dir}/products/{product_id}/images/{file_name}` using
-`http.ServeFile`. `filepath.Base` is applied to both path values before joining to prevent path traversal.
-`NewHandler` takes `dataDir string` (positional) so the handler can resolve image paths without importing
-`internal/app`.
+`handler.ServeImage` reads from `{data_dir}/products/{product_id}/images/{file_name}` via `http.ServeFile`.
+`filepath.Base` is applied to both path values before joining (path-traversal guard).
 
-Functional tests for image serving must create a complete valid product directory (including `product.yaml`)
-alongside the `images/` subdir if the test needs the product to appear in `catalog.Products`. If only the image file
-itself is needed (file living under `{data_dir}/products/{id}/images/`), no `product.yaml` is required — the loader
-silently skips directories that lack one.
+Functest: only the image file under `{data_dir}/products/{id}/images/` is required to serve it. A `product.yaml` is
+needed only if the product must also appear in `catalog.Products` — the loader silently skips directories without it.
 
 ## Configuration
 
-Config keys live under `internal/app/config.go`. Notable required vs optional rules:
+Config keys in `internal/app/config.go`. Required vs optional:
 
-- **`Monobank.APIKey`** and **`Monobank.RedirectURL`** are required — `app.Run` returns an error before the
-  migrator if either is empty.
-- **`Monobank.ServiceURL`** is optional; empty falls back to `https://api.monobank.ua/`. Tests inject a
+- **`Monobank.APIKey`**, **`Monobank.RedirectURL`**, **`Server.PublicURL`** — required; empty → startup error.
+- **`Server.PublicURL`** is the public https base URL of this service. Used to derive the Monobank webhook URL
+  (`<PublicURL>/monobank/webhook`, sent as `webHookUrl` on every `CreateInvoice`) and the basket-item icon
+  (`<PublicURL>/images/<product_id>/<preview>`). Trailing slash trimmed once in `NewHandler`. **There is no separate
+  `monobank.webhook_url` config** — the webhook target is always derived.
+- **`Monobank.ServiceURL`**, **`NovaPoshta.ServiceURL`** — optional; empty → real upstream. Tests inject
   `httptest.Server.URL` via `testapp.New` opts.
-- **`Monobank.TaxIDs`** is the list of merchant tax-registration IDs from the Monobank business cabinet (required
-  when fiscalization is enabled). Wired into `NewHandler` as `taxIDs []int` and emitted on every basket item.
-- **`Server.APIKey`** is optional; empty disables `GET /orders` via conditional route registration (see Routes).
-- **`Server.PublicURL`** is **required** — the public https base URL of this service (e.g. `https://shop.example`);
-  empty → startup error. Used to derive the Monobank webhook URL (`<PublicURL>/monobank/webhook`, posted as
-  `webHookUrl` on every `CreateInvoice`) and, when the product has at least one image with a non-empty `preview`,
-  the basket-item `icon = <PublicURL>/images/<product_id>/<preview>`. Trailing slash is trimmed once in
-  `NewHandler`. There is **no separate `monobank.webhook_url` config** — the webhook target is always derived from
-  `server.public_url`.
-- **`NovaPoshta.ServiceURL`** is optional; empty falls back to the production NP URL.
-- **`RateLimit`** (top-level `rate_limit`): positive → that many RPM per IP; `0` or negative → rate limiting
-  disabled (functional tests use `-1`).
-- **`DataDir`** (top-level `data_dir`): default `./data`.
+- **`Monobank.TaxIDs`** — list of merchant tax-registration IDs (required when fiscalization is enabled). Wired into
+  `NewHandler` as `taxIDs []int` and emitted on every basket item.
+- **`Server.APIKey`** — optional; empty disables `GET /orders` via conditional registration.
+- **`RateLimit`** — positive → RPM/IP; `0`/negative → disabled (functests use `-1`).
+- **`DataDir`** — default `./data`.
 
-`testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`, and
-`Server.PublicURL="https://test.example"` (which makes the derived webhook URL
-`https://test.example/monobank/webhook`) so plain construction works in tests. It also starts a
-built-in `httptest.Server` (registered as `cfg.Monobank.ServiceURL`) that serves `/api/merchant/pubkey` so
-`Verifier.Fetch` succeeds at startup without hitting real Monobank. Tests that need custom Monobank behaviour
-override `cfg.Monobank.ServiceURL` via opts; the built-in stub is then unused but still shut down via `t.Cleanup`.
+`testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`,
+`Server.PublicURL="https://test.example"` so plain construction works in tests. It also starts a built-in
+`httptest.Server` registered as `cfg.Monobank.ServiceURL` that serves `/api/merchant/pubkey` so `Verifier.Fetch`
+succeeds at startup. Tests overriding `cfg.Monobank.ServiceURL` get their own stub; the built-in is unused but still
+shut down via `t.Cleanup`.
 
-`uuidv7()` is a built-in PostgreSQL 18 function; the `orders` and `order_history` tables use
-`id uuid PRIMARY KEY DEFAULT uuidv7()`. There is no separate `uuidv7` type. Earlier PG versions need an extension
-(`pg_uuidv7`) or a custom `CREATE DOMAIN`. The test container in `docker-compose.tests.yaml` pins `postgres:18-alpine`
-to satisfy this.
+`uuidv7()` is a built-in PostgreSQL 18 function (no extension); `orders` and `order_history` use
+`id uuid PRIMARY KEY DEFAULT uuidv7()`. The test container in `docker-compose.tests.yaml` pins `postgres:18-alpine`.
 
 ## Tests
 
 ### Running
 
-Unit tests live alongside source code in each package. Run:
-
 ```
 task go:test:unit -- [FLAGS]
-```
-
-Functional tests live in `tests/`, all files tagged `//go:build functest`. Run:
-
-```
 task go:test:func -- [FLAGS]
 ```
 
-`[FLAGS]` are standard `go test` flags (e.g. `-run TestName`, `-v`). In git worktrees where `.ci/` is not
-initialized, run `go test` directly: `go test -run TestFoo -v ./internal/...` or
-`go test -tags=functest ./tests/...`.
+`[FLAGS]` are standard `go test` flags. In git worktrees where `.ci/` is not initialized, run `go test` directly:
+`go test -run TestFoo -v ./internal/...` or `go test -tags=functest ./tests/...`.
 
-When the postgres state ends up dirty (e.g. an interrupted test), run `task go:test:func:clean` to wipe and recreate
-the container.
+When postgres state ends up dirty, run `task go:test:func:clean` to wipe and recreate.
 
 ### Unit tests
 
-- Before implementing any feature or fix, invoke the `superpowers:test-driven-development` skill.
-- Before claiming any work is done, invoke the `superpowers:verification-before-completion` skill and run **both**
-  `task go:test:unit -- ./...` and `task go:test:func -- -v`. Both suites must pass — running only one is not enough.
-- After all changes are made and tests pass, run `task go:golangci-lint`. All lint checks must pass before the task
-  is considered complete.
-- Do not consider a task complete until tests pass. Do not respond with a summary of changes before running tests.
-- Group related tests under a single parent function `TestFoo(main *testing.T)` and use `main.Run("CaseName", ...)`
-  for sub-tests. Never write separate top-level functions like `TestFoo_CaseName`.
-- When adding a new file to a package that already has `_test.go` companions alongside source files (e.g.
-  `internal/handler/`), write the unit test file as part of the same task. Do not wait to be reminded.
-- When a handler response schema declares `id` with `format: uuid`, mock return values in handler unit tests must
-  use valid UUID strings (e.g. `"018f4e3a-0000-7000-8000-000000000099"`). The OpenAPI response validator
-  (`resp.Write`) rejects non-UUID strings and the handler returns HTTP 500, masking the actual assertion under test.
+- Before implementing any feature or fix, invoke `superpowers:test-driven-development`.
+- Before claiming work is done, invoke `superpowers:verification-before-completion` and run **both**
+  `task go:test:unit -- ./...` and `task go:test:func -- -v`. Both suites must pass.
+- After all tests pass, run `task go:golangci-lint`. All lint must pass before the task is complete.
+- Do not respond with a summary before tests pass.
+- Group related tests under one parent: `TestFoo(main *testing.T)` + `main.Run("CaseName", ...)`. Never write
+  separate top-level `TestFoo_CaseName` functions.
+- When adding a new file to a package that already has `_test.go` companions (e.g. `internal/handler/`), write the
+  unit test file in the same task. Don't wait to be reminded.
+- When a handler response declares `id` with `format: uuid`, mock return values must be valid UUID strings
+  (e.g. `"018f4e3a-0000-7000-8000-000000000099"`) — the OpenAPI response validator rejects non-UUIDs, the handler
+  returns 500, and your real assertion is masked.
 
 ### Functional tests
 
-`docker-compose.tests.yaml` defines a `postgres:18-alpine` service. The `tests` service depends on
-`postgres: service_healthy` and exports
-`APP_DB_DSN=postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable`. `testapp.New` reads `APP_DB_DSN`
-(defaulting to the same value) and assigns it to `cfg.Database.DSN`. Tests can override the DSN via the `opts`
-callback like any other config field. `(*App).DSN()` exposes the DSN so tests can open their own `pgxpool.Pool` to
-inspect or mutate the database.
+`docker-compose.tests.yaml` defines `postgres:18-alpine`. The `tests` service depends on `postgres: service_healthy`
+and exports `APP_DB_DSN=postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable`. `testapp.New` reads
+`APP_DB_DSN` and assigns it to `cfg.Database.DSN`; tests can override via the `opts` callback. `(*App).DSN()` exposes
+the DSN so tests can open their own pool.
 
-The postgres container persists across `task go:test:func` runs, so tests that need clean state must truncate
-explicitly. `tests/api/order/post_test.go` uses a `truncateOrders` helper that runs
-`TRUNCATE order_attrs, order_history, orders RESTART IDENTITY CASCADE` before each subtest that inspects the tables.
-After a destructive test (e.g. forcing a DB error), restore the schema in `t.Cleanup` rather than leaving the
-database in a broken state — `TestCreateOrder_DBFailure` does this by renaming `orders` away and back instead of
-dropping it.
+The postgres container persists across `task go:test:func` runs — tests needing clean state must truncate explicitly.
+`tests/api/order/post_test.go` has a `truncateOrders` helper (`TRUNCATE order_attrs, order_history, orders RESTART
+IDENTITY CASCADE`). After a destructive test (e.g. forcing a DB error), restore the schema in `t.Cleanup` — don't
+leave the DB broken. `TestCreateOrder_DBFailure` does this via `RENAME` rather than `DROP`.
 
-**`t.Cleanup` runs after `defer`, not before.** `t.Cleanup` callbacks fire after the test function returns *and after
-all deferred statements run*. If a test does `defer pool.Close()` and then registers a cleanup that uses the pool,
-the cleanup will silently fail because the pool is already closed. Either close the pool inside the cleanup callback,
-or skip the `defer` and let the cleanup own teardown. This bit `TestCreateOrder_DBFailure`'s table-rename rollback
-once already.
+**`t.Cleanup` runs after `defer`, not before.** If a test does `defer pool.Close()` and then registers a cleanup using
+the pool, the cleanup silently fails. Either close the pool inside the cleanup, or skip the `defer` and let the
+cleanup own teardown.
 
-Functional tests use YAML fixture files. **Loader unit tests (`internal/loader/`):**
+Test fixture helpers — **loader unit tests (`internal/loader/`)**:
 
-- `makeProductDir(t, dataDir, id, yaml, extraFiles)` creates `{dataDir}/products/{id}/product.yaml` and any extra
-  files specified as `map[string][]byte` of relative path → content.
-- `makeProductsFile(t, dataDir, content)` creates `{dataDir}/products/products.yaml` with the given content.
+- `makeProductDir(t, dataDir, id, yaml, extraFiles)` — creates `products/{id}/product.yaml` plus extra files.
+- `makeProductsFile(t, dataDir, content)` — writes `products/products.yaml`.
 
-**API functional tests (`tests/api/product/`):**
+**API functional tests (`tests/api/product/`)**:
 
-- `makeDataDir(t, productsYAML, productYAMLs)` creates a temp data dir, writes `products/products.yaml` (if
-  non-empty), and writes per-product `product.yaml` files given as `map[string]string` of `{id: yaml-content}`.
-- `testapp.New(t, dataDir, opts ...func(*app.Config))` takes a `dataDir` and optional config mutators. Pass
-  `func(cfg *app.Config) { cfg.NovaPoshta.ServiceURL = srv.URL }` to override config fields in tests.
-- Subtests that need a completely separate empty catalog start their own `testapp` inside the subtest body — safe
-  because each app binds to a random port.
+- `makeDataDir(t, productsYAML, productYAMLs)` — temp data dir with `products/products.yaml` (if non-empty) and
+  per-product YAMLs as `map[string]string`.
+- `testapp.New(t, dataDir, opts ...func(*app.Config))` — config mutators override fields, e.g.
+  `func(cfg *app.Config) { cfg.NovaPoshta.ServiceURL = srv.URL }`.
+- Subtests needing a fully separate empty catalog start their own `testapp` — safe because each binds a random port.
 
 API test orchestration:
 
-- All API subtests within a `TestFoo` share one `testapp` instance started in the parent function. Starting a
-  separate instance per subtest panics on port conflict when subtests run in parallel.
-- At most one top-level `TestFoo` function per package may call `main.Parallel()` if each starts its own `testapp`.
-  New API test functions that start their own app must NOT call `main.Parallel()` unless existing parallel tests are
-  refactored to share a single app.
-- Tests that need to issue many requests synchronously must set `cfg.RateLimit = -1` to disable rate limiting on
-  `POST /orders`.
+- All API subtests within a `TestFoo` share one `testapp` started in the parent function. Per-subtest instances
+  panic on port conflict under `main.Parallel()`.
+- At most one top-level `TestFoo` per package may call `main.Parallel()` if each starts its own `testapp`. New API
+  test functions starting their own app must NOT call `main.Parallel()` unless the existing parallel tests are
+  refactored to share one app.
+- Tests issuing many synchronous requests must set `cfg.RateLimit = -1` to disable rate limiting on `POST /orders`.
 
 ### Shared helpers location
 
-Keep shared test helpers in `handler_test.go` (not in per-feature test files) so they survive feature removal.
+Keep shared test helpers in `handler_test.go`, not per-feature test files, so they survive feature removal.
 
 ### Shared ECDSA test key in `tests/api/order/`
 
-The package has a single `testECDSAKey *ecdsa.PrivateKey` generated in `init()`. Two helpers derived from it:
-`pubKeyPayload(t)` returns the PEM-encoded public key wrapped in the Monobank pubkey JSON payload, and
-`signWebhookBody(t, body)` computes the ECDSA-SHA256 signature in the format `POST /monobank/webhook` expects.
-All Monobank stub servers in the package's functional tests use `pubKeyPayload` for `/api/merchant/pubkey`. No test
-function should generate its own ECDSA key — use the shared helpers instead.
-
-### Webhook handler response policy
-
-`MonobankWebhook` never calls `h.writeError` and never writes a JSON body. Monobank does not read error bodies, so
-the response is **status code only, empty body** via plain `w.WriteHeader(...)`. The status codes are semantically
-driven by retryability: permanent conditions (bad sig, malformed body, unknown reference, informational status,
-idempotent/backwards transition) return 200 or 4xx so Monobank stops retrying. Transient conditions (verifier
-transport error, DB error) return 500 so Monobank retries later. This is the only handler in the codebase that
-deliberately returns 500 as a retry signal rather than as an error indicator.
+A single `testECDSAKey *ecdsa.PrivateKey` is generated in `init()`. Helpers: `pubKeyPayload(t)` returns the PEM-encoded
+public key wrapped in the Monobank pubkey JSON payload; `signWebhookBody(t, body)` computes the ECDSA-SHA256 signature
+in the format `POST /monobank/webhook` expects. All Monobank stub servers in this package must use `pubKeyPayload` for
+`/api/merchant/pubkey`. No test should generate its own ECDSA key — use the shared helpers.
