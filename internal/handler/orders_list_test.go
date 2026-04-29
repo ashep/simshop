@@ -152,44 +152,4 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 
-	main.Run("PayloadRoundTrips", func(t *testing.T) {
-		now := time.Now().UTC()
-		payload := json.RawMessage(`{"status":"success","invoiceId":"inv-1"}`)
-		records := []order.Record{
-			{
-				ID:        "018f4e3a-0000-7000-8000-000000000050",
-				ProductID: "widget",
-				Status:    "paid",
-				Email:     "x@y",
-				Price:     1000,
-				Currency:  "USD",
-				FirstName: "F",
-				LastName:  "L",
-				Country:   "ua",
-				City:      "C",
-				Phone:     "+1",
-				Address:   "A",
-				CreatedAt: now,
-				UpdatedAt: now,
-				Attrs:     []order.Attr{},
-				History: []order.HistoryEntry{
-					{ID: "018f4e3a-0000-7000-8000-000000000051", Status: "paid", Payload: payload, CreatedAt: now},
-				},
-				Invoices: []order.Invoice{},
-			},
-		}
-		svc := &orderServiceMock{}
-		svc.On("List", mock.Anything).Return(records, nil)
-
-		w := doRequest(t, svc)
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var got []map[string]any
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-		require.Len(t, got, 1)
-		hist, _ := got[0]["history"].([]any)
-		require.Len(t, hist, 1)
-		entry, _ := hist[0].(map[string]any)
-		assert.Equal(t, map[string]any{"status": "success", "invoiceId": "inv-1"}, entry["payload"])
-	})
 }

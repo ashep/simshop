@@ -3,7 +3,6 @@ package orderdb
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -168,7 +167,7 @@ const listAttrsSQL = `SELECT order_id::text, attr_name, attr_value, attr_price
 FROM order_attrs
 WHERE order_id = ANY($1::uuid[])`
 
-const listHistorySQL = `SELECT id::text, order_id::text, status::text, note, payload, created_at
+const listHistorySQL = `SELECT id::text, order_id::text, status::text, note, created_at
 FROM order_history
 WHERE order_id = ANY($1::uuid[])
 ORDER BY created_at ASC`
@@ -184,8 +183,20 @@ const updateOrderStatusSQL = `UPDATE orders
 	SET status = $2::order_status, updated_at = CURRENT_TIMESTAMP
 	WHERE id = $1::uuid`
 
-const insertHistoryWithPayloadSQL = `INSERT INTO order_history
-	(order_id, status, note, payload) VALUES ($1::uuid, $2::order_status, $3, $4)`
+const insertOrderHistoryNoteSQL = `INSERT INTO order_history
+	(order_id, status, note) VALUES ($1::uuid, $2::order_status, $3)`
+
+const lockOrderStatusSQL = `SELECT status::text FROM orders WHERE id = $1::uuid FOR UPDATE`
+
+const insertInvoiceHistorySQL = `INSERT INTO invoice_history
+	(order_id, invoice_id, provider, status, note, payload, event_at)
+	VALUES ($1::uuid, $2, $3, $4::invoice_status, $5, $6, $7)
+	ON CONFLICT (invoice_id, provider, status, event_at) DO NOTHING`
+
+const latestInvoiceEventSQL = `SELECT status::text, note FROM invoice_history
+	WHERE order_id = $1::uuid
+	ORDER BY event_at DESC, created_at DESC
+	LIMIT 1`
 
 // List returns all orders, newest first, each populated with its attrs and
 // history. Always returns a non-nil slice on success (possibly empty).
@@ -271,17 +282,13 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 		var entry order.HistoryEntry
 		var orderID string
 		var note pgtype.Text
-		var payload []byte
-		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &payload, &entry.CreatedAt); err != nil {
+		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &entry.CreatedAt); err != nil {
 			hRows.Close()
 			return nil, fmt.Errorf("scan order_history: %w", err)
 		}
 		if note.Valid {
 			v := note.String
 			entry.Note = &v
-		}
-		if len(payload) > 0 {
-			entry.Payload = json.RawMessage(payload)
 		}
 		if rec, ok := indexByID[orderID]; ok {
 			rec.History = append(rec.History, entry)
@@ -329,11 +336,20 @@ func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) 
 	return status, nil
 }
 
-// ApplyPaymentEvent updates the order status and appends an order_history
-// row carrying note and payload. Runs both writes in a single transaction so
-// a crash between them cannot leave the order with an updated status but no
-// history row (or vice versa).
-func (w *Writer) ApplyPaymentEvent(ctx context.Context, orderID, status, note string, payload json.RawMessage) error {
+// RecordInvoiceEvent persists evt and recomputes the order's payment status
+// from the latest invoice event for the order. All writes share a single
+// transaction with the orders row locked FOR UPDATE so concurrent webhook
+// deliveries for the same order are serialized.
+//
+// Idempotent on (invoice_id, provider, status, event_at): a duplicate webhook
+// re-derives from the unchanged latest event and is a no-op.
+//
+// Returns order.ErrNotFound when the order does not exist.
+func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) error {
+	if len(evt.Payload) == 0 {
+		return fmt.Errorf("invoice event payload is required")
+	}
+
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -345,26 +361,54 @@ func (w *Writer) ApplyPaymentEvent(ctx context.Context, orderID, status, note st
 		}
 	}()
 
-	tag, err := tx.Exec(ctx, updateOrderStatusSQL, orderID, status)
+	var currentStatus string
+	if err := tx.QueryRow(ctx, lockOrderStatusSQL, evt.OrderID).Scan(&currentStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return order.ErrNotFound
+		}
+		return fmt.Errorf("lock order: %w", err)
+	}
+
+	var noteArg any = evt.Note
+	if evt.Note == "" {
+		noteArg = nil
+	}
+	if _, err := tx.Exec(ctx, insertInvoiceHistorySQL,
+		evt.OrderID, evt.InvoiceID, evt.Provider, evt.Status, noteArg, []byte(evt.Payload), evt.EventAt,
+	); err != nil {
+		return fmt.Errorf("insert invoice_history: %w", err)
+	}
+
+	var latestStatus string
+	var latestNote pgtype.Text
+	if err := tx.QueryRow(ctx, latestInvoiceEventSQL, evt.OrderID).Scan(&latestStatus, &latestNote); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// No event survived the insert (duplicate filtered AND no prior rows).
+			// This shouldn't happen — the unique constraint allows the very first
+			// (orderID, invoice, status, event_at) tuple — but bail safely.
+			return tx.Commit(ctx)
+		}
+		return fmt.Errorf("query latest invoice_history: %w", err)
+	}
+
+	candidate, ok := order.InvoiceStatusToOrderStatus(latestStatus)
+	if !ok || !order.ShouldApplyInvoiceTransition(currentStatus, candidate) {
+		return tx.Commit(ctx)
+	}
+
+	tag, err := tx.Exec(ctx, updateOrderStatusSQL, evt.OrderID, candidate)
 	if err != nil {
 		return fmt.Errorf("update order status: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return order.ErrNotFound
 	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
 	}
 
-	var noteArg any = note
-	if note == "" {
-		noteArg = nil
+	var orderNoteArg any
+	if latestNote.Valid {
+		orderNoteArg = latestNote.String
 	}
-	var payloadArg any = []byte(payload)
-	if len(payload) == 0 {
-		payloadArg = nil
-	}
-	if _, err := tx.Exec(ctx, insertHistoryWithPayloadSQL, orderID, status, noteArg, payloadArg); err != nil {
+	if _, err := tx.Exec(ctx, insertOrderHistoryNoteSQL, evt.OrderID, candidate, orderNoteArg); err != nil {
 		return fmt.Errorf("insert order_history: %w", err)
 	}
 

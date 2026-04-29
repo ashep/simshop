@@ -3,12 +3,12 @@ package handler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -24,52 +24,27 @@ func (m *monobankVerifierMock) Verify(ctx context.Context, body []byte, sig stri
 	return m.Called(ctx, body, sig).Error(0)
 }
 
-func TestMonobankStatusToOrderStatus(main *testing.T) {
+func TestMonobankStatusToInvoiceStatus(main *testing.T) {
 	cases := []struct {
 		in  string
 		out string
 		ok  bool
 	}{
 		{"created", "", false},
-		{"processing", "payment_processing", true},
-		{"hold", "payment_hold", true},
+		{"processing", "processing", true},
+		{"hold", "hold", true},
 		{"success", "paid", true},
-		{"failure", "cancelled", true},
-		{"expired", "cancelled", true},
-		{"reversed", "refunded", true},
+		{"failure", "failed", true},
+		{"expired", "failed", true},
+		{"reversed", "reversed", true},
 		{"unknown", "", false},
 		{"", "", false},
 	}
 	for _, c := range cases {
 		main.Run(c.in, func(t *testing.T) {
-			got, ok := monobankStatusToOrderStatus(c.in)
+			got, ok := monobankStatusToInvoiceStatus(c.in)
 			assert.Equal(t, c.out, got)
 			assert.Equal(t, c.ok, ok)
-		})
-	}
-}
-
-func TestShouldApply(main *testing.T) {
-	cases := []struct {
-		current string
-		target  string
-		want    bool
-	}{
-		{"awaiting_payment", "payment_processing", true},
-		{"awaiting_payment", "paid", true},
-		{"awaiting_payment", "cancelled", true},
-		{"payment_processing", "payment_hold", true},
-		{"payment_processing", "paid", true},
-		{"payment_hold", "paid", true},
-		{"paid", "paid", false},               // idempotent
-		{"paid", "payment_processing", false}, // backwards
-		{"paid", "refunded", true},
-		{"processing", "cancelled", false}, // share rank: late failure after fulfillment kick-off
-		{"cancelled", "paid", false},       // backwards
-	}
-	for _, c := range cases {
-		main.Run(c.current+"_"+c.target, func(t *testing.T) {
-			assert.Equal(t, c.want, shouldApply(c.current, c.target))
 		})
 	}
 }
@@ -118,7 +93,7 @@ func TestMonobankWebhook(main *testing.T) {
 		w := doRequest(t, h, bodyFor("success"), "garbage")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		ver.AssertExpectations(t)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
+		svc.AssertNotCalled(t, "RecordInvoiceEvent")
 	})
 
 	main.Run("MalformedJSONReturns400", func(t *testing.T) {
@@ -128,49 +103,44 @@ func TestMonobankWebhook(main *testing.T) {
 		h := build(svc, ver)
 		w := doRequest(t, h, []byte(`not json`), "sig")
 		assert.Equal(t, http.StatusBadRequest, w.Code)
+		svc.AssertNotCalled(t, "RecordInvoiceEvent")
 	})
 
-	main.Run("UnknownReferenceReturns200NoDBCall", func(t *testing.T) {
+	main.Run("UnknownReferenceReturns200", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
 		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("", order.ErrNotFound)
+		svc.On("RecordInvoiceEvent", mock.Anything, mock.Anything).Return(order.ErrNotFound)
 		h := build(svc, ver)
 		w := doRequest(t, h, bodyFor("success"), "sig")
 		assert.Equal(t, http.StatusOK, w.Code)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
+		svc.AssertExpectations(t)
 	})
 
 	main.Run("InformationalCreatedReturns200NoDBCall", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
 		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
 		h := build(svc, ver)
 		w := doRequest(t, h, bodyFor("created"), "sig")
 		assert.Equal(t, http.StatusOK, w.Code)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
+		svc.AssertNotCalled(t, "RecordInvoiceEvent")
 	})
 
-	main.Run("BackwardsTransitionReturns200NoDBCall", func(t *testing.T) {
-		svc := &orderServiceMock{}
-		ver := &monobankVerifierMock{}
-		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("paid", nil)
-		h := build(svc, ver)
-		w := doRequest(t, h, bodyFor("processing"), "sig")
-		assert.Equal(t, http.StatusOK, w.Code)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
-	})
-
-	main.Run("ForwardSuccessTransitions", func(t *testing.T) {
+	main.Run("ForwardSuccessRecordsEvent", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
 		body := bodyFor("success")
+		eventAt, _ := time.Parse(time.RFC3339, "2026-04-26T10:05:00Z")
 		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
-		svc.On("ApplyPaymentEvent", mock.Anything, orderID, "paid", "monobank: success, finalAmount=12345", mock.MatchedBy(func(p json.RawMessage) bool {
-			return bytes.Equal(p, body)
+		svc.On("RecordInvoiceEvent", mock.Anything, mock.MatchedBy(func(evt order.InvoiceEvent) bool {
+			return evt.OrderID == orderID &&
+				evt.InvoiceID == "inv-1" &&
+				evt.Provider == "monobank" &&
+				evt.Status == order.InvoiceStatusPaid &&
+				evt.Note == "monobank: success, finalAmount=12345" &&
+				evt.EventAt.Equal(eventAt) &&
+				bytes.Equal(evt.Payload, body)
 		})).Return(nil)
 		h := build(svc, ver)
 		w := doRequest(t, h, body, "sig")
@@ -178,28 +148,19 @@ func TestMonobankWebhook(main *testing.T) {
 		svc.AssertExpectations(t)
 	})
 
-	main.Run("ForwardFailureTransitionsWithErrCodeNote", func(t *testing.T) {
+	main.Run("ForwardFailureWithErrCodeNote", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
 		body := []byte(`{"invoiceId":"inv-1","status":"failure","reference":"` + orderID + `","errCode":"LIMIT_EXCEEDED","failureReason":"limit","amount":1,"ccy":980,"finalAmount":0,"createdDate":"2026-04-26T10:00:00Z","modifiedDate":"2026-04-26T10:05:00Z"}`)
 		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
-		svc.On("ApplyPaymentEvent", mock.Anything, orderID, "cancelled", "monobank: failure (LIMIT_EXCEEDED)", mock.Anything).Return(nil)
+		svc.On("RecordInvoiceEvent", mock.Anything, mock.MatchedBy(func(evt order.InvoiceEvent) bool {
+			return evt.Status == order.InvoiceStatusFailed &&
+				evt.Note == "monobank: failure (LIMIT_EXCEEDED)"
+		})).Return(nil)
 		h := build(svc, ver)
 		w := doRequest(t, h, body, "sig")
 		assert.Equal(t, http.StatusOK, w.Code)
 		svc.AssertExpectations(t)
-	})
-
-	main.Run("IdempotentReplay", func(t *testing.T) {
-		svc := &orderServiceMock{}
-		ver := &monobankVerifierMock{}
-		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("paid", nil)
-		h := build(svc, ver)
-		w := doRequest(t, h, bodyFor("success"), "sig")
-		assert.Equal(t, http.StatusOK, w.Code)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
 	})
 
 	main.Run("VerifierTransportErrorReturns500", func(t *testing.T) {
@@ -209,40 +170,17 @@ func TestMonobankWebhook(main *testing.T) {
 		h := build(svc, ver)
 		w := doRequest(t, h, bodyFor("success"), "sig")
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
-		svc.AssertNotCalled(t, "GetStatus")
-	})
-
-	main.Run("GetStatusDBErrorReturns500", func(t *testing.T) {
-		svc := &orderServiceMock{}
-		ver := &monobankVerifierMock{}
-		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("", errors.New("db: connection reset"))
-		h := build(svc, ver)
-		w := doRequest(t, h, bodyFor("success"), "sig")
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
-		svc.AssertNotCalled(t, "ApplyPaymentEvent")
+		svc.AssertNotCalled(t, "RecordInvoiceEvent")
 	})
 
 	main.Run("DBErrorReturns500", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		ver := &monobankVerifierMock{}
 		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
-		svc.On("ApplyPaymentEvent", mock.Anything, orderID, "paid", mock.Anything, mock.Anything).Return(errors.New("db down"))
+		svc.On("RecordInvoiceEvent", mock.Anything, mock.Anything).Return(errors.New("db down"))
 		h := build(svc, ver)
 		w := doRequest(t, h, bodyFor("success"), "sig")
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
-	})
-
-	main.Run("OrderVanishedAfterStatusCheckReturns200", func(t *testing.T) {
-		svc := &orderServiceMock{}
-		ver := &monobankVerifierMock{}
-		ver.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		svc.On("GetStatus", mock.Anything, orderID).Return("awaiting_payment", nil)
-		svc.On("ApplyPaymentEvent", mock.Anything, orderID, "paid", mock.Anything, mock.Anything).Return(order.ErrNotFound)
-		h := build(svc, ver)
-		w := doRequest(t, h, bodyFor("success"), "sig")
-		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
 	main.Run("OversizeBodyTriggersJSONErrorReturning400", func(t *testing.T) {

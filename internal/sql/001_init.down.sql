@@ -1,5 +1,9 @@
+DROP INDEX IF EXISTS invoice_history_order_idx;
+DROP TABLE IF EXISTS invoice_history;
+DROP TYPE IF EXISTS invoice_status;
 DROP INDEX IF EXISTS order_invoices_order_id_idx;
 DROP TABLE IF EXISTS order_invoices;
 DROP TABLE IF EXISTS order_history;
+DROP TABLE IF EXISTS order_attrs;
 DROP TABLE IF EXISTS orders;
 DROP TYPE IF EXISTS order_status;

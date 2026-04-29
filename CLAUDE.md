@@ -145,8 +145,9 @@ flat — handler must not import `internal/app` to read them.
 satisfied by `*monobank.Verifier` and is used by the webhook handler to authenticate incoming Monobank callbacks.
 
 The `orderService` interface in `order.go` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`,
-`ApplyPaymentEvent`. The last two are needed by the webhook handler to query current order state and record payment
-events.
+`RecordInvoiceEvent`. `GetStatus` powers `GET /orders/{id}`; `RecordInvoiceEvent` is called by the Monobank webhook
+handler to persist a provider event and recompute the order's payment status from the latest event in the invoice
+timeline (see `internal/orderdb` and the **POST /monobank/webhook** route).
 
 ### internal/geo
 
@@ -246,6 +247,36 @@ the reason `handler.CreateOrder` resolves `attrLang.Title` and `attrVal.Title` b
 would muddy both. Nullable text columns (`MiddleName`, `AdminNote`, `CustomerNote`, `HistoryEntry.Note`) are
 `*string` so SQL NULL becomes JSON omission via `json:",omitempty"` rather than serialising as an empty string;
 read-side scans use `pgtype.Text` and convert to `*string`.
+
+#### `Writer.RecordInvoiceEvent` and the invoice timeline
+
+`RecordInvoiceEvent(ctx, evt)` is the single entry point for provider-side invoice events (today, Monobank
+webhooks). It runs in one transaction:
+
+1. `SELECT … FOR UPDATE` on the `orders` row — serializes concurrent webhook deliveries for the same order. Missing
+   row → `order.ErrNotFound` (handler maps to HTTP 200, since the order will never appear).
+2. `INSERT INTO invoice_history (order_id, invoice_id, provider, status, note, payload, event_at) ON CONFLICT
+   (invoice_id, provider, status, event_at) DO NOTHING` — idempotent on the provider's own dedupe key. A duplicate
+   webhook delivery silently no-ops here.
+3. `SELECT status, note FROM invoice_history WHERE order_id = … ORDER BY event_at DESC, created_at DESC LIMIT 1` —
+   re-derives the *current* invoice status from the timeline (not just from the row we may have just inserted).
+   This is what gives the system "out-of-order webhook" tolerance: a late-arriving event with an older `event_at`
+   inserts behind the latest and does not move the order.
+4. Map `invoice_status → order_status` candidate via `order.InvoiceStatusToOrderStatus`. Apply the candidate iff
+   `order.ShouldApplyInvoiceTransition(currentStatus, candidate)` returns true; the apply writes
+   `UPDATE orders.status` and `INSERT INTO order_history` carrying the latest event's note.
+
+`evt.Payload` must be non-empty (sanity check: a payload-less webhook event is meaningless and would also break
+forensics); `RecordInvoiceEvent` returns an error before begining the tx.
+
+`order_history.payload` was removed in this iteration — payloads now live exclusively on `invoice_history.payload`,
+where they serve as the audit trail for "what Monobank told us." `order_history` is the order-state transition log
+and is therefore note-only. To inspect the verbatim provider payload that triggered an order_status change, query
+`invoice_history` ordered by `event_at`.
+
+The `invoice_status` enum has five values: `processing, hold, paid, failed, reversed`. Monobank's webhook statuses
+map onto them via `monobankStatusToInvoiceStatus` in `internal/handler/monobank_webhook.go` (`success → paid`,
+`failure|expired → failed`, `created → no row` informational).
 
 #### No unit tests in `internal/orderdb`
 
@@ -399,16 +430,30 @@ required (public endpoint). The handler maps `order.ErrNotFound` (from `orderdb.
 
 `MonobankWebhook` processes Monobank invoice-status webhook deliveries. Authenticated by `X-Sign` (ECDSA over the
 body); no API key, no CORS, no OpenAPI middleware, no rate limiter — Monobank is the sole caller. Reads up to 1 MB,
-verifies via `h.mbVerifier`, parses with `monobank.ParseWebhook`, looks up the order by `payload.Reference`, computes
-the target `order_status` via `monobankStatusToOrderStatus`, and applies the transition only when
-`shouldApply(current, target)` — equal rank or backwards is a silent no-op. On forward transition,
-`order.Service.ApplyPaymentEvent` runs `UPDATE orders.status` + `INSERT order_history` with the verbatim payload in
-one tx. Response codes: 200 for processed/idempotent/informational/unknown reference (permanent — Monobank stops
-retrying); 401 for bad signature; 400 for malformed body; 500 for transient DB errors so Monobank retries.
+verifies via `h.mbVerifier`, parses with `monobank.ParseWebhook`, then maps `payload.Status` → `invoice_status` via
+`monobankStatusToInvoiceStatus` (`created` is informational and short-circuits to 200 with no DB write). The handler
+builds an `order.InvoiceEvent{OrderID: payload.Reference, InvoiceID, Provider: "monobank", Status, Note: buildWebhookNote(...),
+Payload: payload.RawBody, EventAt: payload.ModifiedDate}` and calls `orders.RecordInvoiceEvent`. The service /
+`internal/orderdb` does the rest (insert event idempotently, derive from latest, apply forward transition) — see
+**internal/orderdb** for the full flow.
 
-State-machine ranks live in `orderStatusRank` in `internal/handler/monobank_webhook.go`. `cancelled` and fulfillment
-`processing` deliberately share rank 5 — a late `failure` after the operator has begun fulfillment is informational
-only and must not downgrade the order.
+Response codes: 200 for processed/idempotent/informational/unknown-reference outcomes (permanent — Monobank stops
+retrying); 401 for bad signature; 400 for malformed body; 500 for transient DB or verifier-transport errors so
+Monobank retries. The handler emits status-only responses (empty body) — Monobank does not read error bodies, so
+JSON error envelopes are unnecessary noise.
+
+`event_at` is populated from Monobank's `modifiedDate` (not from our `CURRENT_TIMESTAMP`), which is what gives the
+system order-independence: webhooks delivered out of order resolve correctly because "latest event" is decided by
+the provider's authoritative timestamp, not by our receive time. This is also what lets retry-after-failure work:
+`processing@t1 → failure@t2 → processing@t3 → success@t4` correctly drives the order to `paid`, even though `paid`
+arrives after `cancelled` was applied.
+
+The order/invoice lifecycle rule is `order.ShouldApplyInvoiceTransition(current, candidate)` in
+`internal/order/lifecycle.go`. Summary: invoice events freely drive the pre-paid cluster
+{`new`, `awaiting_payment`, `payment_processing`, `payment_hold`, `cancelled`}; `cancelled` is re-enterable on retry;
+`paid` is stable against payment_* and `cancelled` (only `refunded` moves it forward); fulfillment states
+(`processing`, `shipped`, `delivered`, `refund_requested`, `returned`) are operator-owned and ignore invoice events
+except for `refunded`, which always wins because the customer's money was returned.
 
 ### `GET /nova-poshta/cities`, `/branches`, `/streets`
 
