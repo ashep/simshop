@@ -542,7 +542,7 @@ prices:
 			return req.Amount == 4999 &&
 				req.Ccy == 840 &&
 				req.MerchantPaymInfo.Reference == "018f4e3a-0000-7000-8000-000000000099" &&
-				req.MerchantPaymInfo.Destination == "Test Shop, order 018f4e3a" &&
+				req.MerchantPaymInfo.Destination == "Test Shop, order 018f4e3a-0000" &&
 				req.RedirectURL == "https://test.example/thanks?order_id=018f4e3a-0000-7000-8000-000000000099"
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000099", mock.MatchedBy(func(inv order.Invoice) bool {
