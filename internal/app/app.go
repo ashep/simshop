@@ -38,8 +38,8 @@ func Run(rt *runner.Runtime[Config]) error {
 	if cfg.Monobank.RedirectURL == "" {
 		return fmt.Errorf("monobank redirect url is required")
 	}
-	if cfg.Monobank.WebhookURL == "" {
-		return fmt.Errorf("monobank webhook url is required")
+	if cfg.Server.PublicURL == "" {
+		return fmt.Errorf("server public url is required")
 	}
 
 	migRes, err := dbmigrator.RunPostgres(cfg.Database.DSN, l, dbmigrator.Source{FS: appsql.FS, Path: "."})
@@ -88,7 +88,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	hdl := handler.NewHandler(
 		prodSvc, pageSvc, shopSvc, npClient, mbClient, mbVerifier, orderSvc,
 		geo.NewDetector(), openAPI.Responder(),
-		cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Monobank.WebhookURL, cfg.Monobank.TaxIDs, l,
+		cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Server.PublicURL, cfg.Monobank.TaxIDs, l,
 	)
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()

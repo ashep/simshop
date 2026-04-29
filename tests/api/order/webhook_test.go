@@ -325,7 +325,7 @@ func TestMonobankWebhook(main *testing.T) {
 		defer captureSrv.Close()
 		captureApp := testapp.New(t, dataDir, func(cfg *app.Config) {
 			cfg.Monobank.ServiceURL = captureSrv.URL
-			cfg.Monobank.WebhookURL = "https://capture.example/monobank/webhook"
+			cfg.Server.PublicURL = "https://capture.example"
 			cfg.RateLimit = -1
 		})
 		captureApp.Start()

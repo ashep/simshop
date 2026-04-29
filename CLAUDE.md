@@ -137,9 +137,11 @@ The same rule applies to other internal packages (e.g. `internal/geo`, `internal
 implementation packages.
 
 `NewHandler` parameter order (see `internal/handler/handler.go`):
-`prod, pages, shopSvc, np, mb, mbVerifier, orders, geo, resp, dataDir, redirectURL, webhookURL, taxIDs, l`. The
-trailing scalars (`dataDir`, `redirectURL`, `webhookURL`, `taxIDs`) are read out of `cfg` in `app.Run` and passed in
-flat — handler must not import `internal/app` to read them.
+`prod, pages, shopSvc, np, mb, mbVerifier, orders, geo, resp, dataDir, redirectURL, publicURL, taxIDs, l`.
+The trailing scalars (`dataDir`, `redirectURL`, `publicURL`, `taxIDs`) are read out of `cfg` in `app.Run` and
+passed in flat — handler must not import `internal/app` to read them. `NewHandler` trims the trailing slash from
+`publicURL` once and stores `webhookURL = publicURL + "/monobank/webhook"` on the handler — the Monobank webhook
+URL is **always derived**, never read from config.
 
 `monobankVerifier` is a local interface in `handler.go` with one method `Verify(ctx, body, sigB64) error`. It is
 satisfied by `*monobank.Verifier` and is used by the webhook handler to authenticate incoming Monobank callbacks.
@@ -388,10 +390,19 @@ and add-on use `int(math.Round(value * 100))` to convert to cents (see Conventio
 
 The Monobank `merchantPaymInfo.basketOrder` is **mandatory** — Monobank rejects invoices without it as
 `INVALID_MERCHANT_PAYM_INFO` (required for fiscalization). The handler sends a single line item per invoice with
-`name = p.Name[req.Lang]` (product title in customer's language), `qty = 1`, `sum = totalCents`,
-`code = req.ProductID`, and `tax = h.taxIDs` (loaded from `cfg.Monobank.TaxIDs`). `Code` and `Tax` are also required
-when fiscalization is enabled on the merchant account. Per Monobank's contract, the sum of all basket-item `sum`
-values must equal the invoice `amount`; with one line item this is trivially satisfied.
+`name = "<product title>"` when no attrs are selected, and `name = "<product title> (<Attr1>: <Val1>, <Attr2>:
+<Val2>)"` when attrs are present (titles in `req.Lang`, attrs in the same alphabetical order as the persisted
+`order.Attrs` slice). The remaining basket fields are `qty = 1`, `sum = totalCents`, `code = req.ProductID`, and
+`tax = h.taxIDs` (loaded from `cfg.Monobank.TaxIDs`). `Code` and `Tax` are also required when fiscalization is
+enabled on the merchant account. Per Monobank's contract, the sum of all basket-item `sum` values must equal the
+invoice `amount`; with one line item this is trivially satisfied.
+
+The optional basket-item `icon` is emitted as `<server.public_url>/images/<product_id>/<images[0].preview>` when
+the product has at least one image with a non-empty `preview` (`len(p.Images) > 0 && p.Images[0].Preview != ""`).
+`server.public_url` is required at startup, so the handler does not re-check it. The trailing slash on
+`server.public_url` is trimmed once in `NewHandler`. Missing images silently omit `icon` — Monobank treats it as
+optional. The icon URL is built from the bare filename in YAML — the same path the
+`GET /images/{product_id}/{file_name}` route serves — so the public URL must point at this service.
 
 Other Monobank invoice fields built per request: `merchantPaymInfo.reference = orderID`,
 `destination = "<shop name in req.Lang>, order <orderID first 8 chars>"` (e.g. `"Acme, order 018f4e3a"`),
@@ -486,20 +497,27 @@ silently skips directories that lack one.
 
 Config keys live under `internal/app/config.go`. Notable required vs optional rules:
 
-- **`Monobank.APIKey`**, **`Monobank.RedirectURL`**, and **`Monobank.WebhookURL`** are required — `app.Run` returns an
-  error before the migrator if any is empty.
+- **`Monobank.APIKey`** and **`Monobank.RedirectURL`** are required — `app.Run` returns an error before the
+  migrator if either is empty.
 - **`Monobank.ServiceURL`** is optional; empty falls back to `https://api.monobank.ua/`. Tests inject a
   `httptest.Server.URL` via `testapp.New` opts.
 - **`Monobank.TaxIDs`** is the list of merchant tax-registration IDs from the Monobank business cabinet (required
   when fiscalization is enabled). Wired into `NewHandler` as `taxIDs []int` and emitted on every basket item.
 - **`Server.APIKey`** is optional; empty disables `GET /orders` via conditional route registration (see Routes).
+- **`Server.PublicURL`** is **required** — the public https base URL of this service (e.g. `https://shop.example`);
+  empty → startup error. Used to derive the Monobank webhook URL (`<PublicURL>/monobank/webhook`, posted as
+  `webHookUrl` on every `CreateInvoice`) and, when the product has at least one image with a non-empty `preview`,
+  the basket-item `icon = <PublicURL>/images/<product_id>/<preview>`. Trailing slash is trimmed once in
+  `NewHandler`. There is **no separate `monobank.webhook_url` config** — the webhook target is always derived from
+  `server.public_url`.
 - **`NovaPoshta.ServiceURL`** is optional; empty falls back to the production NP URL.
 - **`RateLimit`** (top-level `rate_limit`): positive → that many RPM per IP; `0` or negative → rate limiting
   disabled (functional tests use `-1`).
 - **`DataDir`** (top-level `data_dir`): default `./data`.
 
 `testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`, and
-`Monobank.WebhookURL="https://test.example/monobank/webhook"` so plain construction works in tests. It also starts a
+`Server.PublicURL="https://test.example"` (which makes the derived webhook URL
+`https://test.example/monobank/webhook`) so plain construction works in tests. It also starts a
 built-in `httptest.Server` (registered as `cfg.Monobank.ServiceURL`) that serves `/api/merchant/pubkey` so
 `Verifier.Fetch` succeeds at startup without hitting real Monobank. Tests that need custom Monobank behaviour
 override `cfg.Monobank.ServiceURL` via opts; the built-in stub is then unused but still shut down via `t.Cleanup`.

@@ -67,7 +67,7 @@ func New(t *testing.T, dataDir string, opts ...func(*app.Config)) *App {
 		cfg.Monobank.APIKey = "test-key"
 	}
 	cfg.Monobank.RedirectURL = "https://test.example/thanks"
-	cfg.Monobank.WebhookURL = "https://test.example/monobank/webhook"
+	cfg.Server.PublicURL = "https://test.example"
 
 	// Start a default stub Monobank server so Verifier.Fetch succeeds at app startup.
 	// Tests that need custom Monobank behaviour override cfg.Monobank.ServiceURL via opts.
