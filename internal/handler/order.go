@@ -303,8 +303,8 @@ func buildDestination(shopName map[string]string, lang, orderID string) string {
 		}
 	}
 	short := orderID
-	if len(short) > 8 {
-		short = short[:8]
+	if len(short) > 13 {
+		short = short[:13]
 	}
 	return fmt.Sprintf("%s, order %s", name, short)
 }
