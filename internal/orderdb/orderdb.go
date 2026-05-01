@@ -336,6 +336,112 @@ func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) 
 	return status, nil
 }
 
+const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price, currency,
+	first_name, middle_name, last_name,
+	country, city, phone, address,
+	admin_note, customer_note,
+	created_at, updated_at
+FROM orders
+WHERE id = $1::uuid`
+
+// GetByID returns one order populated with its attrs, history, and invoices.
+// Returns order.ErrNotFound when no row matches.
+func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) {
+	var rec order.Record
+	var middleName, adminNote, customerNote pgtype.Text
+	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
+		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency,
+		&rec.FirstName, &middleName, &rec.LastName,
+		&rec.Country, &rec.City, &rec.Phone, &rec.Address,
+		&adminNote, &customerNote,
+		&rec.CreatedAt, &rec.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, order.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query order: %w", err)
+	}
+	if middleName.Valid {
+		v := middleName.String
+		rec.MiddleName = &v
+	}
+	if adminNote.Valid {
+		v := adminNote.String
+		rec.AdminNote = &v
+	}
+	if customerNote.Valid {
+		v := customerNote.String
+		rec.CustomerNote = &v
+	}
+	rec.Attrs = []order.Attr{}
+	rec.History = []order.HistoryEntry{}
+	rec.Invoices = []order.Invoice{}
+
+	ids := []string{rec.ID}
+
+	aRows, err := r.db.Query(ctx, listAttrsSQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_attrs: %w", err)
+	}
+	for aRows.Next() {
+		var orderID string
+		var attr order.Attr
+		if err := aRows.Scan(&orderID, &attr.Name, &attr.Value, &attr.Price); err != nil {
+			aRows.Close()
+			return nil, fmt.Errorf("scan order_attr: %w", err)
+		}
+		rec.Attrs = append(rec.Attrs, attr)
+	}
+	aRows.Close()
+	if err := aRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_attrs: %w", err)
+	}
+
+	hRows, err := r.db.Query(ctx, listHistorySQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_history: %w", err)
+	}
+	for hRows.Next() {
+		var entry order.HistoryEntry
+		var orderID string
+		var note pgtype.Text
+		if err := hRows.Scan(&entry.ID, &orderID, &entry.Status, &note, &entry.CreatedAt); err != nil {
+			hRows.Close()
+			return nil, fmt.Errorf("scan order_history: %w", err)
+		}
+		if note.Valid {
+			v := note.String
+			entry.Note = &v
+		}
+		rec.History = append(rec.History, entry)
+	}
+	hRows.Close()
+	if err := hRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_history: %w", err)
+	}
+
+	iRows, err := r.db.Query(ctx, listInvoicesSQL, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query order_invoices: %w", err)
+	}
+	for iRows.Next() {
+		var orderID string
+		var inv order.Invoice
+		if err := iRows.Scan(&orderID, &inv.Provider, &inv.ID, &inv.PageURL, &inv.Amount, &inv.Currency); err != nil {
+			iRows.Close()
+			return nil, fmt.Errorf("scan order_invoice: %w", err)
+		}
+		rec.Invoices = append(rec.Invoices, inv)
+	}
+	iRows.Close()
+	if err := iRows.Err(); err != nil {
+		return nil, fmt.Errorf("iter order_invoices: %w", err)
+	}
+
+	return &rec, nil
+}
+
 // RecordInvoiceEvent persists evt and recomputes the order's payment status
 // from the latest invoice event for the order. All writes share a single
 // transaction with the orders row locked FOR UPDATE so concurrent webhook
@@ -345,14 +451,14 @@ func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) 
 // re-derives from the unchanged latest event and is a no-op.
 //
 // Returns order.ErrNotFound when the order does not exist.
-func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) error {
+func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) (string, error) {
 	if len(evt.Payload) == 0 {
-		return fmt.Errorf("invoice event payload is required")
+		return "", fmt.Errorf("invoice event payload is required")
 	}
 
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return "", fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
 		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
@@ -364,9 +470,9 @@ func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent)
 	var currentStatus string
 	if err := tx.QueryRow(ctx, lockOrderStatusSQL, evt.OrderID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return order.ErrNotFound
+			return "", order.ErrNotFound
 		}
-		return fmt.Errorf("lock order: %w", err)
+		return "", fmt.Errorf("lock order: %w", err)
 	}
 
 	var noteArg any = evt.Note
@@ -376,7 +482,7 @@ func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent)
 	if _, err := tx.Exec(ctx, insertInvoiceHistorySQL,
 		evt.OrderID, evt.InvoiceID, evt.Provider, evt.Status, noteArg, []byte(evt.Payload), evt.EventAt,
 	); err != nil {
-		return fmt.Errorf("insert invoice_history: %w", err)
+		return "", fmt.Errorf("insert invoice_history: %w", err)
 	}
 
 	var latestStatus string
@@ -386,22 +492,22 @@ func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent)
 			// No event survived the insert (duplicate filtered AND no prior rows).
 			// This shouldn't happen — the unique constraint allows the very first
 			// (orderID, invoice, status, event_at) tuple — but bail safely.
-			return tx.Commit(ctx)
+			return "", tx.Commit(ctx)
 		}
-		return fmt.Errorf("query latest invoice_history: %w", err)
+		return "", fmt.Errorf("query latest invoice_history: %w", err)
 	}
 
 	candidate, ok := order.InvoiceStatusToOrderStatus(latestStatus)
 	if !ok || !order.ShouldApplyInvoiceTransition(currentStatus, candidate) {
-		return tx.Commit(ctx)
+		return "", tx.Commit(ctx)
 	}
 
 	tag, err := tx.Exec(ctx, updateOrderStatusSQL, evt.OrderID, candidate)
 	if err != nil {
-		return fmt.Errorf("update order status: %w", err)
+		return "", fmt.Errorf("update order status: %w", err)
 	}
 	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
+		return "", fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
 	}
 
 	var orderNoteArg any
@@ -409,11 +515,11 @@ func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent)
 		orderNoteArg = latestNote.String
 	}
 	if _, err := tx.Exec(ctx, insertOrderHistoryNoteSQL, evt.OrderID, candidate, orderNoteArg); err != nil {
-		return fmt.Errorf("insert order_history: %w", err)
+		return "", fmt.Errorf("insert order_history: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
+		return "", fmt.Errorf("commit tx: %w", err)
 	}
-	return nil
+	return candidate, nil
 }

@@ -482,3 +482,56 @@ rate_limit: 1
   production; used in tests.
 - `rate_limit` — requests per minute allowed for `POST /orders` per client IP (positive integer). `0` or a negative
   value disables rate limiting entirely.
+- `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
+- `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
+
+### Telegram notifications
+
+Optional. When configured, every change to an order's `order_history` is mirrored as a MarkdownV2 message to a Telegram
+chat. Useful for shop owners who want a real-time feed of order activity without standing up a separate dashboard.
+
+```yaml
+telegram:
+  token: "<bot token from @BotFather>"
+  chat_id: "<numeric channel id like -1001234567890, or @channel handle>"
+```
+
+Both keys must be set together; setting one without the other is a fatal startup error. With both empty the feature is
+silently disabled (this is the default; existing deployments are unaffected by the upgrade).
+
+**Message format.** New orders get the full detail; every other status change gets a slim notification. The order id is
+rendered as inline code so it's tap-to-copy in the Telegram client.
+
+A new order:
+
+```
+*New order* `0193c5fa-7b3a-7000-8000-0123456789ab`
+
+*Product:* pro-plan-annual
+*Display color:* Red
+*Total:* 49.00 USD
+*Customer:* Jane Doe
+*Phone:* +1234567890
+*Email:* jane@example.com
+*Delivery:* UA, Kyiv, Some Street 5
+*Customer note:* Please ship after Friday
+```
+
+Any subsequent status change (e.g. `awaiting_payment`, `paid`, `failed`):
+
+```
+Order `0193c5fa-7b3a-7000-8000-0123456789ab` — *paid*
+
+monobank: success, finalAmount=4900
+```
+
+The trailing line ("status note") is the rendered note from the underlying invoice event and is omitted when empty.
+
+**Failure handling.** The notifier is best-effort: a Telegram outage cannot break order placement or webhook processing.
+Events are queued in an in-memory bounded buffer (256 entries) drained by a single background worker that retries
+transient failures up to three times with 1s/2s backoff between attempts (or honors `retry_after` on 429). Permanent
+errors (4xx other than 429) and buffer-full conditions log and drop the event. Events still in the buffer at process
+exit are discarded after a 5s graceful drain.
+
+To get a chat id for a private channel: add the bot to the channel as an administrator, then post once and inspect the
+update via `getUpdates`.

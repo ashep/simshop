@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -611,4 +612,116 @@ func TestCreateOrder_DBFailure(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+}
+
+func TestCreateOrder_Telegram(main *testing.T) {
+	dataDir := makeDataDir(main)
+
+	pubPayload := pubKeyPayload(main)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubPayload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-tg","pageUrl":"https://pay.example/inv-tg"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
+	tgSrv, tgCh := newTelegramStub(main)
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.RateLimit = -1
+		cfg.Telegram = app.TelegramConfig{
+			Token:      "test-token",
+			ChatID:     "@simshop-test",
+			ServiceURL: tgSrv.URL,
+		}
+	})
+	a.Start()
+
+	body := []byte(`{"product_id":"widget","lang":"en","first_name":"Іван","last_name":"Іваненко","phone":"+380501234567","email":"ivan@example.com","country":"ua","city":"Київ","address":"Відділення №5","notes":"Please ship after Friday"}`)
+
+	main.Run("EmitsNewAndAwaitingPaymentMessages", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		// Drain any leftover messages from earlier subtests.
+		drainTGChannel(tgCh)
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		first := waitForTGRequest(t, tgCh, 2*time.Second)
+		assert.Equal(t, "/bottest-token/sendMessage", first.Path)
+		assert.Equal(t, "@simshop-test", first.ChatID)
+		assert.Equal(t, "MarkdownV2", first.ParseMode)
+		assert.Contains(t, first.Text, "*New order* `")
+		assert.Contains(t, first.Text, "*Product:* widget")
+		assert.Contains(t, first.Text, "*Customer:* Іван Іваненко")
+		assert.Contains(t, first.Text, `*Phone:* \+380501234567`)
+		assert.Contains(t, first.Text, `*Email:* ivan@example\.com`)
+		assert.Contains(t, first.Text, "*Delivery:* UA, Київ, Відділення №5")
+		assert.Contains(t, first.Text, "*Customer note:* Please ship after Friday")
+
+		second := waitForTGRequest(t, tgCh, 2*time.Second)
+		assert.Equal(t, "@simshop-test", second.ChatID)
+		assert.Contains(t, second.Text, "— *awaiting\\_payment*")
+		// Slim format: no full-info fields.
+		assert.NotContains(t, second.Text, "Product:")
+		assert.NotContains(t, second.Text, "Total:")
+	})
+}
+
+func TestCreateOrder_TelegramDisabled(main *testing.T) {
+	dataDir := makeDataDir(main)
+
+	pubPayload := pubKeyPayload(main)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubPayload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-disabled","pageUrl":"https://pay.example/inv-disabled"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
+	// Stub is wired in case the production code regresses and hits Telegram
+	// with empty config; we'll assert it received zero requests.
+	tgSrv, tgCh := newTelegramStub(main)
+	_ = tgSrv
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.RateLimit = -1
+		// Telegram intentionally zero-valued → notifier disabled.
+	})
+	a.Start()
+
+	body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+
+	main.Run("NoTelegramRequestsWhenConfigEmpty", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		// Wait long enough that a misconfigured production code path would
+		// have fired both notifications by now.
+		select {
+		case got := <-tgCh:
+			t.Fatalf("expected no Telegram requests when config empty, got %+v", got)
+		case <-time.After(500 * time.Millisecond):
+			// Pass: nothing arrived.
+		}
+	})
 }

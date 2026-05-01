@@ -18,6 +18,12 @@ type MonobankConfig struct {
 	TaxIDs      []int  `yaml:"tax_ids"`      // merchant tax registration IDs from the Monobank business cabinet; required when fiscalization is enabled
 }
 
+type TelegramConfig struct {
+	Token      string `yaml:"token"`       // bot token; empty + chat_id empty disables the feature
+	ChatID     string `yaml:"chat_id"`     // numeric channel id ("-1001234567890") or "@channel" handle
+	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.telegram.org
+}
+
 type DBConfig struct {
 	DSN string `yaml:"dsn"`
 }
@@ -28,6 +34,7 @@ type Config struct {
 	DataDir    string           `yaml:"data_dir"`
 	NovaPoshta NovaPoshtaConfig `yaml:"nova_poshta"`
 	Monobank   MonobankConfig   `yaml:"monobank"`
+	Telegram   TelegramConfig   `yaml:"telegram"`
 	Database   DBConfig         `yaml:"database"`
 	RateLimit  int              `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
 }
