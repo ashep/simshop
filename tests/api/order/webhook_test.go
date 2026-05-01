@@ -342,3 +342,80 @@ func TestMonobankWebhook(main *testing.T) {
 		assert.Equal(t, "https://capture.example/monobank/webhook", captured["webHookUrl"])
 	})
 }
+
+func TestMonobankWebhook_Telegram(main *testing.T) {
+	dataDir := makeDataDir(main)
+
+	pubPayload := pubKeyPayload(main)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/merchant/pubkey":
+			_, _ = w.Write(pubPayload)
+		default:
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"invoiceId":"inv-tg-hook","pageUrl":"https://pay.example/inv-tg-hook"}`))
+		}
+	}))
+	main.Cleanup(mbServer.Close)
+
+	tgSrv, tgCh := newTelegramStub(main)
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.RateLimit = -1
+		cfg.Telegram = app.TelegramConfig{
+			Token:      "test-token",
+			ChatID:     "@simshop-test",
+			ServiceURL: tgSrv.URL,
+		}
+	})
+	a.Start()
+
+	createOrder := func(t *testing.T) string {
+		t.Helper()
+		body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		pool, err := pgxpool.New(t.Context(), a.DSN())
+		require.NoError(t, err)
+		defer pool.Close()
+		var id string
+		require.NoError(t, pool.QueryRow(t.Context(), "SELECT id::text FROM orders ORDER BY created_at DESC LIMIT 1").Scan(&id))
+		return id
+	}
+
+	main.Run("SuccessWebhookEmitsPaidMessage", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		drainTGChannel(tgCh)
+
+		id := createOrder(t)
+		// Drain the two messages emitted by the order placement (new, awaiting_payment).
+		_ = waitForTGRequest(t, tgCh, 2*time.Second)
+		_ = waitForTGRequest(t, tgCh, 2*time.Second)
+
+		ts := time.Now().UTC().Format(time.RFC3339)
+		body := []byte(`{"invoiceId":"inv-tg-hook","status":"success","reference":"` + id + `","amount":4999,"ccy":840,"finalAmount":4999,"createdDate":"` + ts + `","modifiedDate":"` + ts + `"}`)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/monobank/webhook"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Sign", signWebhookBody(t, body))
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		got := waitForTGRequest(t, tgCh, 2*time.Second)
+		assert.Equal(t, "@simshop-test", got.ChatID)
+		assert.Equal(t, "MarkdownV2", got.ParseMode)
+		assert.Contains(t, got.Text, "— *paid*")
+		assert.Contains(t, got.Text, `monobank: success, finalAmount\=4999`)
+		// Slim format on status updates: no full-info fields.
+		assert.NotContains(t, got.Text, "Product:")
+		assert.NotContains(t, got.Text, "Customer:")
+	})
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/ashep/simshop/internal/product"
 	"github.com/ashep/simshop/internal/shop"
 	appsql "github.com/ashep/simshop/internal/sql"
+	"github.com/ashep/simshop/internal/telegram"
 )
 
 func Run(rt *runner.Runtime[Config]) error {
@@ -77,8 +78,24 @@ func Run(rt *runner.Runtime[Config]) error {
 
 	ordersWriter := orderdb.New(db)
 	ordersReader := orderdb.NewReader(db)
+
+	var orderNotifier order.Notifier
+	switch {
+	case cfg.Telegram.Token != "" && cfg.Telegram.ChatID != "":
+		tgClient := telegram.NewClient(cfg.Telegram.Token, cfg.Telegram.ServiceURL)
+		tn := telegram.NewNotifier(tgClient, cfg.Telegram.ChatID, ordersReader, prodSvc, l)
+		tn.Start()
+		defer tn.Stop()
+		orderNotifier = tn
+		l.Info().Msg("telegram notifier enabled")
+	case cfg.Telegram.Token != "" || cfg.Telegram.ChatID != "":
+		return fmt.Errorf("telegram: token and chat_id must be set together")
+	default:
+		l.Info().Msg("telegram notifier disabled")
+	}
+
 	// orderdb.Writer satisfies Writer, InvoiceWriter, and InvoiceEventWriter.
-	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter)
+	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter, orderNotifier)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {

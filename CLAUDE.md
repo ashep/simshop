@@ -108,6 +108,16 @@ on the handler — the Monobank webhook URL is **always derived**, never read fr
 
 `orderService` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`, `RecordInvoiceEvent`.
 
+Do **not** add delegating methods on `order.Service` for every `Reader` method added to the `Reader` interface. Only
+proxy methods that correspond to the `orderService` interface consumed by `internal/handler`. Other consumers (e.g.
+background workers) receive `order.Reader` directly — a `Service` proxy is dead code and violates YAGNI.
+
+`order.Service` holds an optional `Notifier` (5th arg to `NewService`; pass `nil` to disable). Dispatch pattern:
+`Notify` is called **only after a successful commit**, guarded by `if s.n != nil`. `RecordInvoiceEvent` dispatches
+only when the underlying `InvoiceEventWriter` returns a non-empty `newStatus` (i.e. a forward transition occurred).
+`app.go` wires `*telegram.Notifier` when both `cfg.Telegram.Token` and `cfg.Telegram.ChatID` are set; passes `nil`
+(notifier disabled) otherwise.
+
 ### internal/geo
 
 `Detector.Detect(r)` resolves a country code in two steps:
@@ -162,6 +172,25 @@ and the check retried** — auto-recovers from key rotation. `ErrInvalidSignatur
 from upstream failure. Concurrent refetches deduped via `atomic.Bool` (`refetching`); other callers spin on 10 ms
 ticks until the flag clears, then re-verify. `NewVerifier(apiKey, serviceURL)` is production; tests construct
 directly.
+
+### internal/telegram
+
+`Client.SendMessage` posts to `/bot<token>/sendMessage`. `NewClient(token, serviceURL)` is the production constructor
+(empty `serviceURL` → `https://api.telegram.org`); tests construct `*Client` directly to inject `httpClient`/`serviceURL`.
+Body capped at 1 MB.
+
+`*APIError` is returned on any non-2xx response. `APIError.RetryAfter` is non-zero only on 429 responses that include
+`parameters.retry_after`. Transport errors (timeout, connection refused) are wrapped plain — callers distinguish them
+from `*APIError` via `errors.As`.
+
+`Notifier` implements `order.Notifier`. `NewNotifier(client, chatID, reader, log)` returns a stopped notifier; call
+`Start()` before the first `Notify` call and `Stop()` on shutdown. `Notify` is non-blocking: if the 256-slot buffer is
+full or the channel is closed (post-Stop race), the event is dropped with a Warn log and the call returns immediately.
+`Stop()` closes the channel and waits up to 5s for the worker to drain. `messageSender` is a local interface satisfied
+by `*Client`; tests use `fakeSender`. `sleepFn` is injected in tests to eliminate real sleeps. Retry policy: up to 3
+attempts; 4xx (except 429) → permanent, no retry; 429 → honor `APIError.RetryAfter` clamped to `[1s, 30s]`; other
+errors → `backoffSchedule[attempt-1]` (1s, 2s, 4s). `formatMessage` uses U+2014 em-dash (`—`), uppercases currency and
+country, omits optional lines (`Customer note:`, `Status note:`) when empty.
 
 ### internal/orderdb
 
@@ -380,8 +409,11 @@ Config keys in `internal/app/config.go`. Required vs optional:
   (`<PublicURL>/monobank/webhook`, sent as `webHookUrl` on every `CreateInvoice`) and the basket-item icon
   (`<PublicURL>/images/<product_id>/<preview>`). Trailing slash trimmed once in `NewHandler`. **There is no separate
   `monobank.webhook_url` config** — the webhook target is always derived.
-- **`Monobank.ServiceURL`**, **`NovaPoshta.ServiceURL`** — optional; empty → real upstream. Tests inject
-  `httptest.Server.URL` via `testapp.New` opts.
+- **`Monobank.ServiceURL`**, **`NovaPoshta.ServiceURL`**, **`Telegram.ServiceURL`** — optional; empty → real upstream.
+  Tests inject `httptest.Server.URL` via `testapp.New` opts.
+- **`Telegram.Token`** + **`Telegram.ChatID`** — both optional; both empty → notifier disabled; exactly one set →
+  startup error `"telegram: token and chat_id must be set together"`; both set → notifier enabled. `defer tn.Stop()`
+  must be registered **after** `defer db.Close()` so LIFO order drains pending events while the pool is still open.
 - **`Monobank.TaxIDs`** — list of merchant tax-registration IDs (required when fiscalization is enabled). Wired into
   `NewHandler` as `taxIDs []int` and emitted on every basket item.
 - **`Server.APIKey`** — optional; empty disables `GET /orders` via conditional registration.
