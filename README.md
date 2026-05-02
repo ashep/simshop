@@ -451,14 +451,14 @@ user-facing message in their own language.
 
 **Allowed transitions:**
 
-| From               | Allowed targets                       |
-|--------------------|---------------------------------------|
-| `paid`             | `processing`, `refunded`              |
-| `processing`       | `shipped`, `refunded`                 |
-| `shipped`          | `delivered`, `refund_requested`       |
-| `delivered`        | `refund_requested`                    |
-| `refund_requested` | `returned`, `refunded`                |
-| `returned`         | `refunded`                            |
+| From               | Allowed targets                                              |
+|--------------------|--------------------------------------------------------------|
+| `paid`             | `processing`, `refund_requested`, `refunded`                 |
+| `processing`       | `shipped`, `refund_requested`, `refunded`                    |
+| `shipped`          | `delivered`, `refund_requested`                              |
+| `delivered`        | `refund_requested`                                           |
+| `refund_requested` | `processing`, `shipped`, `delivered`, `returned`, `refunded` |
+| `returned`         | `refunded`                                                   |
 
 Any transition outside this matrix returns HTTP 409 with `{"error": "transition not allowed"}`. Submitting the order's
 current status is treated as a no-op idempotent success (HTTP 200, no extra `order_history` row, no notification).
