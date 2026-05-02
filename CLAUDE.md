@@ -118,7 +118,7 @@ concrete type, and wire it in `internal/app`.
 `NewHandler` trims the trailing slash from `publicURL` once and stores `webhookURL = publicURL + "/monobank/webhook"`
 on the handler — the Monobank webhook URL is **always derived**, never read from config.
 
-`orderService` has five methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`, `RecordInvoiceEvent`.
+`orderService` has six methods: `Submit`, `AttachInvoice`, `List`, `GetStatus`, `UpdateStatus`, `RecordInvoiceEvent`.
 
 Do **not** add delegating methods on `order.Service` for every `Reader` method added to the `Reader` interface. Only
 proxy methods that correspond to the `orderService` interface consumed by `internal/handler`. Other consumers (e.g.
