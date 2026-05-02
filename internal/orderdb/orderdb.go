@@ -442,6 +442,16 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 	return &rec, nil
 }
 
+// UpdateStatusByOperator is a temporary stub; the real implementation lands in
+// a follow-up task. It panics so any accidental call surfaces immediately in
+// tests.
+func (w *Writer) UpdateStatusByOperator(
+	_ context.Context,
+	_, _, _, _ string,
+) (bool, error) {
+	panic("orderdb.Writer.UpdateStatusByOperator: not implemented")
+}
+
 // RecordInvoiceEvent persists evt and recomputes the order's payment status
 // from the latest invoice event for the order. All writes share a single
 // transaction with the orders row locked FOR UPDATE so concurrent webhook

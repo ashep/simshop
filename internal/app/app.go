@@ -136,8 +136,8 @@ func Run(rt *runner.Runtime[Config]) error {
 		orderNotifier = order.NewMultiNotifier(notifiers...)
 	}
 
-	// orderdb.Writer satisfies Writer, InvoiceWriter, and InvoiceEventWriter.
-	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter, orderNotifier)
+	// orderdb.Writer satisfies Writer, InvoiceWriter, InvoiceEventWriter, and OperatorWriter.
+	orderSvc := order.NewService(ordersWriter, ordersReader, ordersWriter, ordersWriter, ordersWriter, orderNotifier)
 
 	openAPI, err := openapi.New(api.Spec)
 	if err != nil {
