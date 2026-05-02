@@ -126,10 +126,11 @@ type Record struct {
 	City         string
 	Phone        string
 	Address      string
-	AdminNote    *string // nil when SQL NULL
-	CustomerNote *string // nil when SQL NULL
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	AdminNote      *string         `json:",omitempty"`
+	CustomerNote   *string         `json:",omitempty"`
+	TrackingNumber *string         `json:"tracking_number,omitempty"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 	Attrs        []Attr         // never nil; possibly empty
 	History      []HistoryEntry // chronological, oldest first; never nil
 	Invoices     []Invoice      // never nil; possibly empty
