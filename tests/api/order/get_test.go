@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -45,9 +46,13 @@ func TestListOrders(main *testing.T) {
 	})
 	a.Start()
 
-	getOrders := func(t *testing.T, authHeader string) *http.Response {
+	getOrders := func(t *testing.T, authHeader, query string) *http.Response {
 		t.Helper()
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/orders"), nil)
+		target := a.URL("/orders")
+		if query != "" {
+			target += "?" + query
+		}
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 		require.NoError(t, err)
 		if authHeader != "" {
 			req.Header.Set("Authorization", authHeader)
@@ -71,7 +76,7 @@ func TestListOrders(main *testing.T) {
 
 	main.Run("MissingAuthHeaderReturns401", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
-		resp := getOrders(t, "")
+		resp := getOrders(t, "", "")
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -79,7 +84,7 @@ func TestListOrders(main *testing.T) {
 	})
 
 	main.Run("WrongKeyReturns401", func(t *testing.T) {
-		resp := getOrders(t, "Bearer wrong")
+		resp := getOrders(t, "Bearer wrong", "")
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -88,7 +93,7 @@ func TestListOrders(main *testing.T) {
 
 	main.Run("EmptyDBReturnsEmptyArray", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
-		resp := getOrders(t, "Bearer "+testAPIKey)
+		resp := getOrders(t, "Bearer "+testAPIKey, "")
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -125,7 +130,7 @@ func TestListOrders(main *testing.T) {
 			"address":    "Addr 2",
 		}))
 
-		resp := getOrders(t, "Bearer "+testAPIKey)
+		resp := getOrders(t, "Bearer "+testAPIKey, "")
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -180,6 +185,114 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, "inv-existing-1", aliceInvoices[0].(map[string]any)["id"])
 		assert.Equal(t, "https://pay.example/inv-existing-1", aliceInvoices[0].(map[string]any)["page_url"])
 	})
+
+	main.Run("StatusFilterSingleValue", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbCounter.Store(0)
+
+		// Seed two orders. Both start as "awaiting_payment" (after Monobank invoice).
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Alice", "last_name": "Smith",
+			"phone": "+1", "email": "alice@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 1",
+		}))
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Bob", "last_name": "Brown",
+			"phone": "+2", "email": "bob@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 2",
+		}))
+
+		// Promote one order to "paid" via direct SQL so we can filter by it.
+		promoteOneOrderToPaid(t, a.DSN())
+
+		resp := getOrders(t, "Bearer "+testAPIKey, "status=paid")
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var got []map[string]any
+		require.NoError(t, json.Unmarshal(body, &got))
+		require.Len(t, got, 1)
+		assert.Equal(t, "paid", got[0]["status"])
+	})
+
+	main.Run("StatusFilterCSVMultiValue", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbCounter.Store(0)
+
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Alice", "last_name": "Smith",
+			"phone": "+1", "email": "alice@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 1",
+		}))
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Bob", "last_name": "Brown",
+			"phone": "+2", "email": "bob@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 2",
+		}))
+		promoteOneOrderToPaid(t, a.DSN())
+		// Both rows now: one "paid", one "awaiting_payment".
+
+		resp := getOrders(t, "Bearer "+testAPIKey, "status=paid,awaiting_payment")
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var got []map[string]any
+		require.NoError(t, json.Unmarshal(body, &got))
+		require.Len(t, got, 2)
+	})
+
+	main.Run("StatusFilterEmptyValueReturnsAll", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbCounter.Store(0)
+
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Alice", "last_name": "Smith",
+			"phone": "+1", "email": "alice@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 1",
+		}))
+
+		// Omitted ?status= must mean "no filter" → all orders. The handler's
+		// parseStatusFilter also no-ops on a literal empty value, but the
+		// OpenAPI middleware rejects an explicit `?status=` because [""] fails
+		// the enum check. Sending no query at all is the supported "no filter"
+		// invocation, so that's what we exercise here.
+		resp := getOrders(t, "Bearer "+testAPIKey, "")
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var got []map[string]any
+		require.NoError(t, json.Unmarshal(body, &got))
+		require.Len(t, got, 1)
+	})
+
+	main.Run("StatusFilterInvalidValueReturns400", func(t *testing.T) {
+		resp := getOrders(t, "Bearer "+testAPIKey, "status=bogus")
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	main.Run("StatusFilterMatchesNothingReturnsEmpty", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbCounter.Store(0)
+
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Alice", "last_name": "Smith",
+			"phone": "+1", "email": "alice@example.com",
+			"country": "ua", "city": "Kyiv", "address": "Addr 1",
+		}))
+		// Order is in awaiting_payment; filter for "delivered" matches nothing.
+
+		resp := getOrders(t, "Bearer "+testAPIKey, "status=delivered")
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `[]`, string(body))
+	})
 }
 
 // TestListOrders_NoAPIKeyConfigured starts a separate testapp with no API key
@@ -221,4 +334,19 @@ func mustJSON(v any) []byte {
 		panic(err)
 	}
 	return b
+}
+
+// promoteOneOrderToPaid bumps exactly one order to status='paid' via raw SQL,
+// so a status filter can distinguish it from the others. Picks the most
+// recently created order to keep ordering stable for the assertions.
+func promoteOneOrderToPaid(t *testing.T, dsn string) {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), dsn)
+	require.NoError(t, err)
+	defer pool.Close()
+	_, err = pool.Exec(t.Context(), `
+		UPDATE orders
+		SET status = 'paid', updated_at = CURRENT_TIMESTAMP
+		WHERE id = (SELECT id FROM orders ORDER BY created_at DESC LIMIT 1)`)
+	require.NoError(t, err)
 }
