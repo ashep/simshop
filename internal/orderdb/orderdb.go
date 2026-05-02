@@ -158,7 +158,7 @@ func NewReader(db *pgxpool.Pool) *Reader {
 const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
-	admin_note, customer_note,
+	admin_note, customer_note, tracking_number,
 	created_at, updated_at
 FROM orders
 ORDER BY created_at DESC`
@@ -210,12 +210,12 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 	var ids []string
 	for rows.Next() {
 		var rec order.Record
-		var middleName, adminNote, customerNote pgtype.Text
+		var middleName, adminNote, customerNote, trackingNumber pgtype.Text
 		if err := rows.Scan(
 			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 			&rec.FirstName, &middleName, &rec.LastName,
 			&rec.Country, &rec.City, &rec.Phone, &rec.Address,
-			&adminNote, &customerNote,
+			&adminNote, &customerNote, &trackingNumber,
 			&rec.CreatedAt, &rec.UpdatedAt,
 		); err != nil {
 			rows.Close()
@@ -232,6 +232,10 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 		if customerNote.Valid {
 			v := customerNote.String
 			rec.CustomerNote = &v
+		}
+		if trackingNumber.Valid {
+			v := trackingNumber.String
+			rec.TrackingNumber = &v
 		}
 		rec.Attrs = []order.Attr{}
 		rec.History = []order.HistoryEntry{}
@@ -339,7 +343,7 @@ func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) 
 const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
-	admin_note, customer_note,
+	admin_note, customer_note, tracking_number,
 	created_at, updated_at
 FROM orders
 WHERE id = $1::uuid`
@@ -348,12 +352,12 @@ WHERE id = $1::uuid`
 // Returns order.ErrNotFound when no row matches.
 func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) {
 	var rec order.Record
-	var middleName, adminNote, customerNote pgtype.Text
+	var middleName, adminNote, customerNote, trackingNumber pgtype.Text
 	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
 		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 		&rec.FirstName, &middleName, &rec.LastName,
 		&rec.Country, &rec.City, &rec.Phone, &rec.Address,
-		&adminNote, &customerNote,
+		&adminNote, &customerNote, &trackingNumber,
 		&rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -373,6 +377,10 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 	if customerNote.Valid {
 		v := customerNote.String
 		rec.CustomerNote = &v
+	}
+	if trackingNumber.Valid {
+		v := trackingNumber.String
+		rec.TrackingNumber = &v
 	}
 	rec.Attrs = []order.Attr{}
 	rec.History = []order.HistoryEntry{}
