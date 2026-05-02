@@ -58,6 +58,9 @@ The validator (`kin-openapi`) runs in OpenAPI 3.0 compatibility mode:
 
 - Don't use 3.1 array-type syntax (`type: ["string", "null"]`); use `type: string` + `nullable: true`.
 - For UUID path params, use `type: string` + `format: uuid`, never `type: uuid` (panics at startup).
+- For CSV-encoded query arrays (`?status=a,b`), use `in: query` + `style: form` + `explode: false` + `schema.type:
+  array` with item-level `enum`. The validator decodes the CSV and rejects unknown values with 400 before the
+  handler runs, so handlers should not redeclare the enum in Go.
 
 ### HTTP middleware
 
