@@ -30,8 +30,8 @@ func (m *orderServiceMock) AttachInvoice(ctx context.Context, orderID string, in
 	return m.Called(ctx, orderID, inv).Error(0)
 }
 
-func (m *orderServiceMock) List(ctx context.Context) ([]order.Record, error) {
-	args := m.Called(ctx)
+func (m *orderServiceMock) List(ctx context.Context, statuses []string) ([]order.Record, error) {
+	args := m.Called(ctx, statuses)
 	v, _ := args.Get(0).([]order.Record)
 	return v, args.Error(1)
 }

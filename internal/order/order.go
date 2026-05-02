@@ -143,7 +143,10 @@ type Writer interface {
 
 // Reader reads orders from a backing store.
 type Reader interface {
-	List(ctx context.Context) ([]Record, error)
+	// List returns all orders, newest first. When statuses is non-empty, only
+	// orders whose order_status matches one of the supplied values are returned.
+	// A nil or empty statuses slice means "no filter — return everything".
+	List(ctx context.Context, statuses []string) ([]Record, error)
 	// GetByID returns the fully-populated Record for the given order id.
 	// Returns ErrNotFound when no row matches.
 	GetByID(ctx context.Context, orderID string) (*Record, error)
@@ -241,10 +244,11 @@ func (s *Service) AttachInvoice(ctx context.Context, orderID string, inv Invoice
 	return nil
 }
 
-// List returns all orders, newest first. Always returns a non-nil slice on
-// success (possibly empty).
-func (s *Service) List(ctx context.Context) ([]Record, error) {
-	return s.r.List(ctx)
+// List returns all orders, newest first. When statuses is non-empty, only
+// orders whose order_status matches one of the supplied values are returned.
+// nil or empty statuses returns all orders.
+func (s *Service) List(ctx context.Context, statuses []string) ([]Record, error) {
+	return s.r.List(ctx, statuses)
 }
 
 // GetStatus returns the current order_status for orderID. Returns ErrNotFound
