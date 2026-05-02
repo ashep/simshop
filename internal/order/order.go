@@ -266,3 +266,51 @@ func (s *Service) RecordInvoiceEvent(ctx context.Context, evt InvoiceEvent) erro
 	}
 	return nil
 }
+
+// UpdateStatus applies an operator-driven status transition to an order. The
+// caller is expected to validate at the request layer that target is one of
+// the operator-permitted statuses and that trackingNumber is supplied iff
+// target == "shipped".
+//
+// Flow:
+//
+//  1. Look up the current status (no lock). ErrNotFound is propagated.
+//  2. If current == target, return (false, nil) — idempotent no-op, no DB
+//     write, no notification.
+//  3. If !ShouldApplyOperatorTransition(current, target), return
+//     (false, ErrTransitionNotAllowed). No DB write, no notification.
+//  4. Call the OperatorWriter, which re-checks the rule under the lock.
+//     applied=false with nil error means a concurrent same-target writer beat
+//     us; in that case no notification is dispatched.
+//  5. On a real apply, dispatch NotificationEvent. TrackingNumber is set on
+//     the event only when target == "shipped".
+func (s *Service) UpdateStatus(
+	ctx context.Context,
+	orderID string,
+	target string,
+	note string,
+	trackingNumber string,
+) (bool, error) {
+	current, err := s.r.GetStatus(ctx, orderID)
+	if err != nil {
+		return false, err
+	}
+	if current == target {
+		return false, nil
+	}
+	if !ShouldApplyOperatorTransition(current, target) {
+		return false, ErrTransitionNotAllowed
+	}
+	applied, err := s.ow.UpdateStatusByOperator(ctx, orderID, target, note, trackingNumber)
+	if err != nil {
+		return false, err
+	}
+	if applied && s.n != nil {
+		evt := NotificationEvent{OrderID: orderID, Status: target, Note: note}
+		if target == "shipped" {
+			evt.TrackingNumber = trackingNumber
+		}
+		s.n.Notify(ctx, evt)
+	}
+	return applied, nil
+}

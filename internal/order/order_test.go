@@ -50,6 +50,16 @@ func (m *invoiceEventWriterMock) RecordInvoiceEvent(ctx context.Context, evt Inv
 	return args.String(0), args.Error(1)
 }
 
+type operatorWriterMock struct{ mock.Mock }
+
+func (m *operatorWriterMock) UpdateStatusByOperator(
+	ctx context.Context,
+	orderID, target, note, trackingNumber string,
+) (bool, error) {
+	args := m.Called(ctx, orderID, target, note, trackingNumber)
+	return args.Bool(0), args.Error(1)
+}
+
 // notifierMock satisfies order.Notifier and records each Notify call.
 type notifierMock struct{ mock.Mock }
 
@@ -339,6 +349,167 @@ func TestService(main *testing.T) {
 		svc := NewService(w, r, iw, iew, nil, n)
 		assert.Error(t, svc.RecordInvoiceEvent(context.Background(), evt))
 		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
+	})
+}
+
+func TestServiceUpdateStatus(main *testing.T) {
+	main.Run("ApplyForwardTransitionAndNotify", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "processing", "starting", "").
+			Return(true, nil)
+		n.On("Notify", mock.Anything, NotificationEvent{
+			OrderID: "order-1",
+			Status:  "processing",
+			Note:    "starting",
+		}).Return()
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "starting", "")
+		require.NoError(t, err)
+		assert.True(t, applied)
+		ow.AssertExpectations(t)
+		n.AssertExpectations(t)
+	})
+
+	main.Run("ShippedTransitionPropagatesTrackingNumber", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("processing", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "shipped", "", "TRK123").
+			Return(true, nil)
+		n.On("Notify", mock.Anything, NotificationEvent{
+			OrderID:        "order-1",
+			Status:         "shipped",
+			TrackingNumber: "TRK123",
+		}).Return()
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "shipped", "", "TRK123")
+		require.NoError(t, err)
+		assert.True(t, applied)
+		n.AssertExpectations(t)
+	})
+
+	main.Run("NonShippedTransitionDoesNotPopulateTracking", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("shipped", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "delivered", "", "").
+			Return(true, nil)
+		n.On("Notify", mock.Anything, NotificationEvent{
+			OrderID: "order-1",
+			Status:  "delivered",
+		}).Return()
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "delivered", "", "")
+		require.NoError(t, err)
+		assert.True(t, applied)
+		n.AssertExpectations(t)
+	})
+
+	main.Run("IdempotentSameStatusReturnsAppliedFalseNoWriterNoNotify", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("shipped", nil)
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "shipped", "", "TRK123")
+		require.NoError(t, err)
+		assert.False(t, applied)
+		ow.AssertNotCalled(t, "UpdateStatusByOperator", mock.Anything, mock.Anything,
+			mock.Anything, mock.Anything, mock.Anything)
+		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
+	})
+
+	main.Run("RuleRejectsTransition", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "delivered", "", "")
+		assert.ErrorIs(t, err, ErrTransitionNotAllowed)
+		assert.False(t, applied)
+		ow.AssertNotCalled(t, "UpdateStatusByOperator", mock.Anything, mock.Anything,
+			mock.Anything, mock.Anything, mock.Anything)
+		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
+	})
+
+	main.Run("WriterNotFoundPropagates", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		r.On("GetStatus", mock.Anything, "missing").Return("", ErrNotFound)
+
+		svc := NewService(nil, r, nil, nil, ow, nil)
+		applied, err := svc.UpdateStatus(context.Background(), "missing", "processing", "", "")
+		assert.ErrorIs(t, err, ErrNotFound)
+		assert.False(t, applied)
+	})
+
+	main.Run("WriterRaceNoOpDoesNotNotify", func(t *testing.T) {
+		// Pre-lock GetStatus says "paid"; under the lock the writer finds the
+		// order is already at "processing" and returns (false, nil).
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "processing", "", "").
+			Return(false, nil)
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "", "")
+		require.NoError(t, err)
+		assert.False(t, applied)
+		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
+	})
+
+	main.Run("WriterTransitionNotAllowedPropagates", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "processing", "", "").
+			Return(false, ErrTransitionNotAllowed)
+
+		svc := NewService(nil, r, nil, nil, ow, nil)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "", "")
+		assert.ErrorIs(t, err, ErrTransitionNotAllowed)
+		assert.False(t, applied)
+	})
+
+	main.Run("WriterErrorPropagatesNoNotify", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "processing", "", "").
+			Return(false, errors.New("db down"))
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "", "")
+		assert.EqualError(t, err, "db down")
+		assert.False(t, applied)
+		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
+	})
+
+	main.Run("NilNotifierDoesNotPanic", func(t *testing.T) {
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "processing", "", "").
+			Return(true, nil)
+
+		svc := NewService(nil, r, nil, nil, ow, nil)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "", "")
+		require.NoError(t, err)
+		assert.True(t, applied)
 	})
 }
 
