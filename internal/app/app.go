@@ -192,6 +192,8 @@ func Run(rt *runner.Runtime[Config]) error {
 	if cfg.Server.APIKey != "" {
 		apiKeyMw := handler.APIKeyMiddleware(cfg.Server.APIKey)
 		srv.HandleFunc("GET /orders", corsMw(apiKeyMw(openapiMw(hdl.ListOrders))))
+		srv.HandleFunc("OPTIONS /orders/{id}/status", corsMw(nop))
+		srv.HandleFunc("PATCH /orders/{id}/status", corsMw(apiKeyMw(openapiMw(hdl.UpdateOrderStatus))))
 	}
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")
