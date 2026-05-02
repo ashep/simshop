@@ -19,10 +19,14 @@ import (
 func TestListOrders(main *testing.T) {
 	resp := buildTestResponder(main)
 
-	doRequest := func(t *testing.T, svc *orderServiceMock) *httptest.ResponseRecorder {
+	doRequest := func(t *testing.T, svc *orderServiceMock, query string) *httptest.ResponseRecorder {
 		t.Helper()
 		h := &Handler{orders: svc, geo: &geoDetectorStub{}, resp: resp, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
+		target := "/orders"
+		if query != "" {
+			target += "?" + query
+		}
+		r := httptest.NewRequest(http.MethodGet, target, nil)
 		w := httptest.NewRecorder()
 		h.ListOrders(w, r)
 		return w
@@ -33,7 +37,7 @@ func TestListOrders(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{}, nil)
 
-		w := doRequest(t, svc)
+		w := doRequest(t, svc, "")
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `[]`, w.Body.String())
 	})
@@ -80,7 +84,7 @@ func TestListOrders(main *testing.T) {
 		}
 		svc.On("List", mock.Anything, ([]string)(nil)).Return(records, nil)
 
-		w := doRequest(t, svc)
+		w := doRequest(t, svc, "")
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var got []map[string]any
@@ -132,7 +136,7 @@ func TestListOrders(main *testing.T) {
 		}
 		svc.On("List", mock.Anything, ([]string)(nil)).Return(records, nil)
 
-		w := doRequest(t, svc)
+		w := doRequest(t, svc, "")
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var got []map[string]any
@@ -151,8 +155,54 @@ func TestListOrders(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		svc.On("List", mock.Anything, ([]string)(nil)).Return(([]order.Record)(nil), errors.New("boom"))
 
-		w := doRequest(t, svc)
+		w := doRequest(t, svc, "")
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	main.Run("StatusParamNotForwardedWhenAbsent", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{}, nil)
+
+		w := doRequest(t, svc, "")
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("StatusSingleValueForwarded", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything, []string{"paid"}).Return([]order.Record{}, nil)
+
+		w := doRequest(t, svc, "status=paid")
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("StatusCSVMultiValueForwarded", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything, []string{"paid", "shipped"}).Return([]order.Record{}, nil)
+
+		w := doRequest(t, svc, "status=paid,shipped")
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("StatusEmptyValueTreatedAsNoFilter", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{}, nil)
+
+		w := doRequest(t, svc, "status=")
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	main.Run("StatusWhitespaceTrimmedAndEmptiesDropped", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("List", mock.Anything, []string{"paid", "shipped"}).Return([]order.Record{}, nil)
+
+		// " paid , , shipped " → ["paid","shipped"]
+		w := doRequest(t, svc, "status=%20paid%20,%20,%20shipped%20")
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
 }

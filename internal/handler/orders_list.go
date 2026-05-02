@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ashep/simshop/internal/order"
@@ -53,10 +54,15 @@ type orderInvoiceResponse struct {
 	Currency string `json:"currency"`
 }
 
-// ListOrders returns every persisted order with its attrs and history,
-// newest first. The endpoint is only registered when an API key is configured.
+// ListOrders returns persisted orders with their attrs and history, newest
+// first. When the optional ?status= query parameter is supplied, the result is
+// filtered to orders whose order_status matches one of the supplied values
+// (CSV-encoded, e.g. ?status=paid,shipped). The endpoint is only registered
+// when an API key is configured.
 func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
-	rs, err := h.orders.List(r.Context(), nil)
+	statuses := parseStatusFilter(r.URL.Query().Get("status"))
+
+	rs, err := h.orders.List(r.Context(), statuses)
 	if err != nil {
 		h.l.Error().Err(err).Msg("list orders failed")
 		h.writeError(w, err)
@@ -68,6 +74,26 @@ func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
 		h.l.Error().Err(err).Msg("write list orders response failed")
 		h.writeError(w, err)
 	}
+}
+
+// parseStatusFilter splits a CSV ?status= value, trims whitespace, and drops
+// empty entries. Returns nil when raw is empty or parses to no values, so the
+// downstream layers see a clear "no filter" signal.
+func parseStatusFilter(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func toOrdersResponse(rs []order.Record) []orderRecordResponse {
