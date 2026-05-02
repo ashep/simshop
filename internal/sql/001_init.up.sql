@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS orders
     email         TEXT                        NOT NULL,
     price         INT                         NOT NULL CHECK ( price >= 0 ),
     currency      TEXT                        NOT NULL,
+    lang          TEXT                        NOT NULL,
     first_name    TEXT                        NOT NULL,
     middle_name   TEXT,
     last_name     TEXT                        NOT NULL,

@@ -187,6 +187,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Email:        req.Email,
 		Price:        totalCents,
 		Currency:     price.Currency,
+		Lang:         req.Lang,
 		FirstName:    req.FirstName,
 		MiddleName:   req.MiddleName,
 		LastName:     req.LastName,

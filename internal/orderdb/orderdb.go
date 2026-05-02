@@ -26,15 +26,15 @@ func New(db *pgxpool.Pool) *Writer {
 }
 
 const insertOrderSQL = `INSERT INTO orders (
-	product_id, email, price, currency,
+	product_id, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	customer_note
 ) VALUES (
-	$1, $2, $3, $4,
-	$5, $6, $7,
-	$8, $9, $10, $11,
-	$12
+	$1, $2, $3, $4, $5,
+	$6, $7, $8,
+	$9, $10, $11, $12,
+	$13
 ) RETURNING id`
 
 const insertAttrSQL = `INSERT INTO order_attrs
@@ -73,7 +73,7 @@ func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 
 	var orderID string
 	if err := tx.QueryRow(ctx, insertOrderSQL,
-		o.ProductID, o.Email, o.Price, o.Currency,
+		o.ProductID, o.Email, o.Price, o.Currency, o.Lang,
 		o.FirstName, nullIfEmpty(o.MiddleName), o.LastName,
 		o.Country, o.City, o.Phone, o.Address,
 		nullIfEmpty(o.CustomerNote),
@@ -155,7 +155,7 @@ func NewReader(db *pgxpool.Pool) *Reader {
 	return &Reader{db: db}
 }
 
-const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, currency,
+const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	admin_note, customer_note,
@@ -212,7 +212,7 @@ func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
 		var rec order.Record
 		var middleName, adminNote, customerNote pgtype.Text
 		if err := rows.Scan(
-			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency,
+			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 			&rec.FirstName, &middleName, &rec.LastName,
 			&rec.Country, &rec.City, &rec.Phone, &rec.Address,
 			&adminNote, &customerNote,
@@ -336,7 +336,7 @@ func (r *Reader) GetStatus(ctx context.Context, orderID string) (string, error) 
 	return status, nil
 }
 
-const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price, currency,
+const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	admin_note, customer_note,
@@ -350,7 +350,7 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 	var rec order.Record
 	var middleName, adminNote, customerNote pgtype.Text
 	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
-		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency,
+		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 		&rec.FirstName, &middleName, &rec.LastName,
 		&rec.Country, &rec.City, &rec.Phone, &rec.Address,
 		&adminNote, &customerNote,

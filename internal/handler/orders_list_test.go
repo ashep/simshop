@@ -53,6 +53,7 @@ func TestListOrders(main *testing.T) {
 				Email:        "alice@example.com",
 				Price:        12345,
 				Currency:     "USD",
+				Lang:         "uk",
 				FirstName:    "Alice",
 				MiddleName:   &middle,
 				LastName:     "Smith",
@@ -88,6 +89,7 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000099", got[0]["id"])
 		assert.Equal(t, "widget", got[0]["product_id"])
 		assert.Equal(t, "new", got[0]["status"])
+		assert.Equal(t, "uk", got[0]["lang"])
 		assert.Equal(t, "Q", got[0]["middle_name"])
 		assert.Equal(t, "ok", got[0]["customer_note"])
 		assert.Equal(t, float64(12345), got[0]["price"])
@@ -114,6 +116,7 @@ func TestListOrders(main *testing.T) {
 				Email:     "a@b.com",
 				Price:     100,
 				Currency:  "USD",
+				Lang:      "en",
 				FirstName: "A",
 				LastName:  "B",
 				Country:   "ua",

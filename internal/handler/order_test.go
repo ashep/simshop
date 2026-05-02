@@ -106,6 +106,7 @@ func TestCreateOrder(main *testing.T) {
 				len(o.Attrs) == 0 &&
 				o.Price == 4999 &&
 				o.Currency == "USD" &&
+				o.Lang == "en" &&
 				o.Country == "ua" &&
 				o.FirstName == "Іван" &&
 				o.LastName == "Іваненко" &&

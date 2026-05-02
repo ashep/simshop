@@ -24,6 +24,16 @@ type TelegramConfig struct {
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.telegram.org
 }
 
+type ResendConfig struct {
+	APIKey     string `yaml:"api_key"`     // empty disables the customer email notifier
+	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.resend.com
+}
+
+type MailConfig struct {
+	From     string `yaml:"from"`      // sender address; required when resend.api_key is set
+	OrderURL string `yaml:"order_url"` // customer-facing URL pattern with {id} placeholder
+}
+
 type DBConfig struct {
 	DSN string `yaml:"dsn"`
 }
@@ -35,6 +45,8 @@ type Config struct {
 	NovaPoshta NovaPoshtaConfig `yaml:"nova_poshta"`
 	Monobank   MonobankConfig   `yaml:"monobank"`
 	Telegram   TelegramConfig   `yaml:"telegram"`
+	Resend     ResendConfig     `yaml:"resend"`
+	Mail       MailConfig       `yaml:"mail"`
 	Database   DBConfig         `yaml:"database"`
 	RateLimit  int              `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
 }

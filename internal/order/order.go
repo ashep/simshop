@@ -70,6 +70,7 @@ type Order struct {
 	Email        string
 	Price        int // total in minor units: base price + sum of Attr.Price
 	Currency     string
+	Lang         string // checkout language code (e.g. "en", "uk"), persisted on the order
 	FirstName    string
 	MiddleName   string
 	LastName     string
@@ -111,6 +112,7 @@ type Record struct {
 	Email        string
 	Price        int
 	Currency     string
+	Lang         string // checkout language code persisted at order creation
 	FirstName    string
 	MiddleName   *string // nil when SQL NULL
 	LastName     string

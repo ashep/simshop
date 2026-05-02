@@ -19,6 +19,12 @@ propagate a new field into test bodies without auditing every match: a "missing 
 The `Write` tool requires the target file to have been `Read` at least once in the same session before overwriting.
 When writing many files in one pass, `Read` each target first.
 
+`vendor/` is gitignored in this repo — it is regenerated locally via `go mod vendor` and never committed.
+Only `go.mod` and `go.sum` are staged when adding/updating modules. `go mod tidy` will strip any module not reached
+from a real import; to land a dep before its consumer exists, run `go get` (which records it as `// indirect` in
+`go.mod`) and **skip `go mod tidy`** until the importer is added in a follow-up task. `go mod vendor` is also a no-op
+for a module nothing imports, so the `vendor/` tree only gets populated once a `.go` file actually imports it.
+
 ## Project overview
 
 `simshop` is a Go HTTP API service (`github.com/ashep/simshop`). Stack: filesystem catalog (products from YAML at
@@ -92,6 +98,12 @@ places:
    applies the same transformation inline before building `ProductDetail`.
 
 Same rule for `attr_images`. Any new handler that reads `product.yaml` directly must apply this transformation.
+
+### Customer language on orders
+
+`orders.lang` carries the customer's checkout language, populated from `req.Lang` on `POST /orders`. The customer
+email notifier reads it to resolve `emails/{status}/{lang}.md`. Tests seeding rows directly into `orders` must
+include a non-empty `lang` value (the column is `NOT NULL`).
 
 ## Packages
 
@@ -191,6 +203,48 @@ by `*Client`; tests use `fakeSender`. `sleepFn` is injected in tests to eliminat
 attempts; 4xx (except 429) → permanent, no retry; 429 → honor `APIError.RetryAfter` clamped to `[1s, 30s]`; other
 errors → `backoffSchedule[attempt-1]` (1s, 2s, 4s). `formatMessage` uses U+2014 em-dash (`—`), uppercases currency and
 country, omits optional lines (`Customer note:`, `Status note:`) when empty.
+
+### internal/resend
+
+`Client.SendEmail` POSTs to `{serviceURL}/emails`. `NewClient(apiKey, serviceURL)` is the production constructor
+(empty `serviceURL` → `https://api.resend.com`); tests construct directly to inject `httpClient`/`serviceURL`. Body
+capped at 1 MB.
+
+`*APIError` is returned on any non-2xx response. `APIError.RetryAfter` is non-zero only on 429 responses that include
+a `Retry-After` header. Transport errors (timeout, connection refused) are wrapped plain — callers distinguish them
+from `*APIError` via `errors.As`.
+
+`Notifier` implements `order.Notifier`. Status filter at the top of `handle()`: only `paid`, `shipped`, `delivered`,
+`refund_requested`, `refunded` are dispatched; anything else (especially `new`, `awaiting_payment`,
+`payment_processing`, `payment_hold`, `cancelled`, `processing`, `returned`) is silently dropped before any DB read
+or template lookup. `NewNotifier(client, from, orderURL, reader, products, shop, templates, log)` returns a stopped
+notifier; call `Start()` before the first `Notify` and `Stop()` on shutdown. `Notify` is non-blocking: full buffer
+(256) or post-Stop closed channel → drop with Warn log. Retry policy mirrors the Telegram notifier exactly: up to 3
+attempts; 4xx (except 429) → permanent, no retry; 429 → honor `APIError.RetryAfter` clamped `[1s, 30s]`; other
+errors → `backoffSchedule[attempt-1]` (1s, 2s).
+
+`TemplateStore` (built by `LoadTemplates(dir)`) holds parsed templates per `(status, lang)`. `Render(status, lang,
+data)` returns `(subject, html, text, error)`. Markdown body is rendered to HTML by `goldmark` AFTER `text/template`
+substitution so customer names containing markdown-reserved characters aren't mangled. Lang fallback: missing
+`(status, lang)` falls back to `(status, "en")`; missing both is an error. The plain-text body returned alongside
+HTML is the post-template Markdown (good enough for Resend's deliverability tracker — the customer reads the HTML
+view).
+
+Templates live at `{data_dir}/emails/{status}/{lang}.md` with a YAML frontmatter block whose `subject` field is
+required and non-empty. `internal/loader` parses the directory; `internal/app.validateEmailTemplates` enforces that
+`en.md` exists for every notify-on status when `cfg.Resend.APIKey != ""`, aggregating all missing paths into a
+single error. The loader itself stays policy-free.
+
+`shop.Service.Name(lang string) string` was added to satisfy the notifier's `shopLookup` interface (returns the
+shop name in the requested language with alphabetical-fallback to whichever language is defined). The notifier
+relies on this fallback rather than performing its own en-fallback dance.
+
+### internal/order
+
+`MultiNotifier` (in `internal/order/notifier.go`) is a tiny fanout combinator over `[]Notifier`. `app.Run` wraps the
+enabled notifiers in it only when 2+ are configured; with one it passes the child directly, with zero it passes nil.
+A panic in any child is recovered silently and does not skip later children — children are expected to log
+internally if they care.
 
 ### internal/orderdb
 
@@ -419,6 +473,12 @@ Config keys in `internal/app/config.go`. Required vs optional:
 - **`Server.APIKey`** — optional; empty disables `GET /orders` via conditional registration.
 - **`RateLimit`** — positive → RPM/IP; `0`/negative → disabled (functests use `-1`).
 - **`DataDir`** — default `./data`.
+- **`Resend.APIKey`** — optional; empty disables the customer email notifier.
+- **`Mail.From`** — sender address, required when `Resend.APIKey` is set; empty + `Resend.APIKey` non-empty →
+  startup error.
+- **`Mail.OrderURL`** — customer-facing URL pattern with literal `{id}`, required when `Resend.APIKey` is set;
+  empty + `Resend.APIKey` non-empty → startup error.
+- **`Resend.ServiceURL`** — optional; empty → `https://api.resend.com`. Tests inject via `httptest.Server.URL`.
 
 `testapp.New` defaults `Monobank.APIKey="test-key"`, `Monobank.RedirectURL="https://test.example/thanks"`,
 `Server.PublicURL="https://test.example"` so plain construction works in tests. It also starts a built-in

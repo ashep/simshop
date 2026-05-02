@@ -651,6 +651,7 @@ components:
         - email
         - price
         - currency
+        - lang
         - first_name
         - last_name
         - country
@@ -675,6 +676,8 @@ components:
         price:
           type: integer
         currency:
+          type: string
+        lang:
           type: string
         first_name:
           type: string
