@@ -187,6 +187,11 @@ func TestListOrders(main *testing.T) {
 	})
 
 	main.Run("StatusEmptyValueTreatedAsNoFilter", func(t *testing.T) {
+		// Pins the handler-level fallback: parseStatusFilter("") → nil → no filter.
+		// In production, ?status= never reaches the handler — the kin-openapi
+		// middleware decodes [""] and rejects it with 400 (covered in
+		// tests/api/order/get_test.go::StatusFilterEmptyValueReturns400). This
+		// unit test exercises the handler in isolation.
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
 		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{}, nil)

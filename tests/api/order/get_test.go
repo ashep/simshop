@@ -243,6 +243,13 @@ func TestListOrders(main *testing.T) {
 		var got []map[string]any
 		require.NoError(t, json.Unmarshal(body, &got))
 		require.Len(t, got, 2)
+		// Both filtered statuses must be represented — guards against the SQL
+		// ANY clause silently degrading to a no-op match.
+		statuses := map[string]bool{}
+		for _, row := range got {
+			statuses[row["status"].(string)] = true
+		}
+		assert.Equal(t, map[string]bool{"paid": true, "awaiting_payment": true}, statuses)
 	})
 
 	main.Run("StatusFilterEmptyValueReturns400", func(t *testing.T) {
