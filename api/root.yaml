@@ -308,6 +308,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /orders/{id}/status:
+    patch:
+      operationId: updateOrderStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderStatusUpdateRequest'
+      responses:
+        "200":
+          description: Status updated (or idempotent same-status no-op)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatusUpdateResponse'
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Transition not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -517,6 +567,37 @@ components:
       properties:
         status:
           type: string
+
+    OrderStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - processing
+            - shipped
+            - delivered
+            - refund_requested
+            - returned
+            - refunded
+        tracking_number:
+          type: string
+          maxLength: 64
+        note:
+          type: string
+          maxLength: 500
+      additionalProperties: false
+
+    OrderStatusUpdateResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+      additionalProperties: false
 
     ErrorResponse:
       type: object
