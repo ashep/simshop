@@ -69,7 +69,7 @@ func TestService(main *testing.T) {
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		id, err := svc.Submit(context.Background(), o)
 		require.NoError(t, err)
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000001", id)
@@ -84,7 +84,7 @@ func TestService(main *testing.T) {
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("", errors.New("write failed"))
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		_, err := svc.Submit(context.Background(), o)
 		assert.EqualError(t, err, "write failed")
 		w.AssertExpectations(t)
@@ -98,7 +98,7 @@ func TestService(main *testing.T) {
 		inv := Invoice{Provider: "monobank", ID: "inv-1", PageURL: "https://pay/inv-1", Amount: 100, Currency: "UAH"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		require.NoError(t, svc.AttachInvoice(context.Background(), "order-1", inv))
 		iw.AssertExpectations(t)
 	})
@@ -111,7 +111,7 @@ func TestService(main *testing.T) {
 		inv := Invoice{Provider: "monobank"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(errors.New("attach failed"))
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		assert.EqualError(t, svc.AttachInvoice(context.Background(), "order-1", inv), "attach failed")
 		iw.AssertExpectations(t)
 	})
@@ -124,7 +124,7 @@ func TestService(main *testing.T) {
 		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000001", ProductID: "widget"}}
 		r.On("List", mock.Anything).Return(want, nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		got, err := svc.List(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
@@ -138,7 +138,7 @@ func TestService(main *testing.T) {
 		iew := &invoiceEventWriterMock{}
 		r.On("List", mock.Anything).Return(([]Record)(nil), errors.New("read failed"))
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		_, err := svc.List(context.Background())
 		assert.EqualError(t, err, "read failed")
 		r.AssertExpectations(t)
@@ -151,7 +151,7 @@ func TestService(main *testing.T) {
 		iew := &invoiceEventWriterMock{}
 		r.On("GetStatus", mock.Anything, "order-1").Return("awaiting_payment", nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		got, err := svc.GetStatus(context.Background(), "order-1")
 		require.NoError(t, err)
 		assert.Equal(t, "awaiting_payment", got)
@@ -165,7 +165,7 @@ func TestService(main *testing.T) {
 		iew := &invoiceEventWriterMock{}
 		r.On("GetStatus", mock.Anything, "missing").Return("", ErrNotFound)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		_, err := svc.GetStatus(context.Background(), "missing")
 		assert.ErrorIs(t, err, ErrNotFound)
 		r.AssertExpectations(t)
@@ -186,7 +186,7 @@ func TestService(main *testing.T) {
 		}
 		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return("paid", nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		require.NoError(t, svc.RecordInvoiceEvent(context.Background(), evt))
 		iew.AssertExpectations(t)
 	})
@@ -199,7 +199,7 @@ func TestService(main *testing.T) {
 		evt := InvoiceEvent{OrderID: "order-1", Status: InvoiceStatusPaid}
 		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return("", errors.New("record failed"))
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		assert.EqualError(t, svc.RecordInvoiceEvent(context.Background(), evt), "record failed")
 		iew.AssertExpectations(t)
 	})
@@ -217,7 +217,7 @@ func TestService(main *testing.T) {
 			Status:  "new",
 		}).Return()
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		id, err := svc.Submit(context.Background(), o)
 		require.NoError(t, err)
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000001", id)
@@ -233,7 +233,7 @@ func TestService(main *testing.T) {
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("", errors.New("write failed"))
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		_, err := svc.Submit(context.Background(), o)
 		assert.Error(t, err)
 		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
@@ -247,7 +247,7 @@ func TestService(main *testing.T) {
 		o := Order{ProductID: "widget"}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000099", nil)
 
-		svc := NewService(w, r, iw, iew, nil)
+		svc := NewService(w, r, iw, iew, nil, nil)
 		id, err := svc.Submit(context.Background(), o)
 		require.NoError(t, err)
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000099", id)
@@ -266,7 +266,7 @@ func TestService(main *testing.T) {
 			Status:  "awaiting_payment",
 		}).Return()
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		require.NoError(t, svc.AttachInvoice(context.Background(), "order-1", inv))
 		n.AssertExpectations(t)
 	})
@@ -280,7 +280,7 @@ func TestService(main *testing.T) {
 		inv := Invoice{Provider: "monobank"}
 		iw.On("AttachInvoice", mock.Anything, "order-1", inv).Return(errors.New("attach failed"))
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		assert.Error(t, svc.AttachInvoice(context.Background(), "order-1", inv))
 		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
 	})
@@ -304,7 +304,7 @@ func TestService(main *testing.T) {
 			Note:    "monobank: success, finalAmount=100",
 		}).Return()
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		require.NoError(t, svc.RecordInvoiceEvent(context.Background(), evt))
 		n.AssertExpectations(t)
 	})
@@ -322,7 +322,7 @@ func TestService(main *testing.T) {
 		}
 		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return("", nil)
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		require.NoError(t, svc.RecordInvoiceEvent(context.Background(), evt))
 		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
 	})
@@ -336,7 +336,7 @@ func TestService(main *testing.T) {
 		evt := InvoiceEvent{OrderID: "order-1", Payload: json.RawMessage(`{}`)}
 		iew.On("RecordInvoiceEvent", mock.Anything, evt).Return("", errors.New("record failed"))
 
-		svc := NewService(w, r, iw, iew, n)
+		svc := NewService(w, r, iw, iew, nil, n)
 		assert.Error(t, svc.RecordInvoiceEvent(context.Background(), evt))
 		n.AssertNotCalled(t, "Notify", mock.Anything, mock.Anything)
 	})

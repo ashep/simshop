@@ -22,6 +22,11 @@ const (
 // order does not exist.
 var ErrNotFound = errors.New("order not found")
 
+// ErrTransitionNotAllowed is returned by Service.UpdateStatus and the
+// underlying OperatorWriter when the requested target status is not a legal
+// next step from the order's current status. The handler maps it to 409.
+var ErrTransitionNotAllowed = errors.New("transition not allowed")
+
 // Attr is a single selected attribute on an order, ready to be persisted as a
 // row in the order_attrs table.
 type Attr struct {
@@ -170,21 +175,44 @@ type InvoiceEventWriter interface {
 	RecordInvoiceEvent(ctx context.Context, evt InvoiceEvent) (string, error)
 }
 
+// OperatorWriter applies an operator-driven status transition to an order in
+// a single transaction: SELECT … FOR UPDATE on the row, re-check the lifecycle
+// rule, UPDATE orders (status + tracking_number when supplied), INSERT into
+// order_history.
+//
+// applied is true iff the writer performed the UPDATE + INSERT. applied=false
+// with a nil error means the order was already at target under the lock
+// (concurrent same-target write); the caller MUST NOT dispatch a notification
+// in that case.
+type OperatorWriter interface {
+	UpdateStatusByOperator(
+		ctx context.Context,
+		orderID, target, note, trackingNumber string,
+	) (applied bool, err error)
+}
+
 // Service submits orders via a Writer, attaches invoices via an InvoiceWriter,
-// reads them via a Reader, and dispatches NotificationEvent on each successful
+// reads them via a Reader, applies operator-driven status transitions via an
+// OperatorWriter, and dispatches NotificationEvent on each successful
 // order_history insert via an optional Notifier (nil disables notifications).
 type Service struct {
 	w   Writer
 	r   Reader
 	iw  InvoiceWriter
 	iew InvoiceEventWriter
+	ow  OperatorWriter
 	n   Notifier
 }
 
-// NewService returns a Service backed by w, r, iw, iew, and an optional
+// NewService returns a Service backed by w, r, iw, iew, ow, and an optional
 // notifier. Pass nil for n to disable notifications.
-func NewService(w Writer, r Reader, iw InvoiceWriter, iew InvoiceEventWriter, n Notifier) *Service {
-	return &Service{w: w, r: r, iw: iw, iew: iew, n: n}
+func NewService(
+	w Writer, r Reader,
+	iw InvoiceWriter, iew InvoiceEventWriter,
+	ow OperatorWriter,
+	n Notifier,
+) *Service {
+	return &Service{w: w, r: r, iw: iw, iew: iew, ow: ow, n: n}
 }
 
 // Submit writes the order to the backing store and returns the assigned id.
