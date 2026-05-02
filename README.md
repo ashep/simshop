@@ -259,6 +259,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `POST`   | `/orders`                          | Submit a customer order (persisted to PostgreSQL)     |
 | `GET`    | `/orders`                          | List persisted orders (requires API key)              |
 | `GET`    | `/orders/{id}`                     | Get an order's status (public)                        |
+| `PATCH`  | `/orders/{id}/status`              | Operator-driven status transition (requires API key)  |
 | `POST`   | `/monobank/webhook`                | Receive Monobank invoice-status callbacks (ECDSA auth)|
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
@@ -352,7 +353,8 @@ consulted at order time. Returns 201 on success, 400 for invalid input (includin
 `orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int,
 minor units, total = base + sum of attr add-ons), `currency`, `lang` (checkout language code captured from the
 request, drives downstream localized notifications), `first_name`, `middle_name` (nullable), `last_name`,
-`country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable), `created_at`,
+`country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
+`tracking_number` (nullable; populated by the operator on the `shipped` transition, write-once), `created_at`,
 `updated_at`.
 
 `order_attrs` columns: `order_id` (FK to `orders.id`), `attr_name`, `attr_value`, `attr_price` (int, minor units;
@@ -421,6 +423,54 @@ The path parameter is validated by the OpenAPI request middleware as `format: uu
 `{"error": "order not found"}`. The `status` value is the raw `order_status` enum (`new`, `awaiting_payment`,
 `payment_processing`, `payment_hold`, `paid`, `cancelled`, etc.) — clients are responsible for mapping it to a
 user-facing message in their own language.
+
+#### Operator status update
+
+`PATCH /orders/{id}/status` drives an order through the operator-owned fulfillment lifecycle. Authenticated by the same
+`Authorization: Bearer <key>` header as `GET /orders` (`server.api_key`); a missing/invalid key returns HTTP 401.
+
+**Request body (JSON):**
+
+```json
+{
+  "status": "shipped",
+  "note": "Sent via Nova Poshta",
+  "tracking_number": "20451234567890"
+}
+```
+
+- `status` — required; the target `order_status`. Must be one of the operator-allowed transitions below.
+- `note` — optional; an operator-supplied free-text note appended to `order_history.note` and forwarded to the
+  customer email and Telegram notification. Max 1000 characters.
+- `tracking_number` — **required iff** `status == "shipped"`, **forbidden** for any other target. Max 100 characters.
+  Persisted on `orders.tracking_number` write-once: once set, subsequent transitions cannot overwrite or clear it.
+
+**Allowed transitions:**
+
+| From               | Allowed targets                       |
+|--------------------|---------------------------------------|
+| `paid`             | `processing`, `refunded`              |
+| `processing`       | `shipped`, `refunded`                 |
+| `shipped`          | `delivered`, `refund_requested`       |
+| `delivered`        | `refund_requested`                    |
+| `refund_requested` | `returned`, `refunded`                |
+| `returned`         | `refunded`                            |
+
+Any transition outside this matrix returns HTTP 409 with `{"error": "transition not allowed"}`. Submitting the order's
+current status is treated as a no-op idempotent success (HTTP 200, no extra `order_history` row, no notification).
+
+**Responses:**
+
+- `200 {"status": "<new>"}` — the transition was applied (or was a no-op idempotent repeat).
+- `400` — malformed body, missing/unknown `status`, missing `tracking_number` on `shipped`, `tracking_number` on a
+  non-`shipped` target, or any field exceeding its length cap.
+- `401` — missing/invalid bearer token.
+- `404` — order id not found.
+- `409` — current status disallows the requested target.
+- `500` — DB error.
+
+The `tracking_number` is **not** exposed by the public `GET /orders/{id}` endpoint (which returns only `status`); it
+surfaces through the customer email (`shipped` template) and the Telegram operator feed.
 
 #### Monobank webhook
 
