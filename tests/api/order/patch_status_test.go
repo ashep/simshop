@@ -136,6 +136,23 @@ func TestPatchOrderStatus(main *testing.T) {
 		assert.Equal(t, "refunded", body["status"])
 	})
 
+	main.Run("OK_CancelFromAnyState", func(t *testing.T) {
+		for _, from := range []string{
+			"new", "awaiting_payment", "payment_processing", "payment_hold",
+			"paid", "processing", "shipped", "delivered",
+			"refund_requested", "returned", "refunded",
+		} {
+			truncateOrders(t, dsn)
+			drainTGChannel(tgCh)
+			id := seedOrderInStatus(t, dsn, from, "en")
+			code, body := patchStatus(t, a, id, operatorAPIKey, map[string]any{
+				"status": "cancelled", "note": "operator cancel",
+			})
+			assert.Equal(t, http.StatusOK, code, "from=%s", from)
+			assert.Equal(t, "cancelled", body["status"], "from=%s", from)
+		}
+	})
+
 	main.Run("OK_RefundReturnPath", func(t *testing.T) {
 		truncateOrders(t, dsn)
 		drainTGChannel(tgCh)

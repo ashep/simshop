@@ -582,6 +582,7 @@ components:
             - processing
             - shipped
             - delivered
+            - cancelled
             - refund_requested
             - returned
             - refunded

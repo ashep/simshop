@@ -22,6 +22,7 @@ var allowedOperatorTargets = map[string]bool{
 	"processing":       true,
 	"shipped":          true,
 	"delivered":        true,
+	"cancelled":        true,
 	"refund_requested": true,
 	"returned":         true,
 	"refunded":         true,

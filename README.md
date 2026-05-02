@@ -460,6 +460,10 @@ user-facing message in their own language.
 | `refund_requested` | `processing`, `shipped`, `delivered`, `returned`, `refunded` |
 | `returned`         | `refunded`                                                   |
 
+In addition to the matrix above, an operator may set `status: "cancelled"` from **any** non-`cancelled` state — this
+override exists so an order can always be aborted regardless of where it is in the lifecycle (including the webhook-
+owned pre-paid cluster and terminal `refunded`).
+
 Any transition outside this matrix returns HTTP 409 with `{"error": "transition not allowed"}`. Submitting the order's
 current status is treated as a no-op idempotent success (HTTP 200, no extra `order_history` row, no notification).
 
