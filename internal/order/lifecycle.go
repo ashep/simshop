@@ -53,11 +53,11 @@ func ShouldApplyInvoiceTransition(current, candidate string) bool {
 //     payment_hold, cancelled) is webhook-owned.
 //   - "refunded" is terminal.
 var allowedOperatorTransitions = map[string]map[string]bool{
-	"paid":             {"processing": true, "refunded": true},
-	"processing":       {"shipped": true, "refunded": true},
+	"paid":             {"processing": true, "refund_requested": true, "refunded": true},
+	"processing":       {"shipped": true, "refund_requested": true, "refunded": true},
 	"shipped":          {"delivered": true, "refund_requested": true},
 	"delivered":        {"refund_requested": true},
-	"refund_requested": {"returned": true, "refunded": true},
+	"refund_requested": {"processing": true, "shipped": true, "delivered": true, "returned": true, "refunded": true},
 	"returned":         {"refunded": true},
 }
 
