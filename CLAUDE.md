@@ -557,7 +557,8 @@ Test fixture helpers — **loader unit tests (`internal/loader/`)**:
 - `makeDataDir(t, productsYAML, productYAMLs)` — temp data dir with `products/products.yaml` (if non-empty) and
   per-product YAMLs as `map[string]string`.
 - `testapp.New(t, dataDir, opts ...func(*app.Config))` — config mutators override fields, e.g.
-  `func(cfg *app.Config) { cfg.NovaPoshta.ServiceURL = srv.URL }`.
+  `func(cfg *app.Config) { cfg.NovaPoshta.ServiceURL = srv.URL }`. **`testapp.New` does not start the app**; tests
+  must call `a.Start()` before issuing requests, or every HTTP call fails with `connect: connection refused`.
 - Subtests needing a fully separate empty catalog start their own `testapp` — safe because each binds a random port.
 
 API test orchestration:
