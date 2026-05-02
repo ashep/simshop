@@ -65,6 +65,11 @@ The validator (`kin-openapi`) runs in OpenAPI 3.0 compatibility mode:
   tests for "no filter" must omit the parameter entirely, not pass an empty value. `allowEmptyValue: true` does NOT
   rescue this — kin-openapi only checks it when the decoded value is nil, not when it's a one-element array
   containing an empty string.
+- The full `order_status` lifecycle lives in the `OrderStatus` component schema; `$ref` it from any new endpoint
+  that surfaces or accepts a full-enum status (query params, response fields, history entries). Operator-only
+  subsets (e.g. `OrderStatusUpdateRequest.status`) keep their inline enum since they intentionally exclude
+  values like `new`, `awaiting_payment`, etc. The Postgres `order_status` enum in `internal/sql/001_init.up.sql`
+  remains the runtime authority and must be edited together with the OpenAPI schema when a status is added.
 
 ### HTTP middleware
 
