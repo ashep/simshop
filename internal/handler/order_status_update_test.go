@@ -100,6 +100,19 @@ func TestUpdateOrderStatus(main *testing.T) {
 			mock.Anything, mock.Anything, mock.Anything)
 	})
 
+	main.Run("ShippedWhitespaceOnlyTracking", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+
+		w := doRequest(t, svc, `{"status":"shipped","tracking_number":"   "}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var body map[string]string
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, "tracking_number required", body["error"])
+		svc.AssertNotCalled(t, "UpdateStatus", mock.Anything, mock.Anything,
+			mock.Anything, mock.Anything, mock.Anything)
+	})
+
 	main.Run("TrackingOnNonShipped", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
