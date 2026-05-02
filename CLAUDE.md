@@ -44,9 +44,10 @@ shop, sql), `api/`, `tests/` (build tag `functest`), `vendor/`. Config from `con
 
 ### Errors and status codes
 
-Handlers map domain errors to HTTP via `h.writeError(w, err)`. Four typed errors in `internal/handler/handler.go`:
-`BadRequestError` (400), `NotFoundError` (404), `BadGatewayError` (502, upstream failures), `UnauthorizedError` (401).
-Each has a `Reason string` field — always populate it; it's written client-visibly as `{"error": "<reason>"}`.
+Handlers map domain errors to HTTP via `h.writeError(w, err)`. Five typed errors in `internal/handler/handler.go`:
+`BadRequestError` (400), `NotFoundError` (404), `BadGatewayError` (502, upstream failures), `UnauthorizedError` (401),
+`ConflictError` (409, illegal state transition). Each has a `Reason string` field — always populate it; it's written
+client-visibly as `{"error": "<reason>"}`.
 
 Domain errors are defined in service packages; the handler maps them via `errors.Is`. Always use the most semantically
 appropriate status (e.g. 404 for missing resource, not 400).
@@ -276,6 +277,10 @@ resolves `attrLang.Title` and `attrVal.Title` before appending.
 `order.Order` (write side) carries only INSERT fields; `order.Record` (read side, from `GET /orders`) adds DB-generated
 columns and inline `Attrs`/`History`/`Invoices`. The two are intentionally separate. Nullable text columns are
 `*string` (with `json:",omitempty"`) so SQL NULL becomes JSON omission; read-side scans use `pgtype.Text` and convert.
+
+`Writer.UpdateStatusByOperator` writes `tracking_number` write-once via `CASE WHEN $3 = '' THEN tracking_number ELSE
+$3 END` — passing an empty string preserves whatever is already stored. The handler enforces "tracking required iff
+`shipped`" so this SQL guard is a defense-in-depth, not the policy.
 
 #### `RecordInvoiceEvent` and the invoice timeline
 
