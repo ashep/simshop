@@ -44,6 +44,39 @@ func ShouldApplyInvoiceTransition(current, candidate string) bool {
 	return true
 }
 
+// allowedOperatorTransitions enumerates the forward-only transitions an operator
+// may drive via PATCH /orders/{id}/status. Equal current and target is rejected
+// here (returns false) so the writer's same check is trivially correct; the
+// handler converts the equal case to an idempotent 200 before reaching the
+// service. Targets outside this map are operator-forbidden:
+//   - The pre-paid cluster (new, awaiting_payment, payment_processing,
+//     payment_hold, cancelled) is webhook-owned.
+//   - "refunded" is terminal.
+var allowedOperatorTransitions = map[string]map[string]bool{
+	"paid":             {"processing": true, "refunded": true},
+	"processing":       {"shipped": true, "refunded": true},
+	"shipped":          {"delivered": true, "refund_requested": true},
+	"delivered":        {"refund_requested": true},
+	"refund_requested": {"returned": true, "refunded": true},
+	"returned":         {"refunded": true},
+}
+
+// ShouldApplyOperatorTransition reports whether an operator may drive an order
+// from current to target. See allowedOperatorTransitions for the rule. Equal
+// values return false (not a transition). The function is the sole authority
+// on operator-driven transitions; the handler calls it pre-lock and the writer
+// calls it again under SELECT … FOR UPDATE.
+func ShouldApplyOperatorTransition(current, target string) bool {
+	if current == target {
+		return false
+	}
+	targets, ok := allowedOperatorTransitions[current]
+	if !ok {
+		return false
+	}
+	return targets[target]
+}
+
 // InvoiceStatusToOrderStatus maps a persisted invoice_status (the latest event
 // in the invoice timeline) to the order_status it implies. ok=false means the
 // invoice status does not drive the order lifecycle.

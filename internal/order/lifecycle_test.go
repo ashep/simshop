@@ -80,3 +80,61 @@ func TestShouldApplyInvoiceTransition(main *testing.T) {
 		})
 	}
 }
+
+func TestShouldApplyOperatorTransition(main *testing.T) {
+	cases := []struct {
+		name    string
+		current string
+		target  string
+		want    bool
+	}{
+		// Allowed transitions.
+		{"PaidToProcessing", "paid", "processing", true},
+		{"PaidToRefunded", "paid", "refunded", true},
+		{"ProcessingToShipped", "processing", "shipped", true},
+		{"ProcessingToRefunded", "processing", "refunded", true},
+		{"ShippedToDelivered", "shipped", "delivered", true},
+		{"ShippedToRefundRequested", "shipped", "refund_requested", true},
+		{"DeliveredToRefundRequested", "delivered", "refund_requested", true},
+		{"RefundRequestedToReturned", "refund_requested", "returned", true},
+		{"RefundRequestedToRefunded", "refund_requested", "refunded", true},
+		{"ReturnedToRefunded", "returned", "refunded", true},
+
+		// Equal current and target — idempotent (handler-level concern).
+		{"EqualPaid", "paid", "paid", false},
+		{"EqualShipped", "shipped", "shipped", false},
+		{"EqualRefunded", "refunded", "refunded", false},
+
+		// Operator must not drive the pre-paid cluster.
+		{"NewToProcessing", "new", "processing", false},
+		{"AwaitingPaymentToProcessing", "awaiting_payment", "processing", false},
+		{"PaymentProcessingToProcessing", "payment_processing", "processing", false},
+		{"PaymentHoldToProcessing", "payment_hold", "processing", false},
+		{"CancelledToProcessing", "cancelled", "processing", false},
+
+		// Operator cannot skip steps.
+		{"PaidToShipped", "paid", "shipped", false},
+		{"PaidToDelivered", "paid", "delivered", false},
+		{"ProcessingToDelivered", "processing", "delivered", false},
+
+		// Operator cannot move backwards.
+		{"DeliveredToShipped", "delivered", "shipped", false},
+		{"ShippedToProcessing", "shipped", "processing", false},
+		{"ProcessingToPaid", "processing", "paid", false},
+
+		// Refunded is terminal.
+		{"RefundedToAnything", "refunded", "processing", false},
+		{"RefundedToShipped", "refunded", "shipped", false},
+
+		// Operator never sets payment-cluster targets.
+		{"PaidToCancelled", "paid", "cancelled", false},
+		{"ProcessingToCancelled", "processing", "cancelled", false},
+		{"ShippedToCancelled", "shipped", "cancelled", false},
+	}
+	for _, c := range cases {
+		main.Run(c.name, func(t *testing.T) {
+			got := ShouldApplyOperatorTransition(c.current, c.target)
+			assert.Equal(t, c.want, got, "current=%q target=%q", c.current, c.target)
+		})
+	}
+}
