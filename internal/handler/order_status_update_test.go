@@ -42,6 +42,17 @@ func TestUpdateOrderStatus(main *testing.T) {
 		assert.JSONEq(t, `{"status":"processing"}`, w.Body.String())
 	})
 
+	main.Run("OKCancelledFromAnyState", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("UpdateStatus", mock.Anything, orderID, "cancelled", "out of stock", "").
+			Return(true, nil)
+
+		w := doRequest(t, svc, `{"status":"cancelled","note":"out of stock"}`)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.JSONEq(t, `{"status":"cancelled"}`, w.Body.String())
+	})
+
 	main.Run("OKShippedWithTracking", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)

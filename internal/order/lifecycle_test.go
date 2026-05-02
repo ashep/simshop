@@ -127,14 +127,24 @@ func TestShouldApplyOperatorTransition(main *testing.T) {
 		{"ShippedToProcessing", "shipped", "processing", false},
 		{"ProcessingToPaid", "processing", "paid", false},
 
-		// Refunded is terminal.
+		// Refunded is terminal for forward-only transitions.
 		{"RefundedToAnything", "refunded", "processing", false},
 		{"RefundedToShipped", "refunded", "shipped", false},
 
-		// Operator never sets payment-cluster targets.
-		{"PaidToCancelled", "paid", "cancelled", false},
-		{"ProcessingToCancelled", "processing", "cancelled", false},
-		{"ShippedToCancelled", "shipped", "cancelled", false},
+		// Operator may cancel from any other state (override of the forward-only
+		// matrix). Same-status repeat is idempotent (false).
+		{"NewToCancelled", "new", "cancelled", true},
+		{"AwaitingPaymentToCancelled", "awaiting_payment", "cancelled", true},
+		{"PaymentProcessingToCancelled", "payment_processing", "cancelled", true},
+		{"PaymentHoldToCancelled", "payment_hold", "cancelled", true},
+		{"PaidToCancelled", "paid", "cancelled", true},
+		{"ProcessingToCancelled", "processing", "cancelled", true},
+		{"ShippedToCancelled", "shipped", "cancelled", true},
+		{"DeliveredToCancelled", "delivered", "cancelled", true},
+		{"RefundRequestedToCancelled", "refund_requested", "cancelled", true},
+		{"ReturnedToCancelled", "returned", "cancelled", true},
+		{"RefundedToCancelled", "refunded", "cancelled", true},
+		{"EqualCancelled", "cancelled", "cancelled", false},
 	}
 	for _, c := range cases {
 		main.Run(c.name, func(t *testing.T) {
