@@ -156,7 +156,7 @@ func (n *Notifier) handle(evt order.NotificationEvent) {
 		return
 	}
 
-	text := formatMessage(rec, evt.Status, evt.Note, n.products)
+	text := formatMessage(rec, evt.Status, evt.Note, evt.TrackingNumber, n.products)
 	n.sendWithRetry(ctx, evt, text)
 }
 
@@ -236,13 +236,13 @@ func mdv2Escape(s string) string { return mdv2Escaper.Replace(s) }
 // formatMessage renders the MarkdownV2 Telegram message for one event.
 //
 // On status="new" the message includes full order detail; on every other
-// status it is the slim form (id, status, optional status note) — see the
-// Telegram-notifications section in README.md.
-func formatMessage(rec *order.Record, status, statusNote string, products productLookup) string {
+// status it is the slim form (id, status, optional tracking number, optional
+// status note) — see the Telegram-notifications section in README.md.
+func formatMessage(rec *order.Record, status, statusNote, trackingNumber string, products productLookup) string {
 	if status == "new" {
 		return formatNewOrder(rec, statusNote, products)
 	}
-	return formatStatusUpdate(rec.ID, status, statusNote)
+	return formatStatusUpdate(rec.ID, status, statusNote, trackingNumber)
 }
 
 func formatNewOrder(rec *order.Record, statusNote string, products productLookup) string {
@@ -284,9 +284,12 @@ func formatNewOrder(rec *order.Record, statusNote string, products productLookup
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func formatStatusUpdate(orderID, status, statusNote string) string {
+func formatStatusUpdate(orderID, status, statusNote, trackingNumber string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Order `%s` — *%s*", orderID, mdv2Escape(status))
+	if trackingNumber != "" {
+		fmt.Fprintf(&b, "\n\nTracking: `%s`", trackingNumber)
+	}
 	if statusNote != "" {
 		fmt.Fprintf(&b, "\n\n%s", mdv2Escape(statusNote))
 	}

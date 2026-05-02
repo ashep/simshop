@@ -466,4 +466,39 @@ func TestNotifier(main *testing.T) {
 		}()
 		n.Notify(context.Background(), order.NotificationEvent{OrderID: "x", Status: "new"})
 	})
+
+	main.Run("RendersTrackingLineForShippedEvent", func(t *testing.T) {
+		r := newFakeReader()
+		rec := sampleRecord()
+		rec.Status = "shipped"
+		r.put(rec)
+		s := &fakeSender{}
+		n := newTestNotifier(t, s, r)
+
+		n.Notify(context.Background(), order.NotificationEvent{
+			OrderID:        rec.ID,
+			Status:         "shipped",
+			TrackingNumber: "TRK-XYZ",
+		})
+
+		got := waitForCalls(t, s, 1, 2*time.Second)
+		assert.Contains(t, got[0].text, "Tracking: `TRK-XYZ`")
+	})
+
+	main.Run("OmitsTrackingLineWhenEmpty", func(t *testing.T) {
+		r := newFakeReader()
+		rec := sampleRecord()
+		rec.Status = "delivered"
+		r.put(rec)
+		s := &fakeSender{}
+		n := newTestNotifier(t, s, r)
+
+		n.Notify(context.Background(), order.NotificationEvent{
+			OrderID: rec.ID,
+			Status:  "delivered",
+		})
+
+		got := waitForCalls(t, s, 1, 2*time.Second)
+		assert.NotContains(t, got[0].text, "Tracking:")
+	})
 }
