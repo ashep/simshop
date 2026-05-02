@@ -287,4 +287,25 @@ func TestNotifier(main *testing.T) {
 		// No assertion beyond "did not block"; reaching this line is the test.
 		_ = strings.Builder{}
 	})
+
+	main.Run("ShippedEventPropagatesTrackingNumber", func(t *testing.T) {
+		send := &fakeSender{}
+		rec := sampleRecord()
+		rec.Status = "shipped"
+		rd := &fakeReader{rec: rec}
+		tpl := &fakeTemplates{subject: "s", html: "h", text: "t"}
+		n := newTestNotifier(t, send, rd, tpl)
+		n.Start()
+		defer n.Stop()
+		n.Notify(context.Background(), order.NotificationEvent{
+			OrderID:        rec.ID,
+			Status:         "shipped",
+			TrackingNumber: "TRK-XYZ",
+		})
+
+		require.Eventually(t, func() bool { return len(send.snapshot()) == 1 }, 2*time.Second, 10*time.Millisecond)
+		tpl.mu.Lock()
+		defer tpl.mu.Unlock()
+		assert.Equal(t, "TRK-XYZ", tpl.lastData.TrackingNumber)
+	})
 }

@@ -239,15 +239,16 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 	orderURL := strings.ReplaceAll(n.orderURL, "{id}", rec.ID)
 
 	return TemplateData{
-		OrderID:      rec.ID,
-		OrderShortID: short,
-		CustomerName: name,
-		ProductTitle: productTitle,
-		Attrs:        rec.Attrs,
-		Total:        total,
-		StatusNote:   evt.Note,
-		ShopName:     shopName,
-		OrderURL:     orderURL,
+		OrderID:        rec.ID,
+		OrderShortID:   short,
+		CustomerName:   name,
+		ProductTitle:   productTitle,
+		Attrs:          rec.Attrs,
+		Total:          total,
+		StatusNote:     evt.Note,
+		TrackingNumber: evt.TrackingNumber,
+		ShopName:       shopName,
+		OrderURL:       orderURL,
 	}
 }
 

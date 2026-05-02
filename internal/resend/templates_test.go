@@ -104,6 +104,25 @@ subject: s
 		assert.Contains(t, html, "<strong>bold</strong>")
 		assert.Contains(t, html, "<em>italic</em>")
 	})
+
+	main.Run("ShippedRendersTrackingLineWhenSet", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "shipped"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "shipped", "en.md"),
+			[]byte("---\nsubject: x\n---\n{{- if .TrackingNumber }}Tracking: {{ .TrackingNumber }}{{- end }}"),
+			0644))
+
+		store, err := LoadTemplates(dir)
+		require.NoError(t, err)
+
+		_, html, _, err := store.Render("shipped", "en", TemplateData{TrackingNumber: "TRK-XYZ"})
+		require.NoError(t, err)
+		assert.Contains(t, html, "TRK-XYZ")
+
+		_, html2, _, err := store.Render("shipped", "en", TemplateData{})
+		require.NoError(t, err)
+		assert.NotContains(t, html2, "TRK-")
+	})
 }
 
 func TestTemplateData_AllFieldsExist(t *testing.T) {
@@ -112,8 +131,16 @@ func TestTemplateData_AllFieldsExist(t *testing.T) {
 	// updating this literal, the build breaks.
 	d := TemplateData{
 		OrderID: "x", OrderShortID: "x", CustomerName: "x", ProductTitle: "x",
-		Total: "x", StatusNote: "x", ShopName: "x", OrderURL: "x",
+		Total: "x", StatusNote: "x", TrackingNumber: "x", ShopName: "x", OrderURL: "x",
 		Attrs: nil,
 	}
-	_ = d
+	assert.Equal(t, "x", d.OrderID)
+	assert.Equal(t, "x", d.OrderShortID)
+	assert.Equal(t, "x", d.CustomerName)
+	assert.Equal(t, "x", d.ProductTitle)
+	assert.Equal(t, "x", d.Total)
+	assert.Equal(t, "x", d.StatusNote)
+	assert.Equal(t, "x", d.TrackingNumber)
+	assert.Equal(t, "x", d.ShopName)
+	assert.Equal(t, "x", d.OrderURL)
 }

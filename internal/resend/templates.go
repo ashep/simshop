@@ -27,15 +27,16 @@ var markdown = goldmark.New(goldmark.WithExtensions(extension.Table))
 // All fields are pre-formatted strings; callers (Notifier) compute Total,
 // resolve OrderURL, and render names before invoking Render.
 type TemplateData struct {
-	OrderID      string
-	OrderShortID string
-	CustomerName string
-	ProductTitle string
-	Attrs        []order.Attr
-	Total        string
-	StatusNote   string
-	ShopName     string
-	OrderURL     string
+	OrderID        string
+	OrderShortID   string
+	CustomerName   string
+	ProductTitle   string
+	Attrs          []order.Attr
+	Total          string
+	StatusNote     string
+	TrackingNumber string
+	ShopName       string
+	OrderURL       string
 }
 
 // TemplateStore holds parsed subject and body templates per (status, lang).
