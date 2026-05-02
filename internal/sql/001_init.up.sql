@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS orders
     address       TEXT                        NOT NULL,
     admin_note    TEXT,
     customer_note TEXT,
+    tracking_number TEXT,
     created_at    TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP WITHOUT TIME ZONE NOT NULL             DEFAULT CURRENT_TIMESTAMP
 );
