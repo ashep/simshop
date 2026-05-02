@@ -246,6 +246,14 @@ enabled notifiers in it only when 2+ are configured; with one it passes the chil
 A panic in any child is recovered silently and does not skip later children — children are expected to log
 internally if they care.
 
+`ErrTransitionNotAllowed` is returned by `Service.UpdateStatus` and `OperatorWriter.UpdateStatusByOperator` when the
+target status is not a legal next step from the current status. The handler maps it to 409.
+
+`OperatorWriter.UpdateStatusByOperator` returns `(applied bool, err error)`. `applied=false` with `nil` error means
+the order was already at the target status under the SELECT FOR UPDATE lock (concurrent same-target write); the
+caller must NOT dispatch a notification in that case. `Service.NewService` now takes `ow OperatorWriter` as the fifth
+positional argument (before the notifier); pass `nil` only in tests that do not exercise `UpdateStatus`.
+
 ### internal/orderdb
 
 `Writer` and `Reader` own a `*pgxpool.Pool` (concrete, not interface). The pool is created in `app.Run` after
