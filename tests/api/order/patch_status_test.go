@@ -138,29 +138,33 @@ func TestPatchOrderStatus(main *testing.T) {
 		truncateOrders(t, dsn)
 		drainTGChannel(tgCh)
 		id := seedOrderInStatus(t, dsn, "shipped", "en")
-		// Force tracking_number on row so the second shipped call is a true no-op.
+
 		pool, err := pgxpool.New(t.Context(), dsn)
 		require.NoError(t, err)
+		defer pool.Close()
+
+		// Force tracking_number on row so the PATCH below is a true same-status no-op.
 		_, err = pool.Exec(t.Context(),
 			"UPDATE orders SET tracking_number = 'TRK-XYZ' WHERE id = $1::uuid", id)
 		require.NoError(t, err)
-		pool.Close()
+
+		countShippedHistory := func() int {
+			var n int
+			require.NoError(t, pool.QueryRow(t.Context(),
+				"SELECT count(*) FROM order_history WHERE order_id = $1::uuid AND status = 'shipped'",
+				id).Scan(&n))
+			return n
+		}
+		before := countShippedHistory()
 
 		code, _ := patchStatus(t, a, id, operatorAPIKey, map[string]any{
 			"status": "shipped", "tracking_number": "TRK-XYZ",
 		})
 		assert.Equal(t, http.StatusOK, code)
 
-		// No new shipped history row was created (the seed didn't have one).
-		pool2, err := pgxpool.New(t.Context(), dsn)
-		require.NoError(t, err)
-		defer pool2.Close()
-		var n int
-		require.NoError(t, pool2.QueryRow(t.Context(),
-			"SELECT count(*) FROM order_history WHERE order_id = $1::uuid AND status = 'shipped'",
-			id).Scan(&n))
-		assert.Equal(t, 0, n,
-			"idempotent shipped PATCH should not create a new history row when the order is already at shipped")
+		after := countShippedHistory()
+		assert.Equal(t, before, after,
+			"idempotent shipped PATCH must not create a new shipped history row")
 	})
 
 	main.Run("Err_NoAuth", func(t *testing.T) {
