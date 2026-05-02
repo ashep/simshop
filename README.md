@@ -415,6 +415,11 @@ change, each `{id, status, note (optional), created_at}`). Optional text fields 
 The verbatim provider payloads are not surfaced through this endpoint; they live on `invoice_history` for forensic
 inspection via the database.
 
+**Filtering:** the optional `?status=<csv>` query parameter narrows the result set to orders whose current status
+matches one of the listed `order_status` values (comma-separated, e.g. `?status=paid,shipped`). Omitting the
+parameter returns every order (filter disabled). A literal `?status=` (empty value) is rejected with HTTP 400 by the
+OpenAPI validator before the handler runs; unknown status values are likewise rejected with 400.
+
 #### Order status
 
 `GET /orders/{id}` returns `{"status": "<order_status>"}` for a single order identified by its UUIDv7. The endpoint is
