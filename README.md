@@ -441,8 +441,8 @@ user-facing message in their own language.
 
 - `status` — required; the target `order_status`. Must be one of the operator-allowed transitions below.
 - `note` — optional; an operator-supplied free-text note appended to `order_history.note` and forwarded to the
-  customer email and Telegram notification. Max 1000 characters.
-- `tracking_number` — **required iff** `status == "shipped"`, **forbidden** for any other target. Max 100 characters.
+  customer email and Telegram notification. Max 500 characters.
+- `tracking_number` — **required iff** `status == "shipped"`, **forbidden** for any other target. Max 64 characters.
   Persisted on `orders.tracking_number` write-once: once set, subsequent transitions cannot overwrite or clear it.
 
 **Allowed transitions:**
