@@ -26,6 +26,7 @@ type orderService interface {
 	AttachInvoice(ctx context.Context, orderID string, inv order.Invoice) error
 	List(ctx context.Context) ([]order.Record, error)
 	GetStatus(ctx context.Context, orderID string) (string, error)
+	UpdateStatus(ctx context.Context, orderID, target, note, trackingNumber string) (bool, error)
 	RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent) error
 }
 
