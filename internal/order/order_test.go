@@ -370,6 +370,7 @@ func TestServiceUpdateStatus(main *testing.T) {
 		applied, err := svc.UpdateStatus(context.Background(), "order-1", "processing", "starting", "")
 		require.NoError(t, err)
 		assert.True(t, applied)
+		r.AssertExpectations(t)
 		ow.AssertExpectations(t)
 		n.AssertExpectations(t)
 	})
@@ -408,6 +409,30 @@ func TestServiceUpdateStatus(main *testing.T) {
 
 		svc := NewService(nil, r, nil, nil, ow, n)
 		applied, err := svc.UpdateStatus(context.Background(), "order-1", "delivered", "", "")
+		require.NoError(t, err)
+		assert.True(t, applied)
+		n.AssertExpectations(t)
+	})
+
+	main.Run("NonShippedTransitionSuppressesProvidedTrackingNumber", func(t *testing.T) {
+		// The handler validates that tracking_number is only set on shipped, but
+		// the service is the last gate: even if a caller passes a non-empty value
+		// for a non-shipped target, the dispatched NotificationEvent must NOT
+		// carry it.
+		r := &readerMock{}
+		ow := &operatorWriterMock{}
+		n := &notifierMock{}
+		r.On("GetStatus", mock.Anything, "order-1").Return("shipped", nil)
+		ow.On("UpdateStatusByOperator", mock.Anything, "order-1", "delivered", "", "ACCIDENTAL-TRK").
+			Return(true, nil)
+		n.On("Notify", mock.Anything, NotificationEvent{
+			OrderID: "order-1",
+			Status:  "delivered",
+			// TrackingNumber intentionally empty — guard suppresses it.
+		}).Return()
+
+		svc := NewService(nil, r, nil, nil, ow, n)
+		applied, err := svc.UpdateStatus(context.Background(), "order-1", "delivered", "", "ACCIDENTAL-TRK")
 		require.NoError(t, err)
 		assert.True(t, applied)
 		n.AssertExpectations(t)
@@ -472,6 +497,8 @@ func TestServiceUpdateStatus(main *testing.T) {
 	})
 
 	main.Run("WriterTransitionNotAllowedPropagates", func(t *testing.T) {
+		// Covers the writer's lock-time recheck: pre-lock rule passes, but the
+		// writer rejects after acquiring its own lock (concurrent state change).
 		r := &readerMock{}
 		ow := &operatorWriterMock{}
 		r.On("GetStatus", mock.Anything, "order-1").Return("paid", nil)
