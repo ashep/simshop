@@ -55,6 +55,17 @@ func (e *UnauthorizedError) Error() string {
 	return "unauthorized"
 }
 
+type ConflictError struct {
+	Reason string
+}
+
+func (e *ConflictError) Error() string {
+	if e.Reason != "" {
+		return e.Reason
+	}
+	return "conflict"
+}
+
 type geoDetector interface {
 	Detect(r *http.Request) string
 }
@@ -146,6 +157,14 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 
 	if tErr, ok := errors.AsType[*UnauthorizedError](err); tErr != nil && ok {
 		w.WriteHeader(http.StatusUnauthorized)
+		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
+			h.l.Warn().Err(wErr).Msg("error response write failed")
+		}
+		return
+	}
+
+	if tErr, ok := errors.AsType[*ConflictError](err); tErr != nil && ok {
+		w.WriteHeader(http.StatusConflict)
 		if _, wErr := fmt.Fprintf(w, `{"error": %q}`, tErr.Error()); wErr != nil {
 			h.l.Warn().Err(wErr).Msg("error response write failed")
 		}

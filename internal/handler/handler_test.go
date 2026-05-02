@@ -105,4 +105,21 @@ func TestWriteError(main *testing.T) {
 			t.Errorf("unexpected body: %s", body)
 		}
 	})
+
+	main.Run("Conflict", func(t *testing.T) {
+		h := newTestHandler()
+		w := httptest.NewRecorder()
+
+		h.writeError(w, &ConflictError{Reason: "transition not allowed"})
+
+		if w.Code != http.StatusConflict {
+			t.Errorf("expected status %d, got %d", http.StatusConflict, w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %q", ct)
+		}
+		if body := w.Body.String(); body != `{"error": "transition not allowed"}` {
+			t.Errorf("unexpected body: %s", body)
+		}
+	})
 }
