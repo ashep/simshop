@@ -45,9 +45,10 @@ type Invoice struct {
 // the new order_status as text; Note is optional human-readable context (e.g.
 // the rendered Monobank webhook note for a payment transition).
 type NotificationEvent struct {
-	OrderID string
-	Status  string
-	Note    string
+	OrderID        string
+	Status         string
+	Note           string
+	TrackingNumber string // populated only on the "shipped" event from Service.UpdateStatus
 }
 
 // Notifier is the consumer side of NotificationEvent. Implementations must be

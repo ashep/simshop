@@ -348,5 +348,6 @@ func TestNotificationEvent(main *testing.T) {
 		assert.Equal(t, "", evt.OrderID)
 		assert.Equal(t, "", evt.Status)
 		assert.Equal(t, "", evt.Note)
+		assert.Equal(t, "", evt.TrackingNumber)
 	})
 }
