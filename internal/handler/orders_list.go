@@ -14,6 +14,7 @@ type orderRecordResponse struct {
 	Email        string                   `json:"email"`
 	Price        int                      `json:"price"`
 	Currency     string                   `json:"currency"`
+	Lang         string                   `json:"lang"`
 	FirstName    string                   `json:"first_name"`
 	MiddleName   *string                  `json:"middle_name,omitempty"`
 	LastName     string                   `json:"last_name"`
@@ -107,6 +108,7 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 		Email:        rec.Email,
 		Price:        rec.Price,
 		Currency:     rec.Currency,
+		Lang:         rec.Lang,
 		FirstName:    rec.FirstName,
 		MiddleName:   rec.MiddleName,
 		LastName:     rec.LastName,

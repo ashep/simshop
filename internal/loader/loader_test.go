@@ -580,4 +580,36 @@ images:
 		assert.Equal(t, "/images/p/thumb.png", cat.Products[0].Images[0].Preview)
 		assert.Equal(t, "/images/p/full.png", cat.Products[0].Images[0].Full)
 	})
+
+	main.Run("LoadsEmailTemplates", func(t *testing.T) {
+		dir := setupDataDir(t)
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "emails", "paid"), 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "emails", "paid", "en.md"),
+			[]byte("---\nsubject: Paid\n---\nBody"), 0644))
+
+		c, err := loader.Load(dir)
+		require.NoError(t, err)
+		require.NotNil(t, c.EmailTemplates)
+		assert.NotNil(t, c.EmailTemplates.All()["paid"]["en"])
+	})
+
+	main.Run("MissingEmailsDirIsNotAnError", func(t *testing.T) {
+		dir := setupDataDir(t)
+		c, err := loader.Load(dir)
+		require.NoError(t, err)
+		require.NotNil(t, c.EmailTemplates)
+		assert.Empty(t, c.EmailTemplates.All())
+	})
+
+	main.Run("MalformedEmailTemplateIsFatal", func(t *testing.T) {
+		dir := setupDataDir(t)
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "emails", "paid"), 0755))
+		// Missing subject — should be fatal.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "emails", "paid", "en.md"),
+			[]byte("---\nfoo: bar\n---\nbody"), 0644))
+
+		_, err := loader.Load(dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "subject")
+	})
 }

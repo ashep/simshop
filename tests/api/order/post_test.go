@@ -137,6 +137,7 @@ type orderRow struct {
 	Email        string
 	Price        int
 	Currency     string
+	Lang         string
 	FirstName    string
 	MiddleName   *string
 	LastName     string
@@ -167,7 +168,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 	defer pool.Close()
 
 	rows, err := pool.Query(t.Context(), `
-		SELECT id::text, product_id, status::text, email, price, currency,
+		SELECT id::text, product_id, status::text, email, price, currency, lang,
 		       first_name, middle_name, last_name,
 		       country, city, phone, address,
 		       customer_note
@@ -180,7 +181,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 	for rows.Next() {
 		var r orderRow
 		require.NoError(t, rows.Scan(
-			&r.ID, &r.ProductID, &r.Status, &r.Email, &r.Price, &r.Currency,
+			&r.ID, &r.ProductID, &r.Status, &r.Email, &r.Price, &r.Currency, &r.Lang,
 			&r.FirstName, &r.MiddleName, &r.LastName,
 			&r.Country, &r.City, &r.Phone, &r.Address,
 			&r.CustomerNote,
@@ -311,6 +312,7 @@ func TestCreateOrder(main *testing.T) {
 		assert.Equal(t, "ivan@example.com", r.Email)
 		assert.Equal(t, 4999, r.Price)
 		assert.Equal(t, "USD", r.Currency)
+		assert.Equal(t, "en", r.Lang)
 		assert.Equal(t, "Іван", r.FirstName)
 		assert.Nil(t, r.MiddleName)
 		assert.Equal(t, "Іваненко", r.LastName)

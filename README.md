@@ -350,7 +350,8 @@ consulted at order time. Returns 201 on success, 400 for invalid input (includin
 #### Schema
 
 `orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int,
-minor units, total = base + sum of attr add-ons), `currency`, `first_name`, `middle_name` (nullable), `last_name`,
+minor units, total = base + sum of attr add-ons), `currency`, `lang` (checkout language code captured from the
+request, drives downstream localized notifications), `first_name`, `middle_name` (nullable), `last_name`,
 `country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable), `created_at`,
 `updated_at`.
 
@@ -484,6 +485,9 @@ rate_limit: 1
   value disables rate limiting entirely.
 - `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
 - `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
+- `resend.api_key` — Resend API key. Optional; empty disables customer email notifications.
+- `mail.from` — sender address, e.g. `"Shop <orders@shop.example>"`. Required when `resend.api_key` is set.
+- `mail.order_url` — customer-facing URL with `{id}` placeholder. Required when `resend.api_key` is set.
 
 ### Telegram notifications
 
@@ -535,3 +539,53 @@ exit are discarded after a 5s graceful drain.
 
 To get a chat id for a private channel: add the bot to the channel as an administrator, then post once and inspect the
 update via `getUpdates`.
+
+### Customer email notifications (Resend)
+
+Optional. When configured, the service sends a transactional email to the customer's address whenever their order
+transitions to `paid`, `shipped`, `delivered`, `refund_requested`, or `refunded`. Useful for confirming payment,
+tracking shipping, and acknowledging refund flows without standing up a separate notification system.
+
+```yaml
+resend:
+  api_key: "<resend api key>"
+mail:
+  from: "Shop Orders <orders@shop.example>"
+  order_url: "https://shop.example/order?id={id}"
+```
+
+- `resend.api_key` — Resend API key (`re_...`). Empty disables the feature entirely.
+- `mail.from` — sender address as it appears in the customer's inbox. Required when `resend.api_key` is set.
+- `mail.order_url` — customer-facing URL pattern with a literal `{id}` placeholder, substituted with the order id at
+  send time. Required when `resend.api_key` is set.
+
+**Templates.** Email content lives at `{data_dir}/emails/{status}/{lang}.md`. Each file is a Markdown body preceded
+by a YAML frontmatter block declaring the subject:
+
+````markdown
+---
+subject: Order {{ .OrderShortID }} has been paid
+---
+
+Hi {{ .CustomerName }},
+
+Thank you for your order **{{ .ProductTitle }}** ({{ .Total }}).
+
+Track it here: <{{ .OrderURL }}>
+````
+
+Available template variables: `.OrderID` (full UUID), `.OrderShortID` (first 13 chars — UUIDv7 timestamp prefix),
+`.CustomerName`, `.ProductTitle` (rendered title in the customer's language), `.Attrs` (slice of `{Name, Value}`),
+`.Total` (formatted, e.g. `"49.99 USD"`), `.StatusNote` (operator note, e.g. tracking number for `shipped`),
+`.ShopName` (in customer's language), `.OrderURL` (resolved from `mail.order_url`).
+
+**Languages.** The customer's checkout language is persisted on the order and used to look up
+`emails/{status}/{lang}.md`. If a language file is missing, the notifier falls back to `emails/{status}/en.md`.
+
+**Required at startup.** When `resend.api_key` is set, `emails/{status}/en.md` must exist for every notify-on
+status (`paid`, `shipped`, `delivered`, `refund_requested`, `refunded`). The service refuses to start otherwise.
+
+**Failure handling.** Best-effort, like the Telegram notifier: events queue in a 256-event in-memory buffer drained
+by a single background worker. Transient failures (5xx, 429) retry up to three times with 1s/2s backoff (or honor
+`Retry-After` clamped to `[1s, 30s]`). Permanent errors (4xx other than 429) and buffer-full conditions log and
+drop the event. In-flight events are discarded after a 5s graceful drain at process exit.

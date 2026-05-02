@@ -20,6 +20,7 @@ import (
 	"github.com/ashep/simshop/internal/orderdb"
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/resend"
 	"github.com/ashep/simshop/internal/shop"
 	appsql "github.com/ashep/simshop/internal/sql"
 	"github.com/ashep/simshop/internal/telegram"
@@ -79,19 +80,60 @@ func Run(rt *runner.Runtime[Config]) error {
 	ordersWriter := orderdb.New(db)
 	ordersReader := orderdb.NewReader(db)
 
-	var orderNotifier order.Notifier
+	var telegramNotifier order.Notifier
 	switch {
 	case cfg.Telegram.Token != "" && cfg.Telegram.ChatID != "":
 		tgClient := telegram.NewClient(cfg.Telegram.Token, cfg.Telegram.ServiceURL)
 		tn := telegram.NewNotifier(tgClient, cfg.Telegram.ChatID, ordersReader, prodSvc, l)
 		tn.Start()
 		defer tn.Stop()
-		orderNotifier = tn
+		telegramNotifier = tn
 		l.Info().Msg("telegram notifier enabled")
 	case cfg.Telegram.Token != "" || cfg.Telegram.ChatID != "":
 		return fmt.Errorf("telegram: token and chat_id must be set together")
 	default:
 		l.Info().Msg("telegram notifier disabled")
+	}
+
+	var resendNotifier order.Notifier
+	if cfg.Resend.APIKey != "" {
+		if cfg.Mail.From == "" {
+			return fmt.Errorf("mail.from is required when resend.api_key is set")
+		}
+		if cfg.Mail.OrderURL == "" {
+			return fmt.Errorf("mail.order_url is required when resend.api_key is set")
+		}
+		if err := validateEmailTemplates(catalog.EmailTemplates); err != nil {
+			return fmt.Errorf("validate email templates: %w", err)
+		}
+		rc := resend.NewClient(cfg.Resend.APIKey, cfg.Resend.ServiceURL)
+		rn := resend.NewNotifier(
+			rc, cfg.Mail.From, cfg.Mail.OrderURL,
+			ordersReader, prodSvc, shopSvc, catalog.EmailTemplates, l,
+		)
+		rn.Start()
+		defer rn.Stop()
+		resendNotifier = rn
+		l.Info().Msg("resend notifier enabled")
+	} else {
+		l.Info().Msg("resend notifier disabled")
+	}
+
+	var orderNotifier order.Notifier
+	notifiers := make([]order.Notifier, 0, 2)
+	if telegramNotifier != nil {
+		notifiers = append(notifiers, telegramNotifier)
+	}
+	if resendNotifier != nil {
+		notifiers = append(notifiers, resendNotifier)
+	}
+	switch len(notifiers) {
+	case 0:
+		orderNotifier = nil
+	case 1:
+		orderNotifier = notifiers[0]
+	default:
+		orderNotifier = order.NewMultiNotifier(notifiers...)
 	}
 
 	// orderdb.Writer satisfies Writer, InvoiceWriter, and InvoiceEventWriter.

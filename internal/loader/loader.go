@@ -9,16 +9,18 @@ import (
 
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/resend"
 	"github.com/ashep/simshop/internal/shop"
 	"gopkg.in/yaml.v3"
 )
 
 // Catalog holds all content loaded from the data directory at startup.
 type Catalog struct {
-	Products     []*product.Product
-	ProductItems []*product.Item
-	Pages        []*page.Page
-	Shop         *shop.Shop
+	Products       []*product.Product
+	ProductItems   []*product.Item
+	Pages          []*page.Page
+	Shop           *shop.Shop
+	EmailTemplates *resend.TemplateStore
 }
 
 // Load reads data_dir, returning a populated Catalog.
@@ -40,7 +42,19 @@ func Load(dataDir string) (*Catalog, error) {
 	if err := loadShop(dataDir, c); err != nil {
 		return nil, err
 	}
+	if err := loadEmailTemplates(dataDir, c); err != nil {
+		return nil, err
+	}
 	return c, nil
+}
+
+func loadEmailTemplates(dataDir string, c *Catalog) error {
+	store, err := resend.LoadTemplates(filepath.Join(dataDir, "emails"))
+	if err != nil {
+		return fmt.Errorf("load email templates: %w", err)
+	}
+	c.EmailTemplates = store
+	return nil
 }
 
 type pagesFile struct {
