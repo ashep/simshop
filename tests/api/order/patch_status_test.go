@@ -109,6 +109,19 @@ func TestPatchOrderStatus(main *testing.T) {
 		require.NotNil(t, tn)
 		assert.Equal(t, "TRK-XYZ", *tn)
 
+		// Verify tracking is exposed via GET /orders.
+		listReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, a.URL("/orders"), nil)
+		require.NoError(t, err)
+		listReq.Header.Set("Authorization", "Bearer "+operatorAPIKey)
+		listResp, err := http.DefaultClient.Do(listReq)
+		require.NoError(t, err)
+		defer func() { _ = listResp.Body.Close() }()
+		require.Equal(t, http.StatusOK, listResp.StatusCode)
+		var orders []map[string]any
+		require.NoError(t, json.NewDecoder(listResp.Body).Decode(&orders))
+		require.Len(t, orders, 1)
+		assert.Equal(t, "TRK-XYZ", orders[0]["tracking_number"])
+
 		// shipped -> delivered
 		code, _ = patchStatus(t, a, id, operatorAPIKey, map[string]any{"status": "delivered"})
 		assert.Equal(t, http.StatusOK, code)
