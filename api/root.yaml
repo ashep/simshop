@@ -249,20 +249,7 @@ paths:
           schema:
             type: array
             items:
-              type: string
-              enum:
-                - new
-                - awaiting_payment
-                - payment_processing
-                - payment_hold
-                - paid
-                - processing
-                - cancelled
-                - shipped
-                - delivered
-                - refund_requested
-                - returned
-                - refunded
+              $ref: '#/components/schemas/OrderStatus'
       responses:
         "200":
           description: All orders, newest first
@@ -591,13 +578,33 @@ components:
         payment_url:
           type: string
 
+    OrderStatus:
+      type: string
+      description: |
+        Lifecycle status of an order. Mirrors the `order_status` enum in
+        `internal/sql/001_init.up.sql`; both must stay in sync when a status
+        is added or removed.
+      enum:
+        - new
+        - awaiting_payment
+        - payment_processing
+        - payment_hold
+        - paid
+        - processing
+        - cancelled
+        - shipped
+        - delivered
+        - refund_requested
+        - returned
+        - refunded
+
     OrderStatusResponse:
       type: object
       required:
         - status
       properties:
         status:
-          type: string
+          $ref: '#/components/schemas/OrderStatus'
 
     OrderStatusUpdateRequest:
       type: object
@@ -727,7 +734,7 @@ components:
           type: string
           format: uuid
         status:
-          type: string
+          $ref: '#/components/schemas/OrderStatus'
         note:
           type: string
           nullable: true
@@ -783,7 +790,7 @@ components:
         product_id:
           type: string
         status:
-          type: string
+          $ref: '#/components/schemas/OrderStatus'
         email:
           type: string
         price:

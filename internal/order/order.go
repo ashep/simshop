@@ -146,6 +146,11 @@ type Reader interface {
 	// List returns all orders, newest first. When statuses is non-empty, only
 	// orders whose order_status matches one of the supplied values are returned.
 	// A nil or empty statuses slice means "no filter — return everything".
+	//
+	// Caller validates each value against the order_status enum (in production
+	// this happens upstream in the OpenAPI request validator). An invalid
+	// value reaches the SQL layer as an enum cast failure surfaced to the
+	// handler as a generic 502 — no enum-specific error type is returned.
 	List(ctx context.Context, statuses []string) ([]Record, error)
 	// GetByID returns the fully-populated Record for the given order id.
 	// Returns ErrNotFound when no row matches.
