@@ -19,6 +19,11 @@ propagate a new field into test bodies without auditing every match: a "missing 
 The `Write` tool requires the target file to have been `Read` at least once in the same session before overwriting.
 When writing many files in one pass, `Read` each target first.
 
+`data/` is a **symlink** pointing to `../websites/craft.d5y.xyz/data` — a separate git repository. Files under
+`data/` (e.g. email templates, YAML) must be committed in that repo, not in `simshop`. `git add data/...` in the
+`simshop` repo will fail with "beyond a symbolic link". Use `git -C /Users/ashep/src/my/websites/craft.d5y.xyz add ...`
+instead.
+
 `vendor/` is gitignored in this repo — it is regenerated locally via `go mod vendor` and never committed.
 Only `go.mod` and `go.sum` are staged when adding/updating modules. `go mod tidy` will strip any module not reached
 from a real import; to land a dep before its consumer exists, run `go get` (which records it as `// indirect` in
