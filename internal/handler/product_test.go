@@ -265,6 +265,37 @@ attrs:
           title: Червоний
 `
 
+const testProductWithAttrValuePrefixYAML = `
+name:
+  en: Widget
+  uk: Віджет
+description:
+  en: A test product
+  uk: Тестовий продукт
+prices:
+  default:
+    currency: USD
+    value: 49.99
+attrs:
+  display_color:
+    en:
+      title: Display color
+      values:
+        red:
+          prefix: "🛑"
+          title: Red
+        green:
+          title: Green
+    uk:
+      title: Колір дисплея
+      values:
+        red:
+          prefix: "🛑"
+          title: Червоний
+        green:
+          title: Зелений
+`
+
 func TestServeProductContent(main *testing.T) {
 	resp := buildTestResponder(main)
 	dataDir := main.TempDir()
@@ -499,6 +530,38 @@ func TestServeProductContent(main *testing.T) {
 		displayColor, ok := attrValuesOrder["display_color"].([]any)
 		require.True(t, ok, "display_color order should be present")
 		assert.Equal(t, []any{"blue", "red", "green"}, displayColor)
+	})
+
+	main.Run("ReturnsAttrValuePrefix", func(t *testing.T) {
+		avpDataDir := t.TempDir()
+		avpProductDir := filepath.Join(avpDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(avpProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(avpProductDir, "product.yaml"), []byte(testProductWithAttrValuePrefixYAML), 0644))
+
+		h := &Handler{dataDir: avpDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		attrs, ok := body["attrs"].(map[string]any)
+		require.True(t, ok, "attrs should be present")
+		displayColor, ok := attrs["display_color"].(map[string]any)
+		require.True(t, ok)
+		values, ok := displayColor["values"].(map[string]any)
+		require.True(t, ok)
+		red, ok := values["red"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Red", red["title"])
+		assert.Equal(t, "🛑", red["prefix"])
+		green, ok := values["green"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Green", green["title"])
+		assert.Equal(t, "", green["prefix"], "prefix must always be present alongside title")
 	})
 
 	main.Run("ReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {

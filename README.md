@@ -146,7 +146,9 @@ Fields in `product.yaml`:
   detected from the `CF-IPCountry` request header (sent by Cloudflare) or via an ipinfo.io lookup on the client IP.
   If no matching country key exists the `default` entry is used.
 - **attrs** — optional map of attribute keys (e.g. `display_color`). Each attribute is translated into every language
-  in `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`.
+  in `name`. Each language entry has a `title` and a `values` map with at least one entry; each value has a `title`
+  and an optional `prefix` (short symbol or emoji shown before the title in UIs). The API response always includes
+  `prefix` alongside `title`, emitting an empty string when not set in YAML.
 - **attr_prices** — optional map of add-on prices per attribute value, keyed by country (same structure as `prices`).
   Shape: `attr_key → value_key → country_key → float64`. Must contain a `default` country key for each value.
   The API resolves this to `attr_key → value_key → float64` using the same country detection logic as `prices`.
@@ -191,6 +193,7 @@ attrs:
       title: Finish
       values:
         natural:
+          prefix: "🌿"
           title: Natural
         dark:
           title: Dark
@@ -198,6 +201,7 @@ attrs:
       title: Покриття
       values:
         natural:
+          prefix: "🌿"
           title: Натуральне
         dark:
           title: Темне

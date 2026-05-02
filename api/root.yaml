@@ -391,8 +391,11 @@ components:
       type: object
       required:
         - title
+        - prefix
       properties:
         title:
+          type: string
+        prefix:
           type: string
 
     AttrLang:
