@@ -45,6 +45,14 @@ func (m *orderServiceMock) RecordInvoiceEvent(ctx context.Context, evt order.Inv
 	return m.Called(ctx, evt).Error(0)
 }
 
+func (m *orderServiceMock) UpdateStatus(
+	ctx context.Context,
+	orderID, target, note, trackingNumber string,
+) (bool, error) {
+	args := m.Called(ctx, orderID, target, note, trackingNumber)
+	return args.Bool(0), args.Error(1)
+}
+
 type monobankClientMock struct{ mock.Mock }
 
 func (m *monobankClientMock) CreateInvoice(ctx context.Context, req monobank.CreateInvoiceRequest) (*monobank.CreateInvoiceResponse, error) {
