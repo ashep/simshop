@@ -61,6 +61,10 @@ The validator (`kin-openapi`) runs in OpenAPI 3.0 compatibility mode:
 - For CSV-encoded query arrays (`?status=a,b`), use `in: query` + `style: form` + `explode: false` + `schema.type:
   array` with item-level `enum`. The validator decodes the CSV and rejects unknown values with 400 before the
   handler runs, so handlers should not redeclare the enum in Go.
+- An explicit empty value (`?status=`) is decoded as `[""]` and fails the item-level enum check → 400. Functional
+  tests for "no filter" must omit the parameter entirely, not pass an empty value. `allowEmptyValue: true` does NOT
+  rescue this — kin-openapi only checks it when the decoded value is nil, not when it's a one-element array
+  containing an empty string.
 
 ### HTTP middleware
 
