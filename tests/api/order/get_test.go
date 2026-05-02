@@ -245,29 +245,14 @@ func TestListOrders(main *testing.T) {
 		require.Len(t, got, 2)
 	})
 
-	main.Run("StatusFilterEmptyValueReturnsAll", func(t *testing.T) {
-		truncateOrders(t, a.DSN())
-		mbCounter.Store(0)
-
-		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
-			"first_name": "Alice", "last_name": "Smith",
-			"phone": "+1", "email": "alice@example.com",
-			"country": "ua", "city": "Kyiv", "address": "Addr 1",
-		}))
-
-		// Omitted ?status= must mean "no filter" → all orders. The handler's
-		// parseStatusFilter also no-ops on a literal empty value, but the
-		// OpenAPI middleware rejects an explicit `?status=` because [""] fails
-		// the enum check. Sending no query at all is the supported "no filter"
-		// invocation, so that's what we exercise here.
-		resp := getOrders(t, "Bearer "+testAPIKey, "")
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		var got []map[string]any
-		require.NoError(t, json.Unmarshal(body, &got))
-		require.Len(t, got, 1)
+	main.Run("StatusFilterEmptyValueReturns400", func(t *testing.T) {
+		// kin-openapi decodes ?status= as [""] which fails the enum check.
+		// The supported "no filter" form is to omit the parameter entirely
+		// (covered by the unfiltered subtests above). This case pins the
+		// current rejection behavior so a future spec change doesn't quietly
+		// regress it.
+		resp := getOrders(t, "Bearer "+testAPIKey, "status=")
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	main.Run("StatusFilterInvalidValueReturns400", func(t *testing.T) {

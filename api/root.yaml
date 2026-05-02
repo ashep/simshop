@@ -240,9 +240,10 @@ paths:
           in: query
           required: false
           description: |
-            Comma-separated list of order_status values. When supplied, the
-            response is filtered to orders whose status matches one of the
-            given values. Empty or missing means no filter.
+            Comma-separated list of order statuses. When supplied, the response
+            is filtered to orders whose status matches one of the given values.
+            Omit the parameter to disable the filter; an empty value
+            (`?status=`) is rejected with 400.
           style: form
           explode: false
           schema:
