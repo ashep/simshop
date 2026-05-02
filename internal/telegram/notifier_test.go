@@ -32,7 +32,7 @@ func (r *fakeReader) put(rec *order.Record) {
 	r.records[rec.ID] = rec
 }
 
-func (r *fakeReader) List(ctx context.Context) ([]order.Record, error) {
+func (r *fakeReader) List(ctx context.Context, _ []string) ([]order.Record, error) {
 	return nil, errors.New("not used")
 }
 

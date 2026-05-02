@@ -49,7 +49,7 @@ type fakeReader struct {
 	err error
 }
 
-func (f *fakeReader) List(context.Context) ([]order.Record, error) { return nil, nil }
+func (f *fakeReader) List(_ context.Context, _ []string) ([]order.Record, error) { return nil, nil }
 func (f *fakeReader) GetByID(_ context.Context, _ string) (*order.Record, error) {
 	if f.err != nil {
 		return nil, f.err
