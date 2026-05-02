@@ -188,6 +188,12 @@ const insertOrderHistoryNoteSQL = `INSERT INTO order_history
 
 const lockOrderStatusSQL = `SELECT status::text FROM orders WHERE id = $1::uuid FOR UPDATE`
 
+const updateOrderStatusByOperatorSQL = `UPDATE orders
+    SET status = $2::order_status,
+        updated_at = CURRENT_TIMESTAMP,
+        tracking_number = CASE WHEN $3 = '' THEN tracking_number ELSE $3 END
+    WHERE id = $1::uuid`
+
 const insertInvoiceHistorySQL = `INSERT INTO invoice_history
 	(order_id, invoice_id, provider, status, note, payload, event_at)
 	VALUES ($1::uuid, $2, $3, $4::invoice_status, $5, $6, $7)
@@ -450,14 +456,72 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 	return &rec, nil
 }
 
-// UpdateStatusByOperator is a temporary stub; the real implementation lands in
-// a follow-up task. It panics so any accidental call surfaces immediately in
-// tests.
+// UpdateStatusByOperator applies an operator-driven status transition to an
+// order in a single transaction. Locks the orders row FOR UPDATE so the rule
+// re-check is authoritative against concurrent webhook and operator writers.
+//
+// Returns:
+//
+//   - (true, nil) — UPDATE + INSERT applied.
+//   - (false, nil) — under the lock the order was already at target
+//     (concurrent same-target writer beat us). No write performed.
+//   - (false, order.ErrNotFound) — no order row.
+//   - (false, order.ErrTransitionNotAllowed) — concurrent change put the
+//     order in a state that no longer permits target.
+//   - (false, error) — DB error.
+//
+// trackingNumber is written only when non-empty; empty leaves the column
+// untouched (CASE in updateOrderStatusByOperatorSQL).
 func (w *Writer) UpdateStatusByOperator(
-	_ context.Context,
-	_, _, _, _ string,
+	ctx context.Context,
+	orderID, target, note, trackingNumber string,
 ) (bool, error) {
-	panic("orderdb.Writer.UpdateStatusByOperator: not implemented")
+	tx, err := w.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		// Rollback after Commit is a no-op (returns ErrTxClosed); ignore it.
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			_ = rbErr
+		}
+	}()
+
+	var current string
+	if err := tx.QueryRow(ctx, lockOrderStatusSQL, orderID).Scan(&current); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, order.ErrNotFound
+		}
+		return false, fmt.Errorf("lock order: %w", err)
+	}
+
+	if current == target {
+		return false, nil
+	}
+	if !order.ShouldApplyOperatorTransition(current, target) {
+		return false, order.ErrTransitionNotAllowed
+	}
+
+	tag, err := tx.Exec(ctx, updateOrderStatusByOperatorSQL, orderID, target, trackingNumber)
+	if err != nil {
+		return false, fmt.Errorf("update order status: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return false, fmt.Errorf("update order status: expected 1 row affected, got %d", tag.RowsAffected())
+	}
+
+	var noteArg any
+	if note != "" {
+		noteArg = note
+	}
+	if _, err := tx.Exec(ctx, insertOrderHistoryNoteSQL, orderID, target, noteArg); err != nil {
+		return false, fmt.Errorf("insert order_history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit tx: %w", err)
+	}
+	return true, nil
 }
 
 // RecordInvoiceEvent persists evt and recomputes the order's payment status
