@@ -235,6 +235,33 @@ paths:
       operationId: listOrders
       security:
         - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: |
+            Comma-separated list of order_status values. When supplied, the
+            response is filtered to orders whose status matches one of the
+            given values. Empty or missing means no filter.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - new
+                - awaiting_payment
+                - payment_processing
+                - payment_hold
+                - paid
+                - processing
+                - cancelled
+                - shipped
+                - delivered
+                - refund_requested
+                - returned
+                - refunded
       responses:
         "200":
           description: All orders, newest first
