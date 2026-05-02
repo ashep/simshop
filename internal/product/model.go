@@ -11,7 +11,8 @@ type PriceItem struct {
 }
 
 type AttrValue struct {
-	Title string `json:"title" yaml:"title"`
+	Title  string `json:"title"  yaml:"title"`
+	Prefix string `json:"prefix" yaml:"prefix"`
 }
 
 type AttrLang struct {
