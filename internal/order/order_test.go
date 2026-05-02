@@ -20,8 +20,8 @@ func (m *writerMock) Write(ctx context.Context, o Order) (string, error) {
 
 type readerMock struct{ mock.Mock }
 
-func (m *readerMock) List(ctx context.Context) ([]Record, error) {
-	args := m.Called(ctx)
+func (m *readerMock) List(ctx context.Context, statuses []string) ([]Record, error) {
+	args := m.Called(ctx, statuses)
 	v, _ := args.Get(0).([]Record)
 	return v, args.Error(1)
 }
@@ -132,10 +132,10 @@ func TestService(main *testing.T) {
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
 		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000001", ProductID: "widget"}}
-		r.On("List", mock.Anything).Return(want, nil)
+		r.On("List", mock.Anything, ([]string)(nil)).Return(want, nil)
 
 		svc := NewService(w, r, iw, iew, nil, nil)
-		got, err := svc.List(context.Background())
+		got, err := svc.List(context.Background(), nil)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 		r.AssertExpectations(t)
@@ -146,11 +146,27 @@ func TestService(main *testing.T) {
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
-		r.On("List", mock.Anything).Return(([]Record)(nil), errors.New("read failed"))
+		r.On("List", mock.Anything, ([]string)(nil)).Return(([]Record)(nil), errors.New("read failed"))
 
 		svc := NewService(w, r, iw, iew, nil, nil)
-		_, err := svc.List(context.Background())
+		_, err := svc.List(context.Background(), nil)
 		assert.EqualError(t, err, "read failed")
+		r.AssertExpectations(t)
+	})
+
+	main.Run("ListForwardsStatusFilter", func(t *testing.T) {
+		w := &writerMock{}
+		r := &readerMock{}
+		iw := &invoiceWriterMock{}
+		iew := &invoiceEventWriterMock{}
+		statuses := []string{"paid", "shipped"}
+		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000002", ProductID: "widget"}}
+		r.On("List", mock.Anything, statuses).Return(want, nil)
+
+		svc := NewService(w, r, iw, iew, nil, nil)
+		got, err := svc.List(context.Background(), statuses)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 		r.AssertExpectations(t)
 	})
 

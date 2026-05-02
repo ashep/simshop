@@ -163,6 +163,15 @@ const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, 
 FROM orders
 ORDER BY created_at DESC`
 
+const listOrdersByStatusSQL = `SELECT id::text, product_id, status::text, email, price, currency, lang,
+	first_name, middle_name, last_name,
+	country, city, phone, address,
+	admin_note, customer_note, tracking_number,
+	created_at, updated_at
+FROM orders
+WHERE status = ANY($1::order_status[])
+ORDER BY created_at DESC`
+
 const listAttrsSQL = `SELECT order_id::text, attr_name, attr_value, attr_price
 FROM order_attrs
 WHERE order_id = ANY($1::uuid[])`
@@ -205,9 +214,17 @@ const latestInvoiceEventSQL = `SELECT status::text, note FROM invoice_history
 	LIMIT 1`
 
 // List returns all orders, newest first, each populated with its attrs and
-// history. Always returns a non-nil slice on success (possibly empty).
-func (r *Reader) List(ctx context.Context) ([]order.Record, error) {
-	rows, err := r.db.Query(ctx, listOrdersSQL)
+// history. When statuses is non-empty, only orders whose order_status matches
+// one of the supplied values are returned. Always returns a non-nil slice on
+// success (possibly empty).
+func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, error) {
+	var rows pgx.Rows
+	var err error
+	if len(statuses) == 0 {
+		rows, err = r.db.Query(ctx, listOrdersSQL)
+	} else {
+		rows, err = r.db.Query(ctx, listOrdersByStatusSQL, statuses)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query orders: %w", err)
 	}

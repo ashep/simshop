@@ -31,7 +31,7 @@ func TestListOrders(main *testing.T) {
 	main.Run("EmptyListReturnsEmptyArray", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("List", mock.Anything).Return([]order.Record{}, nil)
+		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{}, nil)
 
 		w := doRequest(t, svc)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -78,7 +78,7 @@ func TestListOrders(main *testing.T) {
 				Invoices: []order.Invoice{},
 			},
 		}
-		svc.On("List", mock.Anything).Return(records, nil)
+		svc.On("List", mock.Anything, ([]string)(nil)).Return(records, nil)
 
 		w := doRequest(t, svc)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -130,7 +130,7 @@ func TestListOrders(main *testing.T) {
 				Invoices:  []order.Invoice{},
 			},
 		}
-		svc.On("List", mock.Anything).Return(records, nil)
+		svc.On("List", mock.Anything, ([]string)(nil)).Return(records, nil)
 
 		w := doRequest(t, svc)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -149,7 +149,7 @@ func TestListOrders(main *testing.T) {
 	main.Run("ServiceErrorReturns500", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
-		svc.On("List", mock.Anything).Return(([]order.Record)(nil), errors.New("boom"))
+		svc.On("List", mock.Anything, ([]string)(nil)).Return(([]order.Record)(nil), errors.New("boom"))
 
 		w := doRequest(t, svc)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)

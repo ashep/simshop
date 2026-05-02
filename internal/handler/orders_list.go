@@ -56,7 +56,7 @@ type orderInvoiceResponse struct {
 // ListOrders returns every persisted order with its attrs and history,
 // newest first. The endpoint is only registered when an API key is configured.
 func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
-	rs, err := h.orders.List(r.Context())
+	rs, err := h.orders.List(r.Context(), nil)
 	if err != nil {
 		h.l.Error().Err(err).Msg("list orders failed")
 		h.writeError(w, err)
