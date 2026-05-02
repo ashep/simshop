@@ -8,27 +8,28 @@ import (
 )
 
 type orderRecordResponse struct {
-	ID           string                   `json:"id"`
-	ProductID    string                   `json:"product_id"`
-	Status       string                   `json:"status"`
-	Email        string                   `json:"email"`
-	Price        int                      `json:"price"`
-	Currency     string                   `json:"currency"`
-	Lang         string                   `json:"lang"`
-	FirstName    string                   `json:"first_name"`
-	MiddleName   *string                  `json:"middle_name,omitempty"`
-	LastName     string                   `json:"last_name"`
-	Country      string                   `json:"country"`
-	City         string                   `json:"city"`
-	Phone        string                   `json:"phone"`
-	Address      string                   `json:"address"`
-	AdminNote    *string                  `json:"admin_note,omitempty"`
-	CustomerNote *string                  `json:"customer_note,omitempty"`
-	CreatedAt    time.Time                `json:"created_at"`
-	UpdatedAt    time.Time                `json:"updated_at"`
-	Attrs        []orderAttrResponse      `json:"attrs"`
-	History      []orderHistoryResponse   `json:"history"`
-	Invoices     []orderInvoiceResponse   `json:"invoices"`
+	ID             string                 `json:"id"`
+	ProductID      string                 `json:"product_id"`
+	Status         string                 `json:"status"`
+	Email          string                 `json:"email"`
+	Price          int                    `json:"price"`
+	Currency       string                 `json:"currency"`
+	Lang           string                 `json:"lang"`
+	FirstName      string                 `json:"first_name"`
+	MiddleName     *string                `json:"middle_name,omitempty"`
+	LastName       string                 `json:"last_name"`
+	Country        string                 `json:"country"`
+	City           string                 `json:"city"`
+	Phone          string                 `json:"phone"`
+	Address        string                 `json:"address"`
+	AdminNote      *string                `json:"admin_note,omitempty"`
+	CustomerNote   *string                `json:"customer_note,omitempty"`
+	TrackingNumber *string                `json:"tracking_number,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+	Attrs          []orderAttrResponse    `json:"attrs"`
+	History        []orderHistoryResponse `json:"history"`
+	Invoices       []orderInvoiceResponse `json:"invoices"`
 }
 
 type orderAttrResponse struct {
@@ -102,26 +103,27 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 		}
 	}
 	return orderRecordResponse{
-		ID:           rec.ID,
-		ProductID:    rec.ProductID,
-		Status:       rec.Status,
-		Email:        rec.Email,
-		Price:        rec.Price,
-		Currency:     rec.Currency,
-		Lang:         rec.Lang,
-		FirstName:    rec.FirstName,
-		MiddleName:   rec.MiddleName,
-		LastName:     rec.LastName,
-		Country:      rec.Country,
-		City:         rec.City,
-		Phone:        rec.Phone,
-		Address:      rec.Address,
-		AdminNote:    rec.AdminNote,
-		CustomerNote: rec.CustomerNote,
-		CreatedAt:    rec.CreatedAt,
-		UpdatedAt:    rec.UpdatedAt,
-		Attrs:        attrs,
-		History:      history,
-		Invoices:     invoices,
+		ID:             rec.ID,
+		ProductID:      rec.ProductID,
+		Status:         rec.Status,
+		Email:          rec.Email,
+		Price:          rec.Price,
+		Currency:       rec.Currency,
+		Lang:           rec.Lang,
+		FirstName:      rec.FirstName,
+		MiddleName:     rec.MiddleName,
+		LastName:       rec.LastName,
+		Country:        rec.Country,
+		City:           rec.City,
+		Phone:          rec.Phone,
+		Address:        rec.Address,
+		AdminNote:      rec.AdminNote,
+		CustomerNote:   rec.CustomerNote,
+		TrackingNumber: rec.TrackingNumber,
+		CreatedAt:      rec.CreatedAt,
+		UpdatedAt:      rec.UpdatedAt,
+		Attrs:          attrs,
+		History:        history,
+		Invoices:       invoices,
 	}
 }
