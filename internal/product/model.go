@@ -21,9 +21,12 @@ type AttrLang struct {
 	Values      map[string]AttrValue `json:"values"                yaml:"values"`
 }
 
+// ImageItem is a single gallery media entry. Type defaults to "image" when empty; "video" marks an
+// MP4 entry whose Preview/Full point at .mp4 files instead of images.
 type ImageItem struct {
-	Preview string `json:"preview" yaml:"preview"`
-	Full    string `json:"full"    yaml:"full"`
+	Type    string `json:"type,omitempty" yaml:"type,omitempty"`
+	Preview string `json:"preview"        yaml:"preview"`
+	Full    string `json:"full"           yaml:"full"`
 }
 
 type Product struct {

@@ -435,6 +435,13 @@ components:
         - preview
         - full
       properties:
+        type:
+          type: string
+          enum:
+            - image
+            - video
+          default: image
+          description: Media kind. Absent or "image" means a still image; "video" means an MP4 clip.
         preview:
           type: string
         full:
