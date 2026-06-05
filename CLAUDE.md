@@ -117,6 +117,21 @@ places:
 
 Same rule for `attr_images`. Any new handler that reads `product.yaml` directly must apply this transformation.
 
+### Gallery media: images and video share one list
+
+`Product.Images` (`[]ImageItem`) is a **single ordered media list** holding both stills and MP4 clips — there is no
+separate `videos` field. The discriminator is `ImageItem.Type`: empty/`"image"` is a still, `"video"` is an MP4
+whose `Preview`/`Full` are `.mp4` paths. The frontend keys off this field, so it **must** stay on both the Go struct
+(`internal/product/model.go`) and the `ImageItem` schema (`api/root.yaml`) — dropping it silently breaks video
+rendering. The list is unified (not split) because the frontend's `attr_images` and carousel are index-based into
+it; a separate array would desync those indices.
+
+Nothing else here special-cases video: path transformation, the `validate` file-existence check, and `ServeImage`
+(`http.ServeFile`, MIME-agnostic) all operate on `.mp4` unchanged. The one place that **does** discriminate is
+`joinProductImages` (`internal/loader`), which picks the `/products` list thumbnail (`Item.Image`) — it skips
+`Type == "video"` entries because an `.mp4` can't render in the grid's `<img>`. The generator
+(`craft.d5y.xyz/prepare-images.sh`) also orders photos before videos so the first entry is normally a still.
+
 ### Customer language on orders
 
 `orders.lang` carries the customer's checkout language, populated from `req.Lang` on `POST /orders`. The customer

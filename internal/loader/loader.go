@@ -73,11 +73,19 @@ func joinProductImages(c *Catalog) {
 	}
 	for _, item := range c.ProductItems {
 		p, ok := byID[item.ID]
-		if !ok || len(p.Images) == 0 || p.Images[0].Preview == "" {
+		if !ok {
 			continue
 		}
-		preview := p.Images[0].Preview
-		item.Image = &preview
+		// Use the first image entry's preview as the list thumbnail, skipping video entries
+		// (their preview is an .mp4, which can't render in the grid's <img>).
+		for _, img := range p.Images {
+			if img.Type == "video" || img.Preview == "" {
+				continue
+			}
+			preview := img.Preview
+			item.Image = &preview
+			break
+		}
 	}
 }
 
