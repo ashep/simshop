@@ -48,13 +48,17 @@ required). File order matters: the first shop is the implicit default when no en
 `Config.Select(name)` returns the named shop or an error listing all configured names. `LoadConfig(path)` reads from
 disk; `DefaultConfigPath()` prefers `.yaml` over `.yml`. Shop precedence: `--shop` flag → `default: true` → first.
 
-Commands: `order list [--status csv]` (GET /orders), `order get <id>`, `order set-status <id> <status>` (PATCH
-/orders/{id}/status), `shops`. `order list` with no `--status` defaults to the **active** statuses
+Commands: `order list [--status csv]` (GET /orders), `order get <id>`, `order set-status <status> <id> [<id>...]`
+(PATCH /orders/{id}/status per id), `shops`. `order list` with no `--status` defaults to the **active** statuses
 (`resolveStatusFilter`/`activeStatuses` in `order.go`) — the full enum minus the terminal set `delivered, cancelled,
 returned, refunded` — sent as the server CSV filter; `--status all` (anywhere in the CSV) clears the filter to show
 everything; any other value list passes through verbatim. `order get` has **no single-record endpoint** — it fetches
-GET /orders and filters by id client-side. `set-status` validates `status` against the operator allow-list client-side for a fast error, but the
-**server stays authority** on legal transitions (409) and the tracking-iff-`shipped` rule (400).
+GET /orders and filters by id client-side. `set-status` takes the **status first, then one or more ids** and applies
+it to each in turn; it validates `status` against the operator allow-list client-side for a fast error (before any
+request), but the **server stays authority** on legal transitions (409) and the tracking-iff-`shipped` rule (400).
+Each id is processed independently — a per-id failure (resolution, transition, …) is reported and the rest still run;
+the command exits non-zero with `"N of M orders failed"` if any failed. `--json` emits an **array** of
+`setStatusResult` (`{id, status?, error?}`), one per id. `--tracking`/`--note` apply to every id in the batch.
 
 `order get` and `order set-status` accept a **short id** (any unique prefix of the UUID, e.g. the `id[:13]` shown by
 `order list`) alongside a full UUID. Resolution is in `resolve.go`: `matchOrder` does exact-then-unique-prefix

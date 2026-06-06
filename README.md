@@ -689,7 +689,7 @@ Override the config location with `--config <path>`.
 ```
 simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
                                                  order get    <id>
-                                                 order set-status <id> <status> [--tracking N] [--note TEXT]
+                                                 order set-status <status> <id> [<id>...] [--tracking N] [--note TEXT]
                                                  shops
 ```
 
@@ -697,9 +697,12 @@ simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
   `delivered`, `cancelled`, `returned`, and `refunded`. `--status paid,shipped` filters to the given statuses;
   `--status all` shows every order including terminal ones.
 - `order get <id>` — show one order's full record (attributes, history, invoices).
-- `order set-status <id> <status>` — change an order's status. `status` must be one of `processing`, `shipped`,
-  `delivered`, `cancelled`, `refund_requested`, `returned`, `refunded`. `--tracking` is required by the backend when
-  setting `shipped`; `--note` records an optional note in the order history.
+- `order set-status <status> <id> [<id>...]` — change the status of one or more orders. The status comes first,
+  followed by any number of order ids, e.g. `order set-status cancelled 019e9de8-c3c0 019e9dd7-0740`. `status` must be
+  one of `processing`, `shipped`, `delivered`, `cancelled`, `refund_requested`, `returned`, `refunded`. `--tracking`
+  is required by the backend when setting `shipped`; `--note` records an optional note in the order history; both
+  apply to every id. Each id is handled independently — a failure on one is reported and the rest still run, and the
+  command exits non-zero if any failed.
 
 `order get` and `order set-status` accept either a full order UUID or a **short id** — any unique prefix of it, such
 as the abbreviated id shown by `order list`. An ambiguous prefix (matching more than one order) is rejected with the
