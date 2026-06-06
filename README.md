@@ -687,13 +687,15 @@ Override the config location with `--config <path>`.
 **Commands:**
 
 ```
-simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b]
+simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
                                                  order get    <id>
                                                  order set-status <id> <status> [--tracking N] [--note TEXT]
                                                  shops
 ```
 
-- `order list` — list all orders, newest first. `--status paid,shipped` filters to the given statuses.
+- `order list` — list orders, newest first. By default only active orders are shown, hiding the terminal statuses
+  `delivered`, `cancelled`, `returned`, and `refunded`. `--status paid,shipped` filters to the given statuses;
+  `--status all` shows every order including terminal ones.
 - `order get <id>` — show one order's full record (attributes, history, invoices).
 - `order set-status <id> <status>` — change an order's status. `status` must be one of `processing`, `shipped`,
   `delivered`, `cancelled`, `refund_requested`, `returned`, `refunded`. `--tracking` is required by the backend when

@@ -49,8 +49,11 @@ required). File order matters: the first shop is the implicit default when no en
 disk; `DefaultConfigPath()` prefers `.yaml` over `.yml`. Shop precedence: `--shop` flag → `default: true` → first.
 
 Commands: `order list [--status csv]` (GET /orders), `order get <id>`, `order set-status <id> <status>` (PATCH
-/orders/{id}/status), `shops`. `order get` has **no single-record endpoint** — it fetches GET /orders and filters by
-id client-side. `set-status` validates `status` against the operator allow-list client-side for a fast error, but the
+/orders/{id}/status), `shops`. `order list` with no `--status` defaults to the **active** statuses
+(`resolveStatusFilter`/`activeStatuses` in `order.go`) — the full enum minus the terminal set `delivered, cancelled,
+returned, refunded` — sent as the server CSV filter; `--status all` (anywhere in the CSV) clears the filter to show
+everything; any other value list passes through verbatim. `order get` has **no single-record endpoint** — it fetches
+GET /orders and filters by id client-side. `set-status` validates `status` against the operator allow-list client-side for a fast error, but the
 **server stays authority** on legal transitions (409) and the tracking-iff-`shipped` rule (400). `shops` masks the
 api key as `<hidden>`, never printing it. Output: aligned `text/tabwriter` table by default; `--json` (persistent
 flag) emits raw JSON. Renderers use `_, _ = fmt.Fprintf(...)` blank-assignment to satisfy errcheck (as `main.go`
