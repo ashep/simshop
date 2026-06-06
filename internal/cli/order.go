@@ -8,6 +8,35 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// activeStatuses are the non-terminal order statuses shown by `order list` when
+// no --status filter is given. Terminal statuses (delivered, cancelled, returned,
+// refunded) are excluded; pass `--status all` to include them.
+var activeStatuses = []string{
+	"new",
+	"awaiting_payment",
+	"payment_processing",
+	"payment_hold",
+	"paid",
+	"processing",
+	"shipped",
+	"refund_requested",
+}
+
+// resolveStatusFilter maps the --status flag to the statuses sent to GET /orders:
+// empty defaults to the active set, "all" (anywhere in the list) clears the filter,
+// and any other value list passes through unchanged.
+func resolveStatusFilter(flag []string) []string {
+	if len(flag) == 0 {
+		return activeStatuses
+	}
+	for _, s := range flag {
+		if s == "all" {
+			return nil
+		}
+	}
+	return flag
+}
+
 // operatorStatuses are the statuses an operator may set via the API.
 var operatorStatuses = map[string]bool{
 	"processing":       true,
@@ -36,7 +65,7 @@ func newOrderListCmd(o *globalOpts) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			orders, err := cl.ListOrders(cmd.Context(), status)
+			orders, err := cl.ListOrders(cmd.Context(), resolveStatusFilter(status))
 			if err != nil {
 				return err
 			}
