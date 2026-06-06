@@ -25,8 +25,7 @@ func TestRenderOrders(main *testing.T) {
 
 		assert.Contains(t, out, "019e9de8-c3c0")
 		assert.NotContains(t, out, "019e9de8-c3c0-7000")
-		assert.Contains(t, out, "2026-06-06 17:08")
-		assert.NotContains(t, out, "17:08:33")
+		assert.Contains(t, out, "2026-06-06 17:08:33")
 		assert.Contains(t, out, "p1")
 		assert.Contains(t, out, "a@b.com")
 		assert.Contains(t, out, "10.50 USD")
@@ -41,11 +40,11 @@ func TestRenderOrders(main *testing.T) {
 }
 
 func TestFormatTime(main *testing.T) {
-	main.Run("reformats RFC3339 to short date-time", func(t *testing.T) {
-		assert.Equal(t, "2026-06-06 17:08", formatTime("2026-06-06T17:08:33Z"))
+	main.Run("reformats RFC3339 to date-time with seconds", func(t *testing.T) {
+		assert.Equal(t, "2026-06-06 17:08:33", formatTime("2026-06-06T17:08:33Z"))
 	})
-	main.Run("handles fractional seconds and offsets", func(t *testing.T) {
-		assert.Equal(t, "2026-06-06 17:08", formatTime("2026-06-06T17:08:33.123456+00:00"))
+	main.Run("drops microseconds, keeps seconds, handles offsets", func(t *testing.T) {
+		assert.Equal(t, "2026-06-06 17:08:33", formatTime("2026-06-06T17:08:33.123456+00:00"))
 	})
 	main.Run("passes through unparseable input", func(t *testing.T) {
 		assert.Equal(t, "not-a-time", formatTime("not-a-time"))
@@ -79,6 +78,25 @@ func TestRenderOrderDetail(main *testing.T) {
 		assert.Contains(t, out, "L")
 		assert.Contains(t, out, "DE")
 		assert.Contains(t, out, "20.00 EUR")
+	})
+
+	main.Run("formats timestamps to seconds without microseconds", func(t *testing.T) {
+		var buf bytes.Buffer
+		err := RenderOrderDetail(&buf, &Order{
+			ID: "o1", Status: "shipped", Currency: "usd",
+			CreatedAt: "2026-06-06T17:08:33.123456Z",
+			UpdatedAt: "2026-06-06T17:09:01.987654Z",
+			History: []OrderHistoryEntry{
+				{Status: "new", CreatedAt: "2026-06-06T17:08:33.123456Z"},
+			},
+		})
+		require.NoError(t, err)
+		out := buf.String()
+		assert.Contains(t, out, "2026-06-06 17:08:33")
+		assert.Contains(t, out, "2026-06-06 17:09:01")
+		assert.NotContains(t, out, ".123456")
+		assert.NotContains(t, out, ".987654")
+		assert.NotContains(t, out, "T17:08")
 	})
 }
 
