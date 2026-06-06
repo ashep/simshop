@@ -700,6 +700,10 @@ simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
 - `order set-status <id> <status>` — change an order's status. `status` must be one of `processing`, `shipped`,
   `delivered`, `cancelled`, `refund_requested`, `returned`, `refunded`. `--tracking` is required by the backend when
   setting `shipped`; `--note` records an optional note in the order history.
+
+`order get` and `order set-status` accept either a full order UUID or a **short id** — any unique prefix of it, such
+as the abbreviated id shown by `order list`. An ambiguous prefix (matching more than one order) is rejected with the
+list of candidates.
 - `shops` — list the shops configured in `~/.simshop.yaml`, marking the default. API keys are never printed.
 
 **Global flags:**
