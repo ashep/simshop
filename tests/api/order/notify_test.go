@@ -35,7 +35,7 @@ func writePaidTemplate(t *testing.T, dataDir string) {
 	dir := filepath.Join(dataDir, "emails", "paid")
 	require.NoError(t, os.MkdirAll(dir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "en.md"), []byte(paidTemplateEN), 0644))
-	for _, st := range []string{"shipped", "delivered", "refund_requested", "refunded"} {
+	for _, st := range []string{"processing", "shipped", "delivered", "refund_requested", "refunded"} {
 		sd := filepath.Join(dataDir, "emails", st)
 		require.NoError(t, os.MkdirAll(sd, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(sd, "en.md"),

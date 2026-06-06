@@ -12,7 +12,7 @@ import (
 
 func TestValidateEmailTemplates(main *testing.T) {
 	main.Run("AllStatusesPresent", func(t *testing.T) {
-		store := buildStore(t, []string{"paid", "shipped", "delivered", "refund_requested", "refunded"})
+		store := buildStore(t, []string{"paid", "processing", "shipped", "delivered", "refund_requested", "refunded"})
 		require.NoError(t, validateEmailTemplates(store))
 	})
 
@@ -26,6 +26,13 @@ func TestValidateEmailTemplates(main *testing.T) {
 		err := validateEmailTemplates(store)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "paid")
+	})
+
+	main.Run("MissingProcessingErrors", func(t *testing.T) {
+		store := buildStore(t, []string{"paid", "shipped", "delivered", "refund_requested", "refunded"})
+		err := validateEmailTemplates(store)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "processing")
 	})
 
 	main.Run("MissingEnglishErrors", func(t *testing.T) {
@@ -56,7 +63,7 @@ func buildStore(t *testing.T, statuses []string) *resend.TemplateStore {
 func makeDirOnlyUk(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, s := range []string{"paid", "shipped", "delivered", "refund_requested", "refunded"} {
+	for _, s := range []string{"paid", "processing", "shipped", "delivered", "refund_requested", "refunded"} {
 		sd := dir + "/" + s
 		require.NoError(t, os.MkdirAll(sd, 0755))
 		require.NoError(t, os.WriteFile(sd+"/uk.md", []byte("---\nsubject: x\n---\nbody"), 0644))

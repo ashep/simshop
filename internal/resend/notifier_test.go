@@ -139,7 +139,7 @@ func TestNotifier(main *testing.T) {
 		assert.Equal(t, "https://shop.example/order?id=018f4e3a-0000-7000-8000-000000000099", d.OrderURL)
 	})
 
-	for _, st := range []string{"new", "awaiting_payment", "payment_processing", "payment_hold", "cancelled", "processing", "returned"} {
+	for _, st := range []string{"new", "awaiting_payment", "payment_processing", "payment_hold", "cancelled", "returned"} {
 		main.Run("Skips_"+st, func(t *testing.T) {
 			send := &fakeSender{}
 			rd := &fakeReader{rec: sampleRecord()}
@@ -153,8 +153,8 @@ func TestNotifier(main *testing.T) {
 		})
 	}
 
-	main.Run("DispatchesShippedDeliveredRefundRequestedRefunded", func(t *testing.T) {
-		for _, st := range []string{"shipped", "delivered", "refund_requested", "refunded"} {
+	main.Run("DispatchesProcessingShippedDeliveredRefundRequestedRefunded", func(t *testing.T) {
+		for _, st := range []string{"processing", "shipped", "delivered", "refund_requested", "refunded"} {
 			t.Run(st, func(t *testing.T) {
 				send := &fakeSender{}
 				rd := &fakeReader{rec: sampleRecord()}
