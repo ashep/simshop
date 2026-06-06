@@ -26,13 +26,14 @@ func shortID(id string) string {
 	return id
 }
 
-// formatTime reformats an RFC3339 timestamp to "2006-01-02 15:04"; unparseable input passes through.
+// formatTime reformats an RFC3339 timestamp to "2006-01-02 15:04:05" (dropping any
+// fractional seconds); unparseable input passes through.
 func formatTime(s string) string {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
 		return s
 	}
-	return t.Format("2006-01-02 15:04")
+	return t.Format("2006-01-02 15:04:05")
 }
 
 // RenderOrders writes orders as an aligned table.
@@ -64,8 +65,8 @@ func RenderOrderDetail(w io.Writer, o *Order) error {
 	if o.TrackingNumber != nil && *o.TrackingNumber != "" {
 		p("Tracking", *o.TrackingNumber)
 	}
-	p("Created", o.CreatedAt)
-	p("Updated", o.UpdatedAt)
+	p("Created", formatTime(o.CreatedAt))
+	p("Updated", formatTime(o.UpdatedAt))
 	if err := tw.Flush(); err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func RenderOrderDetail(w io.Writer, o *Order) error {
 	if len(o.History) > 0 {
 		_, _ = fmt.Fprintln(w, "History:")
 		for _, h := range o.History {
-			_, _ = fmt.Fprintf(w, "  - %s  %s\n", h.CreatedAt, h.Status)
+			_, _ = fmt.Fprintf(w, "  - %s  %s\n", formatTime(h.CreatedAt), h.Status)
 		}
 	}
 	return nil
