@@ -13,7 +13,7 @@ import (
 // notifyStatuses; duplicating here avoids importing internal state and gives
 // the validator a single source of "what we promise the customer."
 var notifyStatuses = []string{
-	"paid", "shipped", "delivered", "refund_requested", "refunded",
+	"paid", "processing", "shipped", "delivered", "refund_requested", "refunded",
 }
 
 // validateEmailTemplates fails if `en.md` is missing for any of the

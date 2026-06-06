@@ -235,8 +235,10 @@ optional lines.
 `https://api.resend.com`); tests inject. Body capped 1 MB. `*APIError` on non-2xx; `RetryAfter` non-zero only on 429
 with `Retry-After` header. Transport errors wrapped plain.
 
-`Notifier` implements `order.Notifier`. Status filter atop `handle()`: only `paid`, `shipped`, `delivered`,
-`refund_requested`, `refunded` dispatch; anything else silently dropped before any DB read or template lookup.
+`Notifier` implements `order.Notifier`. Status filter atop `handle()`: only `paid`, `processing`, `shipped`,
+`delivered`, `refund_requested`, `refunded` dispatch; anything else silently dropped before any DB read or template
+lookup. `internal/app/email_validate.go` keeps a parallel `notifyStatuses` slice (same set) for the startup `en.md`
+check — edit both together.
 `NewNotifier(client, from, orderURL, reader, products, shop, templates, log)` returns stopped; `Start()`/`Stop()` as
 above. Non-blocking drop on full buffer (256)/closed channel. Retry mirrors Telegram (≤3; 4xx≠429 permanent; 429 →
 clamped `[1s,30s]`; else `backoffSchedule[attempt-1]` 1s,2s).

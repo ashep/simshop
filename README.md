@@ -606,8 +606,9 @@ update via `getUpdates`.
 ### Customer email notifications (Resend)
 
 Optional. When configured, the service sends a transactional email to the customer's address whenever their order
-transitions to `paid`, `shipped`, `delivered`, `refund_requested`, or `refunded`. Useful for confirming payment,
-tracking shipping, and acknowledging refund flows without standing up a separate notification system.
+transitions to `paid`, `processing`, `shipped`, `delivered`, `refund_requested`, or `refunded`. Useful for confirming
+payment, signalling that the order is being prepared, tracking shipping, and acknowledging refund flows without
+standing up a separate notification system.
 
 ```yaml
 resend:
@@ -646,7 +647,8 @@ Available template variables: `.OrderID` (full UUID), `.OrderShortID` (first 13 
 `emails/{status}/{lang}.md`. If a language file is missing, the notifier falls back to `emails/{status}/en.md`.
 
 **Required at startup.** When `resend.api_key` is set, `emails/{status}/en.md` must exist for every notify-on
-status (`paid`, `shipped`, `delivered`, `refund_requested`, `refunded`). The service refuses to start otherwise.
+status (`paid`, `processing`, `shipped`, `delivered`, `refund_requested`, `refunded`). The service refuses to start
+otherwise.
 
 **Failure handling.** Best-effort, like the Telegram notifier: events queue in a 256-event in-memory buffer drained
 by a single background worker. Transient failures (5xx, 429) retry up to three times with 1s/2s backoff (or honor

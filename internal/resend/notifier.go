@@ -34,6 +34,7 @@ var backoffSchedule = []time.Duration{1 * time.Second, 2 * time.Second}
 // customer.
 var notifyStatuses = map[string]bool{
 	"paid":             true,
+	"processing":       true,
 	"shipped":          true,
 	"delivered":        true,
 	"refund_requested": true,
