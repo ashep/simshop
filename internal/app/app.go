@@ -166,6 +166,7 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
 	srv.HandleFunc("OPTIONS /products/{id}/{lang}", corsMw(nop))
 	srv.HandleFunc("GET /products/{id}/{lang}", corsMw(openapiMw(hdl.ServeProductContent)))
+	srv.HandleFunc("GET /product", hdl.ServeProductPreview)
 	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
 	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
 

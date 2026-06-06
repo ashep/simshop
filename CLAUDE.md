@@ -395,6 +395,24 @@ the spec for documentation. Missing → 404.
 
 Returns `shop.yaml` content (`*shop.Shop`) as JSON.
 
+### `GET /product` (singular — social crawler preview)
+
+`ServeProductPreview` returns a server-rendered HTML page for social crawlers sharing a product URL. Registered in
+`internal/app/app.go` **without** `openapiMw` and **without** `corsMw` (HTML, server-to-server); **not** listed in
+`api/root.yaml`. Reads `{data_dir}/products/{id}/product.yaml` directly. Language is resolved in priority order:
+`?lang=` query param → alphabetically-first key in `shop.Name` (shop default) → first key in the product's `Name`
+map. Markdown is stripped from the description for `<meta name="description">` / `og:description` (truncated to
+~200 runes). The first non-video image is used for `og:image`. Renders Open Graph + Twitter (`summary_large_image`)
+tags, a `<link rel="canonical">`, and a `<meta http-equiv="refresh">` (bounces stray human visitors to the SPA) via
+`html/template`. **Never returns non-200 to a crawler**: invalid or unknown product ID falls back to shop-level
+tags.
+
+`shopOrigin()` derives the absolute shop origin for `og:url` and `canonical` from `h.redirectURL` (the Monobank
+redirect URL, `<shop-origin>/order/status`) — scheme+host only. Falls back to `publicURL` with any `/api` suffix
+stripped. `og:image` uses `publicURL` directly (the API origin). This two-source derivation makes `og:url` correct
+in both same-origin production deployments (API under `/api`) and split-host staging configs (API on a separate
+subdomain).
+
 ### `POST /orders`, `GET /orders`
 
 `CreateOrder` validates the request, resolves product/price, then runs a **two-phase committed flow**:
