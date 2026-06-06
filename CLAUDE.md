@@ -54,7 +54,14 @@ Commands: `order list [--status csv]` (GET /orders), `order get <id>`, `order se
 returned, refunded` — sent as the server CSV filter; `--status all` (anywhere in the CSV) clears the filter to show
 everything; any other value list passes through verbatim. `order get` has **no single-record endpoint** — it fetches
 GET /orders and filters by id client-side. `set-status` validates `status` against the operator allow-list client-side for a fast error, but the
-**server stays authority** on legal transitions (409) and the tracking-iff-`shipped` rule (400). `shops` masks the
+**server stays authority** on legal transitions (409) and the tracking-iff-`shipped` rule (400).
+
+`order get` and `order set-status` accept a **short id** (any unique prefix of the UUID, e.g. the `id[:13]` shown by
+`order list`) alongside a full UUID. Resolution is in `resolve.go`: `matchOrder` does exact-then-unique-prefix
+matching (case-insensitive) over the order list — no match → "not found", >1 → "ambiguous" listing candidates.
+`get` matches against the list it already fetches; `set-status` calls `Client.ResolveOrderID` first, which
+short-circuits a full UUID (`isFullUUID`, canonical 8-4-4-4-12) **without** a list fetch and otherwise resolves the
+prefix to the full id before the server PATCH (server's `format: uuid` would reject a short id). `shops` masks the
 api key as `<hidden>`, never printing it. Output: aligned `text/tabwriter` table by default; `--json` (persistent
 flag) emits raw JSON. Renderers use `_, _ = fmt.Fprintf(...)` blank-assignment to satisfy errcheck (as `main.go`
 does). Money renders via `formatPrice` (integer minor units → `"19.99 USD"`, negative-safe).

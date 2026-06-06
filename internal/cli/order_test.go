@@ -70,3 +70,30 @@ func TestOrderListStatusWiring(main *testing.T) {
 		assert.Equal(t, "processing,shipped", run(t, "--status", "processing,shipped"))
 	})
 }
+
+func TestOrderSetStatusShortID(main *testing.T) {
+	main.Run("resolves a short id to the full id before patching", func(t *testing.T) {
+		const fullID = "019e9df0-1111-7000-8000-000000000003"
+		var patchedPath string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				_, _ = w.Write([]byte(`[{"id":"019e9de8-c3c0-7000-8000-000000000001"},{"id":"` + fullID + `"}]`))
+			case http.MethodPatch:
+				patchedPath = r.URL.Path
+				_, _ = w.Write([]byte(`{"status":"shipped"}`))
+			}
+		}))
+		t.Cleanup(srv.Close)
+
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		require.NoError(t, os.WriteFile(cfgPath,
+			[]byte("s1:\n  url: "+srv.URL+"\n  api_key: k1\n"), 0o600))
+
+		root := NewRootCmd()
+		root.SetArgs([]string{"--config", cfgPath, "order", "set-status", "019e9df0", "shipped", "--tracking", "TRK1"})
+		require.NoError(t, root.Execute())
+		assert.Equal(t, "/orders/"+fullID+"/status", patchedPath)
+	})
+}

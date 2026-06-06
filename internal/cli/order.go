@@ -116,6 +116,10 @@ func newOrderSetStatusCmd(o *globalOpts) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			id, err = cl.ResolveOrderID(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
 			newStatus, err := cl.SetStatus(cmd.Context(), id, status, tracking, note)
 			if err != nil {
 				return err

@@ -105,18 +105,14 @@ func (c *Client) ListOrders(ctx context.Context, statuses []string) ([]Order, er
 	return orders, nil
 }
 
-// GetOrder returns a single order by id (filters the list; no single-record endpoint exists).
+// GetOrder returns a single order by id (filters the list; no single-record endpoint
+// exists). The id may be a full UUID or any unique short prefix.
 func (c *Client) GetOrder(ctx context.Context, id string) (*Order, error) {
 	orders, err := c.ListOrders(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	for i := range orders {
-		if orders[i].ID == id {
-			return &orders[i], nil
-		}
-	}
-	return nil, fmt.Errorf("order %q not found", id)
+	return matchOrder(orders, id)
 }
 
 // SetStatus updates an order's status and returns the resulting status.
