@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,21 +10,26 @@ import (
 )
 
 func TestRenderOrders(main *testing.T) {
-	main.Run("renders header, id, total, uppercased country", func(t *testing.T) {
+	main.Run("renders columns in order with short id and time", func(t *testing.T) {
 		var buf bytes.Buffer
 		err := RenderOrders(&buf, []Order{{
-			ID: "o1", Status: "paid", CreatedAt: "2026-06-06T10:00:00Z",
+			ID: "019e9de8-c3c0-7000-8000-000000000001", Status: "paid", CreatedAt: "2026-06-06T17:08:33Z",
 			Country: "us", Email: "a@b.com", Price: 1050, Currency: "usd", ProductID: "p1",
 		}})
 		require.NoError(t, err)
 		out := buf.String()
-		for _, h := range []string{"ID", "STATUS", "CREATED", "COUNTRY", "EMAIL", "TOTAL", "PRODUCT"} {
-			assert.Contains(t, out, h)
-		}
-		assert.Contains(t, out, "o1")
-		assert.Contains(t, out, "10.50 USD")
-		assert.Contains(t, out, "US")
+
+		header := strings.SplitN(out, "\n", 2)[0]
+		assert.Equal(t, []string{"ID", "STATUS", "CREATED", "PRODUCT", "EMAIL", "TOTAL"}, strings.Fields(header))
+		assert.NotContains(t, out, "COUNTRY")
+
+		assert.Contains(t, out, "019e9de8-c3c0")
+		assert.NotContains(t, out, "019e9de8-c3c0-7000")
+		assert.Contains(t, out, "2026-06-06 17:08")
+		assert.NotContains(t, out, "17:08:33")
 		assert.Contains(t, out, "p1")
+		assert.Contains(t, out, "a@b.com")
+		assert.Contains(t, out, "10.50 USD")
 	})
 
 	main.Run("renders negative total without malformed fraction", func(t *testing.T) {
@@ -31,6 +37,28 @@ func TestRenderOrders(main *testing.T) {
 		err := RenderOrders(&buf, []Order{{ID: "r1", Status: "refunded", Price: -150, Currency: "usd"}})
 		require.NoError(t, err)
 		assert.Contains(t, buf.String(), "-1.50 USD")
+	})
+}
+
+func TestFormatTime(main *testing.T) {
+	main.Run("reformats RFC3339 to short date-time", func(t *testing.T) {
+		assert.Equal(t, "2026-06-06 17:08", formatTime("2026-06-06T17:08:33Z"))
+	})
+	main.Run("handles fractional seconds and offsets", func(t *testing.T) {
+		assert.Equal(t, "2026-06-06 17:08", formatTime("2026-06-06T17:08:33.123456+00:00"))
+	})
+	main.Run("passes through unparseable input", func(t *testing.T) {
+		assert.Equal(t, "not-a-time", formatTime("not-a-time"))
+		assert.Equal(t, "", formatTime(""))
+	})
+}
+
+func TestShortID(main *testing.T) {
+	main.Run("keeps the first two uuid groups", func(t *testing.T) {
+		assert.Equal(t, "019e9de8-c3c0", shortID("019e9de8-c3c0-7000-8000-000000000001"))
+	})
+	main.Run("leaves short ids intact", func(t *testing.T) {
+		assert.Equal(t, "o1", shortID("o1"))
 	})
 }
 
