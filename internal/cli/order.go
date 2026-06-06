@@ -101,14 +101,21 @@ func newOrderGetCmd(o *globalOpts) *cobra.Command {
 	}
 }
 
+// setStatusResult is one order's outcome from `order set-status`.
+type setStatusResult struct {
+	ID     string `json:"id"`
+	Status string `json:"status,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 func newOrderSetStatusCmd(o *globalOpts) *cobra.Command {
 	var tracking, note string
 	cmd := &cobra.Command{
-		Use:   "set-status <id> <status>",
-		Short: "Change an order's status",
-		Args:  cobra.ExactArgs(2),
+		Use:   "set-status <status> <id> [<id>...]",
+		Short: "Change the status of one or more orders",
+		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, status := args[0], args[1]
+			status, ids := args[0], args[1:]
 			if !operatorStatuses[status] {
 				return fmt.Errorf("invalid status %q; allowed: %s", status, allowedStatusList())
 			}
@@ -116,18 +123,39 @@ func newOrderSetStatusCmd(o *globalOpts) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			id, err = cl.ResolveOrderID(cmd.Context(), id)
-			if err != nil {
-				return err
+
+			results := make([]setStatusResult, 0, len(ids))
+			failed := 0
+			for _, raw := range ids {
+				id, err := cl.ResolveOrderID(cmd.Context(), raw)
+				if err == nil {
+					var newStatus string
+					newStatus, err = cl.SetStatus(cmd.Context(), id, status, tracking, note)
+					if err == nil {
+						results = append(results, setStatusResult{ID: id, Status: newStatus})
+						if !*o.jsonOut {
+							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "order %s status: %s\n", id, newStatus)
+						}
+						continue
+					}
+				} else {
+					id = raw // resolution failed; report the id the user typed
+				}
+				failed++
+				results = append(results, setStatusResult{ID: id, Error: err.Error()})
+				if !*o.jsonOut {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "order %s failed: %v\n", id, err)
+				}
 			}
-			newStatus, err := cl.SetStatus(cmd.Context(), id, status, tracking, note)
-			if err != nil {
-				return err
-			}
+
 			if *o.jsonOut {
-				return RenderJSON(cmd.OutOrStdout(), map[string]string{"id": id, "status": newStatus})
+				if err := RenderJSON(cmd.OutOrStdout(), results); err != nil {
+					return err
+				}
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "order %s status: %s\n", id, newStatus)
+			if failed > 0 {
+				return fmt.Errorf("%d of %d orders failed", failed, len(ids))
+			}
 			return nil
 		},
 	}
