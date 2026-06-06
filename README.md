@@ -652,3 +652,56 @@ status (`paid`, `shipped`, `delivered`, `refund_requested`, `refunded`). The ser
 by a single background worker. Transient failures (5xx, 429) retry up to three times with 1s/2s backoff (or honor
 `Retry-After` clamped to `[1s, 30s]`). Permanent errors (4xx other than 429) and buffer-full conditions log and
 drop the event. In-flight events are discarded after a 5s graceful drain at process exit.
+
+## CLI
+
+`simshop` is a command-line client for operators, talking to a running backend over its HTTP API. It is a separate
+binary from the server.
+
+**Install:**
+
+```bash
+go install github.com/ashep/simshop/cmd/simshop@latest
+```
+
+**Configuration.** The CLI reads `~/.simshop.yaml` (or `~/.simshop.yml`), a mapping of shop name to connection
+settings:
+
+```yaml
+my-shop-1:
+  url: https://api.shop1.example
+  api_key: foobar
+  default: true
+my-shop-2:
+  url: https://api.shop2.example
+  api_key: barbaz
+```
+
+- `url` — base URL of that shop's backend. **Required.**
+- `api_key` — operator bearer token (matches the backend's `server.api_key`). **Required.**
+- `default` — optional. Marks the shop used when `--shop` is omitted. At most one shop may set it. When no shop sets
+  `default`, the **first shop in file order** is the default.
+
+Override the config location with `--config <path>`.
+
+**Commands:**
+
+```
+simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b]
+                                                 order get    <id>
+                                                 order set-status <id> <status> [--tracking N] [--note TEXT]
+                                                 shops
+```
+
+- `order list` — list all orders, newest first. `--status paid,shipped` filters to the given statuses.
+- `order get <id>` — show one order's full record (attributes, history, invoices).
+- `order set-status <id> <status>` — change an order's status. `status` must be one of `processing`, `shipped`,
+  `delivered`, `cancelled`, `refund_requested`, `returned`, `refunded`. `--tracking` is required by the backend when
+  setting `shipped`; `--note` records an optional note in the order history.
+- `shops` — list the shops configured in `~/.simshop.yaml`, marking the default. API keys are never printed.
+
+**Global flags:**
+
+- `--shop NAME` — select a shop from the config (default: the configured default shop).
+- `--config PATH` — config file path (default: `~/.simshop.yaml`).
+- `--json` — emit raw JSON instead of a table, for scripting and piping.
