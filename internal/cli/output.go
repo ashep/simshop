@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"time"
 )
 
 // formatPrice renders integer minor units as a decimal amount with uppercased currency.
@@ -17,14 +18,31 @@ func formatPrice(minor int, currency string) string {
 	return fmt.Sprintf("%d.%02d %s", minor/100, frac, strings.ToUpper(currency))
 }
 
+// shortID returns the first two UUID groups of an order id (e.g. "019e9de8-c3c0").
+func shortID(id string) string {
+	if len(id) > 13 {
+		return id[:13]
+	}
+	return id
+}
+
+// formatTime reformats an RFC3339 timestamp to "2006-01-02 15:04"; unparseable input passes through.
+func formatTime(s string) string {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return s
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
 // RenderOrders writes orders as an aligned table.
 func RenderOrders(w io.Writer, orders []Order) error {
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "ID\tSTATUS\tCREATED\tCOUNTRY\tEMAIL\tTOTAL\tPRODUCT")
+	_, _ = fmt.Fprintln(tw, "ID\tSTATUS\tCREATED\tPRODUCT\tEMAIL\tTOTAL")
 	for _, o := range orders {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			o.ID, o.Status, o.CreatedAt, strings.ToUpper(o.Country), o.Email,
-			formatPrice(o.Price, o.Currency), o.ProductID)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			shortID(o.ID), o.Status, formatTime(o.CreatedAt), o.ProductID, o.Email,
+			formatPrice(o.Price, o.Currency))
 	}
 	return tw.Flush()
 }
