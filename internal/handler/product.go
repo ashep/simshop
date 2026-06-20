@@ -121,6 +121,23 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Categories live in the products.yaml listing (product.Item), not in the
+	// per-product product.yaml, so cross-reference them by id. h.prod is always
+	// wired in production; guard for tests that omit it. A product without a
+	// listing entry simply has no categories.
+	if h.prod != nil {
+		if items, err := h.prod.List(r.Context()); err != nil {
+			h.l.Warn().Err(err).Msg("failed to load product listing for categories")
+		} else {
+			for _, item := range items {
+				if item.ID == id {
+					detail.Categories = item.Categories
+					break
+				}
+			}
+		}
+	}
+
 	if err := h.resp.Write(w, r, http.StatusOK, detail); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}

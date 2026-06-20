@@ -331,14 +331,18 @@ filename exists under `{productDir}/images/`.
 
 ### `GET /products`, `GET /products/{id}/{lang}`
 
-`ListProducts` returns `products/products.yaml` as `[{id, title, description, image?}]`; `image` = first preview URL
-of the matching `product.yaml`, omitted when nil; missing file → `[]`. `product.NewService` normalises nil → `[]*Item{}`
-(OpenAPI validator needs it).
+`ListProducts` returns `products/products.yaml` as `[{id, categories?, title, description, image?}]`; `categories` is
+the `Item`'s raw list of category ids (omitted when empty); `image` = first preview URL of the matching `product.yaml`,
+omitted when nil; missing file → `[]`. `product.NewService` normalises nil → `[]*Item{}` (OpenAPI validator needs it).
 
 `ServeProductContent` reads `{data_dir}/products/{id}/product.yaml` directly → lang-filtered `ProductDetail`. `id`/
 `lang` validated by `if v != filepath.Base(v) || v == "" || v == "."`. Missing dir/file → 404; missing lang key → 404.
 Price: `h.geo.Detect(r)` → country → `p.Prices[country]` with `p.Prices["default"]` fallback. `ProductDetail.Prices`
 is a single `PriceItem`, not a map.
+
+**Categories live only in the listing.** `product.yaml` has no `categories`; `ServeProductContent` cross-references
+them onto `ProductDetail.Categories` by matching `id` against `h.prod.List()` (the `products.yaml` items). Guarded by
+`if h.prod != nil` (always wired in prod; tests may omit it); a product with no listing entry gets no categories.
 
 **Price field naming gotcha:** YAML key `prices:`, Go field `Product.Prices`, but the resolved single-country price
 serialises as `"price"` (`ProductDetail.Prices` has `json:"price"`). Intentional mismatch.

@@ -336,6 +336,9 @@ pages:
 		makeProductsFile(t, dataDir, `
 products:
   - id: widget
+    categories:
+      - clocks
+      - organizers
     title:
       en: Widget
       uk: Widget
@@ -350,6 +353,7 @@ products:
 		assert.Equal(t, "widget", cat.ProductItems[0].ID)
 		assert.Equal(t, "Widget", cat.ProductItems[0].Title["en"])
 		assert.Equal(t, "A test product", cat.ProductItems[0].Description["en"])
+		assert.Equal(t, []string{"clocks", "organizers"}, cat.ProductItems[0].Categories)
 	})
 
 	main.Run("MissingShopYAML_Fatal", func(t *testing.T) {

@@ -117,8 +117,11 @@ shop:
 ### Product listing
 
 The product listing served by `GET /products` comes from `{data_dir}/products/products.yaml`. This is a flat YAML
-file containing lightweight product entries: an `id`, a multilingual `title`, and a multilingual `description`. A
-missing `products.yaml` results in an empty list — it is not an error.
+file containing lightweight product entries: an `id`, an optional list of `categories`, a multilingual `title`, and a
+multilingual `description`. A missing `products.yaml` results in an empty list — it is not an error.
+
+Each entry's optional `categories` is a list of category ids referencing the `id`s of the `categories` list in
+`shop.yaml`. It is returned as-is in the listing response and omitted when empty.
 
 Each entry in the listing response also includes an optional `image` field — the URL path of the first preview image
 from the product's `product.yaml` (e.g. `/images/oak-shelf/thumb.png`). The field is omitted when the product has no
@@ -129,6 +132,8 @@ Example `products.yaml`:
 ```yaml
 products:
   - id: oak-shelf
+    categories:
+      - organizers
     title:
       en: Oak Shelf
       uk: Дубова полиця
@@ -145,6 +150,10 @@ validated at startup to enforce data integrity. Subdirectories without a `produc
 `GET /products/{id}/{lang}` reads this file, collapses all multilingual maps to the requested language, resolves the
 price for the caller's country, and returns a JSON `ProductDetail` object. Returns 404 if the product or language is
 not found.
+
+The detail response also includes the product's `categories`, cross-referenced from the matching entry in
+`products.yaml` (the categories live in the listing, not in `product.yaml`). The field is omitted when the product has
+no listing entry or no categories.
 
 Fields in `product.yaml`:
 
@@ -263,7 +272,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | Method   | Path                               | Description                                           |
 |----------|------------------------------------|-------------------------------------------------------|
 | `GET`    | `/shop`                            | Get shop metadata (name, title, description, categories) |
-| `GET`    | `/products`                        | List all products (id, title, description, image)     |
+| `GET`    | `/products`                        | List all products (id, categories, title, description, image) |
 | `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
 | `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
 | `GET`    | `/pages`                           | List all pages (id, title)                            |
