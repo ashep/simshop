@@ -10,6 +10,15 @@ type Country struct {
 	Flag      string            `json:"flag,omitempty"       yaml:"flag"`
 }
 
+// Category describes one product category from shop.yaml: a stable id plus the
+// human-readable title per language. In YAML the language keys sit flat
+// alongside id (`{id: clocks, en: Clocks, uk: Годинники}`) and are collected
+// into Title via the inline map.
+type Category struct {
+	ID    string            `json:"id"              yaml:"id"`
+	Title map[string]string `json:"title,omitempty" yaml:",inline"`
+}
+
 // Shop holds the store metadata loaded from shop.yaml. Countries is the
 // authoritative allow-list of countries from which orders may be created
 // (keyed by lowercase ISO alpha-2 code).
@@ -18,4 +27,5 @@ type Shop struct {
 	Name        map[string]string   `json:"name,omitempty"        yaml:"name"`
 	Title       map[string]string   `json:"title,omitempty"       yaml:"title"`
 	Description map[string]string   `json:"description,omitempty" yaml:"description"`
+	Categories  []*Category         `json:"categories,omitempty"  yaml:"categories"`
 }

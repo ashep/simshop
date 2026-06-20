@@ -58,7 +58,8 @@ referenced by filename in `product.yaml`.
 ### Shop
 
 Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing the
-allowed-countries map and multilingual maps for `name`, `title`, and `description`.
+allowed-countries map, multilingual maps for `name`, `title`, and `description`, and an optional ordered list of
+product `categories`.
 
 `shop.yaml` is **required** at startup. The application fails to start if it is missing or if `countries` is empty.
 The `countries` map is keyed by lowercase ISO alpha-2 country code; each entry carries a per-language `name`,
@@ -67,7 +68,10 @@ per-language `currency` symbol/code, an international `phone_code` (e.g. `"+380"
 orders may be created — any order whose `country` field is not a key of this map is rejected with HTTP 400
 `invalid country`.
 
-`GET /shop` returns the shop object as JSON, including the full `countries` map.
+The optional `categories` list is an ordered set of product categories. Each entry has a stable `id` and a
+per-language title; in YAML the language keys sit flat alongside `id`, and the API nests them under a `title` object.
+
+`GET /shop` returns the shop object as JSON, including the full `countries` map and the `categories` list.
 
 Example `shop.yaml`:
 
@@ -101,6 +105,13 @@ shop:
   description:
     en: Designed and made by hand.
     uk: Спроєктовано та виготовлено вручну.
+  categories:
+    - id: clocks
+      en: Clocks
+      uk: Годинники
+    - id: organizers
+      en: Organizers
+      uk: Органайзери
 ```
 
 ### Product listing
@@ -251,7 +262,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 
 | Method   | Path                               | Description                                           |
 |----------|------------------------------------|-------------------------------------------------------|
-| `GET`    | `/shop`                            | Get shop metadata (name, title, description)          |
+| `GET`    | `/shop`                            | Get shop metadata (name, title, description, categories) |
 | `GET`    | `/products`                        | List all products (id, title, description, image)     |
 | `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
 | `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |

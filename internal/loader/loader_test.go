@@ -382,6 +382,13 @@ shop:
   description:
     en: Designed and made by hand
     uk: Спроєктовано та виготовлено вручну
+  categories:
+    - id: clocks
+      en: Clocks
+      uk: Годинники
+    - id: organizers
+      en: Organizers
+      uk: Органайзери
 `)
 
 		cat, err := loader.Load(dataDir)
@@ -399,6 +406,13 @@ shop:
 		assert.Equal(t, "D5Y Design", cat.Shop.Name["uk"])
 		assert.Equal(t, "Crafted Interior Objects", cat.Shop.Title["en"])
 		assert.Equal(t, "Designed and made by hand", cat.Shop.Description["en"])
+		require.Len(t, cat.Shop.Categories, 2)
+		assert.Equal(t, "clocks", cat.Shop.Categories[0].ID)
+		assert.Equal(t, "Clocks", cat.Shop.Categories[0].Title["en"])
+		assert.Equal(t, "Годинники", cat.Shop.Categories[0].Title["uk"])
+		assert.Equal(t, "organizers", cat.Shop.Categories[1].ID)
+		assert.Equal(t, "Organizers", cat.Shop.Categories[1].Title["en"])
+		assert.Equal(t, "Органайзери", cat.Shop.Categories[1].Title["uk"])
 	})
 
 	main.Run("MalformedShopYAML", func(t *testing.T) {

@@ -46,6 +46,9 @@ func TestServeShop(main *testing.T) {
 			Name:        map[string]string{"en": "My Shop", "uk": "Мій магазин"},
 			Title:       map[string]string{"en": "Best Shop", "uk": "Найкращий магазин"},
 			Description: map[string]string{"en": "We sell things", "uk": "Ми продаємо речі"},
+			Categories: []*shop.Category{
+				{ID: "clocks", Title: map[string]string{"en": "Clocks", "uk": "Годинники"}},
+			},
 		}, nil)
 
 		w := doRequest(t, shopSvc)
@@ -63,6 +66,16 @@ func TestServeShop(main *testing.T) {
 		description, ok := body["description"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "We sell things", description["en"])
+		categories, ok := body["categories"].([]any)
+		require.True(t, ok)
+		require.Len(t, categories, 1)
+		cat, ok := categories[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "clocks", cat["id"])
+		catTitle, ok := cat["title"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Clocks", catTitle["en"])
+		assert.Equal(t, "Годинники", catTitle["uk"])
 	})
 
 	main.Run("EmptyShopYieldsEmptyObject", func(t *testing.T) {
