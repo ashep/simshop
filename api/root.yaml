@@ -457,6 +457,10 @@ components:
       properties:
         id:
           type: string
+        categories:
+          type: array
+          items:
+            type: string
         name:
           type: string
         description:
@@ -509,6 +513,10 @@ components:
       properties:
         id:
           type: string
+        categories:
+          type: array
+          items:
+            type: string
         title:
           type: object
           additionalProperties:

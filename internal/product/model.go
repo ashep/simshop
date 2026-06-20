@@ -45,6 +45,7 @@ type Product struct {
 // ProductDetail holds the lang-filtered product data returned by GET /products/{id}/{lang}.
 type ProductDetail struct {
 	ID              string                        `json:"id"`
+	Categories      []string                      `json:"categories,omitempty"`
 	Name            string                        `json:"name"`
 	Description     string                        `json:"description"`
 	Specs           map[string]SpecItem           `json:"specs,omitempty"`
@@ -58,8 +59,9 @@ type ProductDetail struct {
 
 // Item holds the lightweight product metadata loaded from products.yaml.
 type Item struct {
-	ID          string            `json:"id"          yaml:"id"`
-	Title       map[string]string `json:"title"       yaml:"title"`
-	Description map[string]string `json:"description" yaml:"description"`
-	Image       *string           `json:"image,omitempty" yaml:"-"`
+	ID          string            `json:"id"                   yaml:"id"`
+	Categories  []string          `json:"categories,omitempty" yaml:"categories"`
+	Title       map[string]string `json:"title"                yaml:"title"`
+	Description map[string]string `json:"description"          yaml:"description"`
+	Image       *string           `json:"image,omitempty"      yaml:"-"`
 }

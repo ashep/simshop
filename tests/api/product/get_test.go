@@ -17,6 +17,9 @@ import (
 const testProductsYAML = `
 products:
   - id: widget
+    categories:
+      - clocks
+      - organizers
     title:
       en: Widget
       uk: Віджет
@@ -159,6 +162,9 @@ func TestListProducts(main *testing.T) {
 		description, ok := body[0]["description"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "A test product", description["en"])
+		categories, ok := body[0]["categories"].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"clocks", "organizers"}, categories)
 	})
 
 	main.Run("EmptyListWhenNoProductsYAML", func(t *testing.T) {
@@ -199,6 +205,9 @@ func TestListProducts(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "USD", price["currency"])
 		assert.Equal(t, 49.99, price["value"])
+		categories, ok := body["categories"].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"clocks", "organizers"}, categories)
 	})
 
 	main.Run("GetReturnsCorrectLanguage", func(t *testing.T) {

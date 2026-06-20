@@ -78,6 +78,29 @@ func TestListProducts(main *testing.T) {
 		assert.Nil(t, body[0]["image"])
 	})
 
+	main.Run("WithCategories", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{
+				ID:          "widget",
+				Title:       map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A test product"},
+				Categories:  []string{"clocks", "organizers"},
+			},
+		}, nil)
+
+		w := doRequest(t, prodSvc)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body, 1)
+		categories, ok := body[0]["categories"].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+	})
+
 	main.Run("WithProductsWithImage", func(t *testing.T) {
 		imageURL := "/images/widget/thumb.png"
 		prodSvc := &productServiceMock{}
@@ -333,6 +356,48 @@ func TestServeProductContent(main *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		assert.Equal(t, "Віджет", body["name"])
 		assert.Equal(t, "Тестовий продукт", body["description"])
+	})
+
+	main.Run("IncludesCategoriesFromListing", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{ID: "other", Categories: []string{"misc"}},
+			{ID: "widget", Categories: []string{"clocks", "organizers"}},
+		}, nil)
+		h := &Handler{dataDir: dataDir, prod: prodSvc, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		categories, ok := body["categories"].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+	})
+
+	main.Run("OmitsCategoriesWhenNotInListing", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{ID: "other", Categories: []string{"misc"}},
+		}, nil)
+		h := &Handler{dataDir: dataDir, prod: prodSvc, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		_, ok := body["categories"]
+		assert.False(t, ok)
 	})
 
 	main.Run("NotFoundWhenIDMissing", func(t *testing.T) {
