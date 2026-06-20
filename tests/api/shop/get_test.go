@@ -44,6 +44,13 @@ shop:
   description:
     en: Designed and made by hand
     uk: Спроєктовано та виготовлено вручну
+  categories:
+    - id: clocks
+      en: Clocks
+      uk: Годинники
+    - id: organizers
+      en: Organizers
+      uk: Органайзери
 `
 
 func TestGetShop(main *testing.T) {
@@ -93,5 +100,19 @@ func TestGetShop(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "Designed and made by hand", description["en"])
 		assert.Equal(t, "Спроєктовано та виготовлено вручну", description["uk"])
+
+		categories, ok := body["categories"].([]any)
+		require.True(t, ok)
+		require.Len(t, categories, 2)
+		clocks, ok := categories[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "clocks", clocks["id"])
+		clocksTitle, ok := clocks["title"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Clocks", clocksTitle["en"])
+		assert.Equal(t, "Годинники", clocksTitle["uk"])
+		organizers, ok := categories[1].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "organizers", organizers["id"])
 	})
 }

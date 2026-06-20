@@ -672,6 +672,22 @@ components:
           type: object
           additionalProperties:
             type: string
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShopCategory'
+
+    ShopCategory:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        title:
+          type: object
+          additionalProperties:
+            type: string
 
     ShopCountry:
       type: object
