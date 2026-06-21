@@ -9,3 +9,5 @@ config.yml
 /public
 /tmp
 /vendor
+
+app.out

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+  <meta name="description" content="">
+  <!-- Favicons are injected by applyAssets() from the backend /assets path. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/offer.css">
+</head>
+<body>
+
+  <div id="loader" aria-hidden="true"><div class="loader-spinner"></div></div>
+
+  <main class="main">
+    <div id="home-view">
+      <section class="hero">
+        <h1 class="hero-heading" data-i18n="hero.heading"></h1>
+        <p class="hero-tagline" data-i18n="hero.tagline"></p>
+      </section>
+      <nav class="categories" id="category-bar" style="display:none">
+        <!-- Populated by main.js -->
+      </nav>
+      <section class="grid" id="product-grid">
+        <!-- Populated by main.js -->
+      </section>
+    </div>
+
+    <div id="page-view" style="display:none">
+      <a href="/" class="back-link" data-i18n="product.back">← All products</a>
+      <div id="markdown-content" class="offer-content"></div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="/" class="footer-logo-link" aria-label="Shop">
+      <img alt="Shop" class="footer-logo">
+    </a>
+    <div id="footer-social" class="footer-social"></div>
+    <div class="footer-lang">
+      <a href="#" id="lang-en">EN</a>
+      <span class="footer-lang-sep">·</span>
+      <a href="#" id="lang-uk">UA</a>
+    </div>
+    <div id="footer-links" class="footer-links"></div>
+
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
