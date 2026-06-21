@@ -393,6 +393,13 @@ shop:
     - id: organizers
       en: Organizers
       uk: Органайзери
+  links:
+    en:
+      - title: Instagram
+        icon: instagram
+        url: https://example.com/ig
+  google-analytics:
+    id: G-ABC123
 `)
 
 		cat, err := loader.Load(dataDir)
@@ -417,6 +424,12 @@ shop:
 		assert.Equal(t, "organizers", cat.Shop.Categories[1].ID)
 		assert.Equal(t, "Organizers", cat.Shop.Categories[1].Title["en"])
 		assert.Equal(t, "Органайзери", cat.Shop.Categories[1].Title["uk"])
+		require.Len(t, cat.Shop.Links["en"], 1)
+		assert.Equal(t, "Instagram", cat.Shop.Links["en"][0].Title)
+		assert.Equal(t, "instagram", cat.Shop.Links["en"][0].Icon)
+		assert.Equal(t, "https://example.com/ig", cat.Shop.Links["en"][0].URL)
+		require.NotNil(t, cat.Shop.GoogleAnalytics)
+		assert.Equal(t, "G-ABC123", cat.Shop.GoogleAnalytics.ID)
 	})
 
 	main.Run("MalformedShopYAML", func(t *testing.T) {

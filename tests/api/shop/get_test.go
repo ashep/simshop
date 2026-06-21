@@ -51,6 +51,17 @@ shop:
     - id: organizers
       en: Organizers
       uk: Органайзери
+  links:
+    en:
+      - title: Instagram
+        icon: instagram
+        url: https://example.com/ig
+    uk:
+      - title: Instagram
+        icon: instagram
+        url: https://example.com/ig
+  google-analytics:
+    id: G-ABC123
 `
 
 func TestGetShop(main *testing.T) {
@@ -114,5 +125,20 @@ func TestGetShop(main *testing.T) {
 		organizers, ok := categories[1].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "organizers", organizers["id"])
+
+		links, ok := body["links"].(map[string]any)
+		require.True(t, ok)
+		enLinks, ok := links["en"].([]any)
+		require.True(t, ok)
+		require.Len(t, enLinks, 1)
+		link, ok := enLinks[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Instagram", link["title"])
+		assert.Equal(t, "instagram", link["icon"])
+		assert.Equal(t, "https://example.com/ig", link["url"])
+
+		ga, ok := body["google_analytics"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "G-ABC123", ga["id"])
 	})
 }

@@ -49,6 +49,10 @@ func TestServeShop(main *testing.T) {
 			Categories: []*shop.Category{
 				{ID: "clocks", Title: map[string]string{"en": "Clocks", "uk": "Годинники"}},
 			},
+			Links: map[string][]*shop.Link{
+				"en": {{Title: "Instagram", Icon: "instagram", URL: "https://example.com/ig"}},
+			},
+			GoogleAnalytics: &shop.GoogleAnalytics{ID: "G-ABC123"},
 		}, nil)
 
 		w := doRequest(t, shopSvc)
@@ -76,6 +80,21 @@ func TestServeShop(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "Clocks", catTitle["en"])
 		assert.Equal(t, "Годинники", catTitle["uk"])
+
+		links, ok := body["links"].(map[string]any)
+		require.True(t, ok)
+		enLinks, ok := links["en"].([]any)
+		require.True(t, ok)
+		require.Len(t, enLinks, 1)
+		link, ok := enLinks[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Instagram", link["title"])
+		assert.Equal(t, "instagram", link["icon"])
+		assert.Equal(t, "https://example.com/ig", link["url"])
+
+		ga, ok := body["google_analytics"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "G-ABC123", ga["id"])
 	})
 
 	main.Run("EmptyShopYieldsEmptyObject", func(t *testing.T) {

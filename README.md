@@ -58,8 +58,8 @@ referenced by filename in `product.yaml`.
 ### Shop
 
 Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing the
-allowed-countries map, multilingual maps for `name`, `title`, and `description`, and an optional ordered list of
-product `categories`.
+allowed-countries map, multilingual maps for `name`, `title`, and `description`, an optional ordered list of
+product `categories`, optional per-language `links`, and an optional `google-analytics` block.
 
 `shop.yaml` is **required** at startup. The application fails to start if it is missing or if `countries` is empty.
 The `countries` map is keyed by lowercase ISO alpha-2 country code; each entry carries a per-language `name`,
@@ -71,7 +71,12 @@ orders may be created — any order whose `country` field is not a key of this m
 The optional `categories` list is an ordered set of product categories. Each entry has a stable `id` and a
 per-language title; in YAML the language keys sit flat alongside `id`, and the API nests them under a `title` object.
 
-`GET /shop` returns the shop object as JSON, including the full `countries` map and the `categories` list.
+The optional `links` map groups external/social links by language code; each entry has a display `title`, an `icon`
+identifier the frontend maps to a glyph, and a target `url`. The optional `google-analytics` block carries the
+measurement `id` (e.g. `"G-XXXXXXXXXX"`); it is surfaced in the response under the `google_analytics` key.
+
+`GET /shop` returns the shop object as JSON, including the full `countries` map, the `categories` list, the `links`
+map, and the `google_analytics` block.
 
 Example `shop.yaml`:
 
@@ -112,6 +117,13 @@ shop:
     - id: organizers
       en: Organizers
       uk: Органайзери
+  links:
+    en:
+      - title: Instagram
+        icon: instagram
+        url: https://www.instagram.com/example/
+  google-analytics:
+    id: G-XXXXXXXXXX
 ```
 
 ### Product listing
@@ -271,7 +283,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 
 | Method   | Path                               | Description                                           |
 |----------|------------------------------------|-------------------------------------------------------|
-| `GET`    | `/shop`                            | Get shop metadata (name, title, description, categories) |
+| `GET`    | `/shop`                            | Get shop metadata (name, title, description, categories, links, analytics) |
 | `GET`    | `/products`                        | List all products (id, categories, title, description, image) |
 | `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
 | `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
