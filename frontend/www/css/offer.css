@@ -1,0 +1,72 @@
+.offer-loading {
+  color: var(--text-muted);
+}
+
+.offer-content h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.offer-content h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 40px;
+  margin-bottom: 12px;
+}
+
+.offer-content h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-top: 24px;
+  margin-bottom: 8px;
+}
+
+.offer-content p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 12px;
+}
+
+.offer-content ul,
+.offer-content ol {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  padding-left: 24px;
+  margin-bottom: 12px;
+}
+
+.offer-content li {
+  margin-bottom: 4px;
+}
+
+.offer-content strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.offer-content em {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.offer-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+.offer-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.offer-content a:hover {
+  opacity: 0.8;
+}

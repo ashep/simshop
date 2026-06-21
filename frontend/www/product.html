@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+  <meta name="description" content="">
+  <!-- Favicons are injected by applyAssets() from the backend /assets path. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div id="loader" aria-hidden="true"><div class="loader-spinner"></div></div>
+
+  <main class="main">
+    <div id="product-view">
+      <a href="/" class="back-link" data-i18n="product.back">← All products</a>
+
+      <div class="product-layout">
+        <div id="product-carousel" class="carousel"></div>
+        <div class="product-details">
+          <h1 id="product-name" class="product-name"></h1>
+          <div id="spec-price" class="product-price"></div>
+          <div id="product-variants" class="product-variants"></div>
+          <button class="order-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <path d="M16 10a4 4 0 01-8 0"/>
+            </svg>
+            <span data-i18n="product.order">Order</span>
+          </button>
+        </div>
+        <div id="product-specs" class="product-specs"></div>
+        <div id="product-description" class="product-description"></div>
+        <a href="/" class="all-products-link" data-i18n="product.back">← All products</a>
+      </div>
+      <div id="more-products"></div>
+    </div>
+
+    <div id="order-view" style="display:none">
+      <a href="#" id="order-back" class="back-link" data-i18n="order.back">← Back to product</a>
+
+      <div class="order-layout">
+        <div id="order-summary" class="order-summary"></div>
+
+        <form id="order-form" novalidate>
+          <h2 class="order-form-heading" data-i18n="order.form.title"></h2>
+
+          <div class="form-field">
+            <label for="order-firstname" data-i18n="order.firstname"></label>
+            <input type="text" id="order-firstname" name="firstname" required>
+          </div>
+
+          <div class="form-field">
+            <label for="order-lastname" data-i18n="order.lastname"></label>
+            <input type="text" id="order-lastname" name="lastname" required>
+          </div>
+
+          <div class="form-field" id="order-middlename-field" style="display:none">
+            <label for="order-middlename" data-i18n="order.middlename"></label>
+            <input type="text" id="order-middlename" name="middlename">
+          </div>
+
+          <div class="form-field">
+            <label for="order-email" data-i18n="order.email"></label>
+            <input type="email" id="order-email" name="email" required>
+          </div>
+
+          <div class="form-field">
+            <label for="order-country" data-i18n="order.country"></label>
+            <select id="order-country" name="country" autocomplete="nope" required></select>
+          </div>
+
+          <div class="form-field">
+            <label for="order-phone-number" data-i18n="order.phone"></label>
+            <div class="phone-field">
+              <span class="phone-code" id="order-phone-code"></span>
+              <input type="tel" id="order-phone-number" name="phone_number" required
+                     inputmode="numeric" pattern="[0-9]+" placeholder="XXXXXXXXX">
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label data-i18n="order.delivery"></label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="delivery" value="branch" checked>
+                <span data-i18n="order.delivery.branch"></span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="delivery" value="courier">
+                <span data-i18n="order.delivery.courier"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="order-city" data-i18n="order.city"></label>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="order-city" name="city" autocomplete="nope" required>
+              <input type="hidden" id="order-city-ref" name="city_ref">
+            </div>
+          </div>
+
+          <div class="form-field" id="order-novapost-field">
+            <label for="order-novapost" data-i18n="order.novapost"></label>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="order-novapost" name="novapost" autocomplete="off" required disabled>
+              <input type="hidden" id="order-novapost-ref" name="novapost_ref">
+            </div>
+          </div>
+
+          <div id="order-address-field" style="display:none">
+            <div class="form-field">
+              <label for="order-address" data-i18n="order.street"></label>
+              <div class="autocomplete-wrapper">
+                <input type="text" id="order-address" name="address" autocomplete="off" disabled>
+                <input type="hidden" id="order-address-ref" name="address_ref">
+              </div>
+            </div>
+            <div class="form-field-row">
+              <div class="form-field form-field-col">
+                <label for="order-building" data-i18n="order.building"></label>
+                <input type="text" id="order-building" name="building" autocomplete="off" disabled>
+              </div>
+              <div class="form-field form-field-col">
+                <label for="order-apt" data-i18n="order.apt"></label>
+                <input type="text" id="order-apt" name="apt" autocomplete="off" disabled>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="order-comment" data-i18n="order.comment"></label>
+            <textarea id="order-comment" name="comment" rows="4"></textarea>
+          </div>
+
+          <p id="order-consent-notice" class="consent-notice"></p>
+
+          <div class="form-field consent-field">
+            <label class="consent-option">
+              <input type="checkbox" id="order-consent" name="consent" required>
+              <span id="order-consent-label"></span>
+            </label>
+          </div>
+
+          <div id="order-error" class="form-error" style="display:none"></div>
+          <button type="submit" class="order-btn" data-i18n="order.submit" disabled></button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="/" class="footer-logo-link" aria-label="Shop">
+      <img alt="Shop" class="footer-logo">
+    </a>
+    <div id="footer-social" class="footer-social"></div>
+    <div class="footer-lang">
+      <a href="#" id="lang-en">EN</a>
+      <span class="footer-lang-sep">·</span>
+      <a href="#" id="lang-uk">UA</a>
+    </div>
+    <div id="footer-links" class="footer-links"></div>
+
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

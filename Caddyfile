@@ -1,0 +1,54 @@
+:80 {
+    handle /api* {
+        uri strip_prefix /api
+        reverse_proxy 127.0.0.1:9000
+    }
+
+    @productBot {
+        path /product
+        header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
+    }
+    @productHuman {
+        path /product
+        not header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
+    }
+    rewrite @productHuman /product.html
+    handle @productBot {
+        reverse_proxy 127.0.0.1:9000
+    }
+    rewrite /order/status /order-status.html
+
+    @images path *.jpg *.jpeg *.png *.gif *.webp *.svg *.ico *.mp4
+    handle @images {
+        root * /usr/share/caddy
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
+
+    @js path *.js
+    handle @js {
+        root * /usr/share/caddy
+        header Cache-Control "no-cache"
+        file_server
+    }
+
+    @css path *.css
+    handle @css {
+        root * /usr/share/caddy
+        header Cache-Control "no-cache"
+        file_server
+    }
+
+    @html path *.html
+    handle @html {
+        root * /usr/share/caddy
+        header Cache-Control "no-store"
+        file_server
+    }
+
+    handle {
+        root * /usr/share/caddy
+        try_files {path} /index.html
+        file_server
+    }
+}
