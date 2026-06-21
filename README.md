@@ -287,6 +287,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/products`                        | List all products (id, categories, title, description, image) |
 | `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
 | `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
+| `GET`    | `/assets/{path...}`                | Download a static asset (favicon, logo, etc.) by path |
 | `GET`    | `/pages`                           | List all pages (id, title)                            |
 | `GET`    | `/pages/{id}/{lang}`               | Get page content (Markdown) in the requested language |
 | `GET`    | `/nova-poshta/cities?q=<query>`    | Search Nova Poshta cities by name                     |
