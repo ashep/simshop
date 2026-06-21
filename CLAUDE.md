@@ -406,8 +406,7 @@ order form), `order-status.html` (polls `GET /orders/{id}`). JS: `js/api.js` (fe
 — **every key must have both `en` and `uk`**; `main.js` `t()` falls back to the key), `js/main.js` (routing via query
 params `?id=`/`?lang=`/`?category=`/`?img=`, rendering, order form, carousel). Markdown via `marked` (CDN).
 
-- API base: `window.API_BASE || <origin>/api`. An optional, unbundled `config.js` (referenced by `index.html`) sets
-  `window.API_BASE` for split-host deployments.
+- API base: `<origin>/api` (hardcoded in `api.js`).
 - `applyAssets()` injects favicons/footer logo from the backend `/assets/<conventional-filename>`; none are bundled.
 - Google Analytics (gtag.js) is injected at runtime only when `GET /shop` returns `google_analytics.id`. Footer links
   come from the `/shop` per-language `links`.
