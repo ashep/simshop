@@ -684,6 +684,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShopCategory'
+        links:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ShopLink'
+        google_analytics:
+          $ref: '#/components/schemas/ShopGoogleAnalytics'
+
+    ShopLink:
+      type: object
+      required:
+        - title
+        - icon
+        - url
+      properties:
+        title:
+          type: string
+        icon:
+          type: string
+        url:
+          type: string
+
+    ShopGoogleAnalytics:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
 
     ShopCategory:
       type: object
