@@ -1,7 +1,6 @@
 // js/api.js
-// API base: set `window.API_BASE` before loading this script to point at a
-// separate API host; otherwise it defaults to `/api` on the current origin.
-const API_BASE = window.API_BASE || (window.location.origin + '/api');
+// API base: `/api` on the current origin.
+const API_BASE = window.location.origin + '/api';
 
 let _shopCache = null;
 

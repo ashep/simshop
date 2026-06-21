@@ -763,8 +763,7 @@ catalog, product pages, the checkout form, and the post-payment order-status pag
 - **Scripts.** `js/api.js` wraps every API call; `js/i18n.js` holds the English and Ukrainian UI strings; `js/main.js`
   drives routing (page state lives in query params: `?id=`, `?lang=`, `?category=`, `?img=`), rendering, the order
   form, and the carousel. Markdown is rendered with `marked` (loaded from a CDN).
-- **API base.** `api.js` calls `window.API_BASE` when set, otherwise `<origin>/api`. Define `window.API_BASE` in an
-  optional, unbundled `config.js` to point the frontend at a separate API host.
+- **API base.** `api.js` calls `<origin>/api`.
 - **Languages.** English and Ukrainian. The active language is resolved from `?lang=`, then `localStorage`, then the
   browser locale (a `ru` browser locale maps to `uk`), and persisted to `localStorage`.
 - **Branding assets.** `applyAssets()` injects the favicons and footer logo from the backend `/assets/<file>` path
