@@ -444,6 +444,13 @@ failure → 502.
 both values (traversal guard). Functest: only the image file is needed to serve it; `product.yaml` is needed only for
 the product to appear in `catalog.Products`.
 
+### `GET /assets/{path...}`
+
+`ServeAsset` serves `{data_dir}/assets/<path>` via `http.ServeFile`, supporting nested subdirectories (trailing
+`{path...}` wildcard). Containment guard: `filepath.Join(dataDir, "assets", path)` (runs `Clean`) must stay under the
+assets base (`HasPrefix(full, base+sep)`), else 404 — `filepath.Base` is unusable for multi-segment paths. Directory
+requests and missing files → 404 (`os.Stat`/`IsDir`). CORS-only, no OpenAPI middleware, not in `api/root.yaml`.
+
 ## Configuration
 
 Keys in `internal/app/config.go`:
