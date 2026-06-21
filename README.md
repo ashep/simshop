@@ -1,7 +1,8 @@
 # SimShop
 
 SimShop is an HTTP API service that serves catalog data (products, pages, shop metadata) loaded from YAML files at
-startup and persists customer orders to PostgreSQL.
+startup and persists customer orders to PostgreSQL. It ships with a static storefront frontend and a deployment image
+that fronts the API with Caddy (see [Frontend](#frontend) and [Deployment](#deployment)).
 
 ## Purpose
 
@@ -749,3 +750,37 @@ list of candidates.
 - `--shop NAME` — select a shop from the config (default: the configured default shop).
 - `--config PATH` — config file path (default: `~/.simshop.yaml`).
 - `--json` — emit raw JSON instead of a table, for scripting and piping.
+
+## Frontend
+
+A static single-page storefront lives under `frontend/www/`. It is plain HTML/CSS/JS — no framework and no build step —
+served as static files (by Caddy in the deployment image; see below). It consumes this service's JSON API to render the
+catalog, product pages, the checkout form, and the post-payment order-status page.
+
+- **Pages.** `index.html` (home: hero, category filter, product grid, and Markdown content pages), `product.html`
+  (product detail, image/video carousel, attribute selection, and the order form), and `order-status.html` (polls
+  `GET /orders/{id}` and shows a localized payment/fulfillment status).
+- **Scripts.** `js/api.js` wraps every API call; `js/i18n.js` holds the English and Ukrainian UI strings; `js/main.js`
+  drives routing (page state lives in query params: `?id=`, `?lang=`, `?category=`, `?img=`), rendering, the order
+  form, and the carousel. Markdown is rendered with `marked` (loaded from a CDN).
+- **API base.** `api.js` calls `window.API_BASE` when set, otherwise `<origin>/api`. Define `window.API_BASE` in an
+  optional, unbundled `config.js` to point the frontend at a separate API host.
+- **Languages.** English and Ukrainian. The active language is resolved from `?lang=`, then `localStorage`, then the
+  browser locale (a `ru` browser locale maps to `uk`), and persisted to `localStorage`.
+- **Branding assets.** `applyAssets()` injects the favicons and footer logo from the backend `/assets/<file>` path
+  (conventional filenames); none are bundled in the frontend.
+- **Analytics.** When `GET /shop` returns a `google_analytics.id`, `main.js` loads Google Analytics (gtag.js) at
+  runtime; with no id, no analytics code runs. The footer renders the per-language `links` from `GET /shop`.
+
+## Deployment
+
+The published artifact is a single Docker image (`Dockerfile`) built on the Caddy base image:
+
+- The compiled Go server binary (`app.out`) is copied to `/app/app`; the frontend (`frontend/www/`) is copied to
+  Caddy's web root.
+- `entrypoint.sh` starts both the Go server (listening on `:9000`) and Caddy, exiting when either child exits.
+- `Caddyfile` routes requests: `/api*` is reverse-proxied to the Go server with the `/api` prefix stripped; `/product`
+  is served by the backend's social-crawler preview (`GET /product`, `ServeProductPreview`) for bots and rewritten to
+  `product.html` for humans (distinguished by a User-Agent regex); `/order/status` is rewritten to `order-status.html`;
+  images, JS, CSS, and HTML are served from the web root with per-type cache headers; every other path falls back to
+  `index.html` for client-side routing.
