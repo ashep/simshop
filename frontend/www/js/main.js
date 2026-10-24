@@ -553,7 +553,7 @@ function initHeroSlider(media) {
   media.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { hovered = false; start(); } });
   document.addEventListener('visibilitychange', start);
 
-  addSwipe(track, {
+  addSwipe(media, {
     onStart() { track.style.transition = 'none'; stop(); },
     onMove(dx) { track.style.transform = `translateX(${-(current * media.offsetWidth) + dx}px)`; },
     onEnd(dx) {
@@ -571,6 +571,8 @@ function initHeroSlider(media) {
 // gesture, a second finger landed) or a mostly vertical drag (left to page scroll) ends with
 // dx = 0, so callers can always restore transitions/timers. Pair with CSS `touch-action: pan-y`
 // on `el`, otherwise the browser may claim horizontal drags itself and cancel the touch.
+// `el` must not be the element being translated: once a track moves by -100%, its own box is
+// off-screen and Safari stops delivering touches on the visible slide to the track's listeners.
 function addSwipe(el, { onStart, onMove, onEnd }) {
   let x0 = null;
   let y0 = 0;
@@ -838,7 +840,7 @@ function renderCarousel(container, images, altText) {
 
   container._goTo = goTo;
 
-  addSwipe(track, {
+  addSwipe(viewport, {
     onStart() { track.style.transition = 'none'; },
     onMove(dx) { track.style.transform = `translateX(${-(current * viewport.offsetWidth) + dx}px)`; },
     onEnd(dx) {

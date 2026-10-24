@@ -497,6 +497,7 @@ a.announcement:focus-visible { outline: 2px solid var(--on-dark); outline-offset
 
 .hero-media {
   position: relative;
+  touch-action: pan-y pinch-zoom; /* horizontal drags are the swipe (addSwipe in main.js) */
   background: var(--line);
   overflow: hidden;
   cursor: pointer;
@@ -512,7 +513,6 @@ a.announcement:focus-visible { outline: 2px solid var(--on-dark); outline-offset
 .hero-track {
   display: flex;
   height: 100%;
-  touch-action: pan-y pinch-zoom; /* horizontal drags are the swipe (addSwipe in main.js) */
   transition: transform 0.6s ease;
 }
 
@@ -1146,13 +1146,13 @@ a.announcement:focus-visible { outline: 2px solid var(--on-dark); outline-offset
 
 .carousel-viewport {
   position: relative;
+  touch-action: pan-y pinch-zoom; /* horizontal drags are the swipe (addSwipe in main.js) */
   overflow: hidden;
   background: var(--soft);
 }
 
 .carousel-track {
   display: flex;
-  touch-action: pan-y pinch-zoom; /* horizontal drags are the swipe (addSwipe in main.js) */
   transition: transform 0.3s ease;
 }
 
