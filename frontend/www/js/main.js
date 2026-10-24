@@ -547,36 +547,60 @@ function initHeroSlider(media) {
   media.querySelector('.carousel-prev').addEventListener('click', () => manual(current - 1));
   media.querySelector('.carousel-next').addEventListener('click', () => manual(current + 1));
   dots.forEach(d => d.addEventListener('click', () => manual(Number(d.dataset.index))));
-  media.addEventListener('mouseenter', () => { hovered = true; stop(); });
-  media.addEventListener('mouseleave', () => { hovered = false; start(); });
+  // pointer* with a mouse check: a tap on a phone fires a synthetic mouseenter with no
+  // mouseleave, which would pause autoplay for good.
+  media.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') { hovered = true; stop(); } });
+  media.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { hovered = false; start(); } });
   document.addEventListener('visibilitychange', start);
 
-  let touchStartX = null;
-  let dragging = false;
-  track.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-    dragging = false;
-    track.style.transition = 'none';
-    stop();
-  }, { passive: true });
-  track.addEventListener('touchmove', e => {
-    if (touchStartX === null) return;
-    dragging = true;
-    const delta = e.touches[0].clientX - touchStartX;
-    track.style.transform = `translateX(${-(current * media.offsetWidth) + delta}px)`;
-  }, { passive: true });
-  track.addEventListener('touchend', e => {
-    if (touchStartX === null) return;
-    track.style.transition = '';
-    const delta = e.changedTouches[0].clientX - touchStartX;
-    if (dragging && Math.abs(delta) > media.offsetWidth * 0.2) goTo(current + (delta < 0 ? 1 : -1));
-    else goTo(current);
-    touchStartX = null;
-    dragging = false;
-    start();
-  }, { passive: true });
+  addSwipe(track, {
+    onStart() { track.style.transition = 'none'; stop(); },
+    onMove(dx) { track.style.transform = `translateX(${-(current * media.offsetWidth) + dx}px)`; },
+    onEnd(dx) {
+      track.style.transition = '';
+      goTo(Math.abs(dx) > media.offsetWidth * 0.2 ? current + (dx < 0 ? 1 : -1) : current);
+      start();
+    },
+  });
 
   start();
+}
+
+// Horizontal swipe on `el`: onStart() on touch, onMove(dx) while dragging sideways, onEnd(dx)
+// on release. Every onStart gets exactly one onEnd — a cancelled touch (the browser took the
+// gesture, a second finger landed) or a mostly vertical drag (left to page scroll) ends with
+// dx = 0, so callers can always restore transitions/timers. Pair with CSS `touch-action: pan-y`
+// on `el`, otherwise the browser may claim horizontal drags itself and cancel the touch.
+function addSwipe(el, { onStart, onMove, onEnd }) {
+  let x0 = null;
+  let y0 = 0;
+  let axis = null;
+  const finish = dx => {
+    if (x0 === null) return;
+    x0 = null;
+    onEnd(axis === 'x' ? dx : 0);
+  };
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { finish(0); return; }
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+    axis = null;
+    if (onStart) onStart();
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (x0 === null) return;
+    const dx = e.touches[0].clientX - x0;
+    const dy = e.touches[0].clientY - y0;
+    if (!axis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (axis === 'x' && onMove) onMove(dx);
+  }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (x0 !== null) finish(e.changedTouches[0].clientX - x0);
+  }, { passive: true });
+  el.addEventListener('touchcancel', () => finish(0), { passive: true });
 }
 
 /* ---- Catalog ---- */
@@ -724,7 +748,6 @@ function openLightbox(images, index, alt, onChange) {
     else if (multi && e.key === 'ArrowRight') show(current + 1);
   };
 
-  let touchStartX = null;
   let swiped = false;
   lb.addEventListener('click', e => {
     if (swiped) { swiped = false; return; }
@@ -733,13 +756,10 @@ function openLightbox(images, index, alt, onChange) {
     else close();
   });
   if (multi) {
-    lb.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; swiped = false; }, { passive: true });
-    lb.addEventListener('touchend', e => {
-      if (touchStartX === null) return;
-      const delta = e.changedTouches[0].clientX - touchStartX;
-      touchStartX = null;
-      if (Math.abs(delta) > 50) { swiped = true; show(current + (delta < 0 ? 1 : -1)); }
-    }, { passive: true });
+    addSwipe(lb, {
+      onStart() { swiped = false; },
+      onEnd(dx) { if (Math.abs(dx) > 50) { swiped = true; show(current + (dx < 0 ? 1 : -1)); } },
+    });
   }
 
   show(current);
@@ -818,37 +838,15 @@ function renderCarousel(container, images, altText) {
 
   container._goTo = goTo;
 
-  let touchStartX = null;
-  let dragging = false;
-
-  track.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX;
-    dragging = false;
-    track.style.transition = 'none';
-  }, { passive: true });
-
-  track.addEventListener('touchmove', e => {
-    if (touchStartX === null) return;
-    dragging = true;
-    const delta = e.touches[0].clientX - touchStartX;
-    const w = viewport.offsetWidth;
-    track.style.transform = `translateX(${-(current * w) + delta}px)`;
-  }, { passive: true });
-
-  track.addEventListener('touchend', e => {
-    if (touchStartX === null) return;
-    track.style.transition = '';
-    if (dragging) {
-      const delta = e.changedTouches[0].clientX - touchStartX;
-      if (Math.abs(delta) > viewport.offsetWidth * 0.25) {
-        goTo(current + (delta < 0 ? 1 : -1));
-      } else {
-        track.style.transform = `translateX(-${current * 100}%)`;
-      }
-    }
-    touchStartX = null;
-    dragging = false;
-  }, { passive: true });
+  addSwipe(track, {
+    onStart() { track.style.transition = 'none'; },
+    onMove(dx) { track.style.transform = `translateX(${-(current * viewport.offsetWidth) + dx}px)`; },
+    onEnd(dx) {
+      track.style.transition = '';
+      if (Math.abs(dx) > viewport.offsetWidth * 0.25) goTo(current + (dx < 0 ? 1 : -1));
+      else track.style.transform = `translateX(-${current * 100}%)`;
+    },
+  });
 }
 
 // Swatch colors for one attribute: {valueKey: '#rrggbb'} from product.attr_colors, or null

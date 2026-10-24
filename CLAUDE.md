@@ -286,6 +286,12 @@ becomes a bogus language. Social `links` is a flat list shared by all languages 
 /products` resolves `price` per request and **skips geo detection unless some product has a non-`default` price**
 (avoids an ipinfo.io call per listing).
 
+**Touch swipes** (hero, product carousel, lightbox) all go through `addSwipe` in `main.js`, paired with CSS
+`touch-action: pan-y pinch-zoom` on the swiped element. Without `touch-action` the browser may claim a horizontal drag
+and send `touchcancel` instead of `touchend` — handlers that only listen for `touchend` get stuck (swipe "stops
+working" on phones). Hover-pause must check `pointerType === 'mouse'`: a phone tap fires a synthetic `mouseenter`
+with no `mouseleave`. Synthetic `TouchEvent`s in the browser pane verify the JS, not the browser's gesture handling.
+
 Local run: `task dev` (backend + Caddy on :8080, generated `tmp/Caddyfile.dev`). `dev:api` deliberately builds
 **without the `netgo` tag**: on macOS the pure-Go resolver ignores system DNS and the startup Monobank pubkey fetch
 times out, while `go:run` (with `netgo`) fails. `dev:api` runs under **`air`** (`.air.toml`): ldflags read `$APP_NAME`/`$APP_VERSION`
