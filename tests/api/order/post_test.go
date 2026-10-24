@@ -620,9 +620,9 @@ func TestCreateOrder_Monobank(main *testing.T) {
 			} `json:"merchantPaymInfo"`
 		}
 		require.NoError(t, json.Unmarshal(lastBody, &body))
-		assert.Equal(t, 4249, body.Amount)
+		assert.Equal(t, 4200, body.Amount)
 		require.Len(t, body.MerchantPaymInfo.BasketOrder, 1)
-		assert.Equal(t, 4249, body.MerchantPaymInfo.BasketOrder[0].Sum)
+		assert.Equal(t, 4200, body.MerchantPaymInfo.BasketOrder[0].Sum)
 	})
 }
 

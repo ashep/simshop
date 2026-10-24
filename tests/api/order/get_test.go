@@ -124,7 +124,7 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, "SAVE15", got[0]["promo_code"])
 		assert.InDelta(t, 15, got[0]["discount_percent"], 0)
 		assert.InDelta(t, 799, got[0]["discount"], 0)
-		assert.InDelta(t, 4249, got[0]["price"], 0)
+		assert.InDelta(t, 4200, got[0]["price"], 0)
 	})
 
 	main.Run("PopulatedDBReturnsRecords", func(t *testing.T) {

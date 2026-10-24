@@ -330,6 +330,10 @@ task go:test:func -- [FLAGS]
 In worktrees without `.ci/`, run directly: `go test -run TestFoo -v ./internal/...` or
 `go test -tags=functest ./tests/...`. Dirty PG → `task go:test:func:clean`.
 
+Bumping the `go` directive in `go.mod` also requires bumping the `tests` image in `docker-compose.tests.yaml` (CI runs
+functests in it with `GOTOOLCHAIN=local`, so an older image fails), and reinstalling local `govulncheck`/
+`golangci-lint` with the new toolchain (they refuse to load a module newer than the Go they were built with).
+
 ### Unit tests
 
 - Before implementing, invoke `superpowers:test-driven-development`.
