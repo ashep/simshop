@@ -57,6 +57,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /products/{id}/promo-codes/{code}:
+    get:
+      operationId: checkPromoCode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The code is valid for this product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoCodeResponse'
+        "404":
+          description: Unknown product or promo code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /pages:
     get:
       operationId: listPages
@@ -451,12 +479,15 @@ components:
       type: object
       required:
         - id
+        - available
         - name
         - description
         - price
       properties:
         id:
           type: string
+        available:
+          type: boolean
         categories:
           type: array
           items:
@@ -491,6 +522,15 @@ components:
             type: object
             additionalProperties:
               type: string
+        attr_colors:
+          type: object
+          nullable: true
+          description: Swatch color per attribute value, `#rrggbb`, keyed attr → value (language-independent).
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+              pattern: '^#[0-9a-fA-F]{6}$'
         attr_values_order:
           type: object
           nullable: true
@@ -508,11 +548,14 @@ components:
       type: object
       required:
         - id
+        - available
         - title
         - description
       properties:
         id:
           type: string
+        available:
+          type: boolean
         categories:
           type: array
           items:
@@ -528,6 +571,13 @@ components:
         image:
           type: string
           nullable: true
+        images:
+          type: array
+          description: Up to 2 still previews, starting with `image`; the card swaps to the second on hover.
+          items:
+            type: string
+        price:
+          $ref: '#/components/schemas/PriceItem'
 
     PageItem:
       type: object
@@ -542,6 +592,19 @@ components:
           additionalProperties:
             type: string
 
+    PromoCodeResponse:
+      type: object
+      required:
+        - code
+        - discount_percent
+      properties:
+        code:
+          type: string
+          description: Canonical spelling of the code
+        discount_percent:
+          type: integer
+          minimum: 1
+          maximum: 99
     CreateOrderRequest:
       type: object
       required:
@@ -581,6 +644,10 @@ components:
           type: string
         address:
           type: string
+        promo_code:
+          type: string
+          nullable: true
+          description: Optional product promo code; matched case-insensitively. Unknown code → 400.
         notes:
           type: string
           nullable: true
@@ -685,13 +752,93 @@ components:
           items:
             $ref: '#/components/schemas/ShopCategory'
         links:
-          type: object
-          additionalProperties:
-            type: array
-            items:
-              $ref: '#/components/schemas/ShopLink'
+          type: array
+          items:
+            $ref: '#/components/schemas/ShopLink'
         google_analytics:
           $ref: '#/components/schemas/ShopGoogleAnalytics'
+        announcement:
+          $ref: '#/components/schemas/LangMap'
+        announcement_page:
+          type: string
+          description: Content page id (pages.yaml) the announcement bar links to.
+        hero:
+          $ref: '#/components/schemas/ShopHero'
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShopFeature'
+        story:
+          $ref: '#/components/schemas/ShopStory'
+        gallery:
+          type: array
+          description: Bare filenames under the data dir's assets/ folder (GET /assets/{name}).
+          items:
+            type: string
+        menu:
+          type: array
+          description: Content page ids (pages.yaml) shown in the storefront header navigation.
+          items:
+            type: string
+
+    LangMap:
+      type: object
+      description: Per-language strings keyed by language code.
+      additionalProperties:
+        type: string
+
+    ShopHero:
+      type: object
+      properties:
+        eyebrow:
+          $ref: '#/components/schemas/LangMap'
+        title:
+          $ref: '#/components/schemas/LangMap'
+        text:
+          $ref: '#/components/schemas/LangMap'
+        images:
+          type: array
+          description: Rotating slideshow shown under the same text.
+          items:
+            $ref: '#/components/schemas/ShopHeroImage'
+
+    ShopHeroImage:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+          description: Bare filename under assets/.
+        category:
+          type: string
+          description: Shop category id a click on this slide leads to; unset links to the whole catalog.
+
+    ShopFeature:
+      type: object
+      properties:
+        icon:
+          type: string
+        title:
+          $ref: '#/components/schemas/LangMap'
+        text:
+          $ref: '#/components/schemas/LangMap'
+
+    ShopStory:
+      type: object
+      properties:
+        eyebrow:
+          $ref: '#/components/schemas/LangMap'
+        title:
+          $ref: '#/components/schemas/LangMap'
+        text:
+          $ref: '#/components/schemas/LangMap'
+        image:
+          type: string
+          description: Bare filename under assets/.
+        page:
+          type: string
+          description: Content page id (pages.yaml) the band links to.
 
     ShopLink:
       type: object
@@ -884,6 +1031,17 @@ components:
         tracking_number:
           type: string
           nullable: true
+        promo_code:
+          type: string
+          nullable: true
+          description: Promo code applied to the order (canonical spelling); absent when none.
+        discount_percent:
+          type: integer
+          nullable: true
+        discount:
+          type: integer
+          nullable: true
+          description: Discount in minor units; `price` is already net of it.
         created_at:
           type: string
           format: date-time

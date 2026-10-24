@@ -88,6 +88,14 @@ async function fetchOrderStatus(id) {
     return res.json();
 }
 
+// Returns {code, discount_percent} for a valid code, null when the code is unknown; throws otherwise.
+async function fetchPromoCode(productId, code) {
+    const res = await fetch(`${API_BASE}/products/${encodeURIComponent(productId)}/promo-codes/${encodeURIComponent(code)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+}
+
 async function createOrder(payload) {
     const res = await fetch(`${API_BASE}/orders`, {
         method: 'POST',

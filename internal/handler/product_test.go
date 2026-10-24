@@ -78,6 +78,73 @@ func TestListProducts(main *testing.T) {
 		assert.Nil(t, body[0]["image"])
 	})
 
+	main.Run("PriceResolvedByCountry", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{
+				ID:          "widget",
+				Title:       map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A test product"},
+				Prices: map[string]product.PriceItem{
+					"default": {Currency: "USD", Value: 49.99},
+					"ua":      {Currency: "UAH", Value: 1999},
+				},
+			},
+			{
+				ID:          "gadget",
+				Title:       map[string]string{"en": "Gadget"},
+				Description: map[string]string{"en": "No UA price"},
+				Prices:      map[string]product.PriceItem{"default": {Currency: "USD", Value: 5}},
+			},
+			{
+				ID:          "nopriced",
+				Title:       map[string]string{"en": "No price"},
+				Description: map[string]string{"en": "Listing without product.yaml"},
+			},
+		}, nil)
+
+		h := &Handler{prod: prodSvc, resp: resp, geo: &geoDetectorStub{country: "ua"}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products", nil)
+		w := httptest.NewRecorder()
+		h.ListProducts(w, r)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body, 3)
+		assert.Equal(t, map[string]any{"currency": "UAH", "value": float64(1999)}, body[0]["price"])
+		assert.Equal(t, map[string]any{"currency": "USD", "value": float64(5)}, body[1]["price"])
+		assert.NotContains(t, body[2], "price")
+		assert.NotContains(t, body[0], "prices")
+	})
+
+	main.Run("DefaultPriceSkipsGeoDetection", func(t *testing.T) {
+		prodSvc := &productServiceMock{}
+		defer prodSvc.AssertExpectations(t)
+		prodSvc.On("List", mock.Anything).Return([]*product.Item{
+			{
+				ID:          "widget",
+				Title:       map[string]string{"en": "Widget"},
+				Description: map[string]string{"en": "A test product"},
+				Prices:      map[string]product.PriceItem{"default": {Currency: "USD", Value: 49.99}},
+			},
+		}, nil)
+
+		geo := &geoDetectorCounter{country: "ua"}
+		h := &Handler{prod: prodSvc, resp: resp, geo: geo, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products", nil)
+		w := httptest.NewRecorder()
+		h.ListProducts(w, r)
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, 0, geo.calls)
+
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body, 1)
+		assert.Equal(t, map[string]any{"currency": "USD", "value": 49.99}, body[0]["price"])
+	})
+
 	main.Run("WithCategories", func(t *testing.T) {
 		prodSvc := &productServiceMock{}
 		defer prodSvc.AssertExpectations(t)
@@ -358,14 +425,13 @@ func TestServeProductContent(main *testing.T) {
 		assert.Equal(t, "Тестовий продукт", body["description"])
 	})
 
-	main.Run("IncludesCategoriesFromListing", func(t *testing.T) {
-		prodSvc := &productServiceMock{}
-		defer prodSvc.AssertExpectations(t)
-		prodSvc.On("List", mock.Anything).Return([]*product.Item{
-			{ID: "other", Categories: []string{"misc"}},
-			{ID: "widget", Categories: []string{"clocks", "organizers"}},
-		}, nil)
-		h := &Handler{dataDir: dataDir, prod: prodSvc, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+	main.Run("IncludesCategoriesFromProductYAML", func(t *testing.T) {
+		dir := t.TempDir()
+		pDir := filepath.Join(dir, "products", "widget")
+		require.NoError(t, os.MkdirAll(pDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pDir, "product.yaml"),
+			[]byte(testProductYAML+"categories:\n  - clocks\n  - organizers\n"), 0644))
+		h := &Handler{dataDir: dir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
 		r.SetPathValue("id", "widget")
 		r.SetPathValue("lang", "en")
@@ -380,18 +446,8 @@ func TestServeProductContent(main *testing.T) {
 		assert.Equal(t, []any{"clocks", "organizers"}, categories)
 	})
 
-	main.Run("OmitsCategoriesWhenNotInListing", func(t *testing.T) {
-		prodSvc := &productServiceMock{}
-		defer prodSvc.AssertExpectations(t)
-		prodSvc.On("List", mock.Anything).Return([]*product.Item{
-			{ID: "other", Categories: []string{"misc"}},
-		}, nil)
-		h := &Handler{dataDir: dataDir, prod: prodSvc, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
-		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
-		r.SetPathValue("id", "widget")
-		r.SetPathValue("lang", "en")
-		w := httptest.NewRecorder()
-		h.ServeProductContent(w, r)
+	main.Run("OmitsCategoriesWhenProductHasNone", func(t *testing.T) {
+		w := doRequest(t, "widget", "en")
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var body map[string]any
@@ -550,6 +606,40 @@ func TestServeProductContent(main *testing.T) {
 		assert.Equal(t, "/images/widget/green-thumb.jpg", displayColor["green"])
 	})
 
+	main.Run("ReturnsAttrColors", func(t *testing.T) {
+		acDataDir := t.TempDir()
+		acProductDir := filepath.Join(acDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(acProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(acProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: USD
+    value: 10
+attr_colors:
+  display_color:
+    red: "#d92d20"
+    green: "#22a447"
+`), 0644))
+
+		h := &Handler{dataDir: acDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, map[string]any{
+			"display_color": map[string]any{"red": "#d92d20", "green": "#22a447"},
+		}, body["attr_colors"])
+	})
+
 	main.Run("ReturnsAttrDescription", func(t *testing.T) {
 		adDataDir := t.TempDir()
 		adProductDir := filepath.Join(adDataDir, "products", "widget")
@@ -651,5 +741,43 @@ func TestServeProductContent(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 10.0, displayColor["red"])
 		assert.Equal(t, 8.0, displayColor["green"])
+	})
+
+	main.Run("AvailableTrueByDefault", func(t *testing.T) {
+		w := doRequest(t, "widget", "en")
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, true, body["available"])
+	})
+
+	main.Run("AvailableFalseWhenSet", func(t *testing.T) {
+		unavailDir := t.TempDir()
+		unavailProductDir := filepath.Join(unavailDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(unavailProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(unavailProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+available: false
+prices:
+  default:
+    currency: USD
+    value: 49.99
+`), 0644))
+
+		h := &Handler{dataDir: unavailDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.Equal(t, false, body["available"])
 	})
 }

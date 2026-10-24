@@ -80,6 +80,27 @@ func TestRenderOrderDetail(main *testing.T) {
 		assert.Contains(t, out, "20.00 EUR")
 	})
 
+	main.Run("renders promo line before total", func(t *testing.T) {
+		code, pct, discount := "SPRING15", 15, 750
+		var buf bytes.Buffer
+		err := RenderOrderDetail(&buf, &Order{
+			ID: "o1", Status: "paid", Price: 4249, Currency: "usd",
+			PromoCode: &code, DiscountPercent: &pct, Discount: &discount,
+		})
+		require.NoError(t, err)
+		out := buf.String()
+		assert.Contains(t, out, "SPRING15 (−15%, −7.50 USD)")
+		promoIdx := strings.Index(out, "Promo code:")
+		require.GreaterOrEqual(t, promoIdx, 0)
+		assert.Less(t, promoIdx, strings.Index(out, "Total:"))
+	})
+
+	main.Run("omits promo line without promo", func(t *testing.T) {
+		var buf bytes.Buffer
+		require.NoError(t, RenderOrderDetail(&buf, &Order{ID: "o1", Status: "paid", Price: 4999, Currency: "usd"}))
+		assert.NotContains(t, buf.String(), "Promo code:")
+	})
+
 	main.Run("formats timestamps to seconds without microseconds", func(t *testing.T) {
 		var buf bytes.Buffer
 		err := RenderOrderDetail(&buf, &Order{

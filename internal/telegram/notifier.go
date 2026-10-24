@@ -35,8 +35,8 @@ type messageSender interface {
 	SendMessage(ctx context.Context, chatID, text, parseMode string) error
 }
 
-// productLookup resolves a product id to a display title (typically rendered
-// from products.yaml). The notifier uses it for the *Product:* line in the
+// productLookup resolves a product id to a display title (the listed
+// product's name). The notifier uses it for the *Product:* line in the
 // new-order message. When the lookup returns "", the notifier falls back to
 // the raw product id.
 type productLookup interface {
@@ -260,6 +260,9 @@ func formatNewOrder(rec *order.Record, statusNote string, products productLookup
 	fmt.Fprintf(&b, "*Product:* %s\n", mdv2Escape(productLabel))
 	for _, a := range rec.Attrs {
 		fmt.Fprintf(&b, "*%s:* %s\n", mdv2Escape(a.Name), mdv2Escape(a.Value))
+	}
+	if rec.Promo != nil {
+		fmt.Fprintf(&b, "*Promo code:* %s\n", mdv2Escape(rec.Promo.Label(rec.Currency)))
 	}
 	totalText := fmt.Sprintf("%d.%02d %s", rec.Price/100, rec.Price%100, strings.ToUpper(rec.Currency))
 	fmt.Fprintf(&b, "*Total:* %s\n", mdv2Escape(totalText))

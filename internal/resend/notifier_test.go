@@ -139,6 +139,44 @@ func TestNotifier(main *testing.T) {
 		assert.Equal(t, "https://shop.example/order?id=018f4e3a-0000-7000-8000-000000000099", d.OrderURL)
 	})
 
+	main.Run("PromoPopulatesTemplateData", func(t *testing.T) {
+		send := &fakeSender{}
+		rec := sampleRecord()
+		rec.Price = 4249
+		rec.Promo = &order.Promo{Code: "SPRING15", Percent: 15, Discount: 750}
+		rd := &fakeReader{rec: rec}
+		tpl := &fakeTemplates{subject: "s", html: "<p/>", text: "x"}
+		n := newTestNotifier(t, send, rd, tpl)
+		n.Start()
+		defer n.Stop()
+		n.Notify(context.Background(), order.NotificationEvent{OrderID: rec.ID, Status: "paid"})
+
+		require.Eventually(t, func() bool { return len(send.snapshot()) == 1 }, time.Second, 10*time.Millisecond)
+		d := tpl.lastData
+		assert.Equal(t, "SPRING15", d.PromoCode)
+		assert.Equal(t, 15, d.DiscountPercent)
+		assert.Equal(t, "7.50 USD", d.Discount)
+		assert.Equal(t, "49.99 USD", d.Subtotal)
+		assert.Equal(t, "42.49 USD", d.Total)
+	})
+
+	main.Run("NoPromoLeavesPromoFieldsEmpty", func(t *testing.T) {
+		send := &fakeSender{}
+		rd := &fakeReader{rec: sampleRecord()}
+		tpl := &fakeTemplates{subject: "s", html: "<p/>", text: "x"}
+		n := newTestNotifier(t, send, rd, tpl)
+		n.Start()
+		defer n.Stop()
+		n.Notify(context.Background(), order.NotificationEvent{OrderID: "x", Status: "paid"})
+
+		require.Eventually(t, func() bool { return len(send.snapshot()) == 1 }, time.Second, 10*time.Millisecond)
+		d := tpl.lastData
+		assert.Empty(t, d.PromoCode)
+		assert.Zero(t, d.DiscountPercent)
+		assert.Empty(t, d.Discount)
+		assert.Empty(t, d.Subtotal)
+	})
+
 	for _, st := range []string{"new", "awaiting_payment", "payment_processing", "payment_hold", "cancelled", "returned"} {
 		main.Run("Skips_"+st, func(t *testing.T) {
 			send := &fakeSender{}

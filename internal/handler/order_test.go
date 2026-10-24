@@ -121,7 +121,8 @@ func TestCreateOrder(main *testing.T) {
 				o.Phone == "+380501234567" &&
 				o.Email == "ivan@example.com" &&
 				o.City == "Київ" &&
-				o.Address == "Відділення №5"
+				o.Address == "Відділення №5" &&
+				o.Promo == nil
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
 			return req.WebHookURL == "https://test.example/monobank/webhook"
@@ -451,6 +452,34 @@ images:
 		assert.Contains(t, w.Body.String(), "invalid country")
 	})
 
+	main.Run("UnavailableProductReturns400", func(t *testing.T) {
+		unavailDir := main.TempDir()
+		unavailProductDir := filepath.Join(unavailDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(unavailProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(unavailProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+available: false
+prices:
+  default:
+    currency: USD
+    value: 49.99
+`), 0644))
+
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		w := doRequest(t, unavailDir, svc, mb, `{
+			"product_id": "widget", "lang": "en",
+			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
+		}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "product not available")
+		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
+		mb.AssertNotCalled(t, "CreateInvoice", mock.Anything, mock.Anything)
+	})
+
 	main.Run("UnknownProductReturns404", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
@@ -619,4 +648,78 @@ prices:
 		require.Equal(t, http.StatusBadGateway, w.Code)
 		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
 	})
+
+	promoDataDir := main.TempDir()
+	promoProductDir := filepath.Join(promoDataDir, "products", "widget")
+	require.NoError(main, os.MkdirAll(promoProductDir, 0755))
+	require.NoError(main, os.WriteFile(filepath.Join(promoProductDir, "product.yaml"),
+		[]byte(testProductWithAttrPricesYAML+testPromoCodesYAML), 0644))
+
+	main.Run("PromoCodeAppliesDiscount", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.Price == 4200 && o.Promo != nil &&
+				*o.Promo == order.Promo{Code: "SPRING15", Percent: 15, Discount: 799}
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			return req.Amount == 4200 && req.MerchantPaymInfo.BasketOrder[0].Sum == 4200
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.MatchedBy(func(inv order.Invoice) bool {
+			return inv.Amount == 4200
+		})).Return(nil)
+
+		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"spring15",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("PromoCodeAppliesToAddons", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.Price == 4900 && o.Promo != nil && o.Promo.Discount == 599
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"TEN",
+			"attributes":{"display_color":"red"},
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"ua","city":"X","address":"Y"}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	main.Run("InvalidPromoCodeReturns400", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+
+		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"NOPE",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid promo code"}`, w.Body.String())
+		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
+	})
+
+	main.Run("EmptyPromoCodeIgnored", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.Promo == nil && o.Price == 4999
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
 }
+
+const testPromoCodesYAML = `promo_codes:
+  SPRING15: 15
+  TEN: 10
+`

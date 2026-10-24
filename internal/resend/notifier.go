@@ -235,21 +235,36 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 	// language when the requested one is missing).
 	shopName := n.shop.Name(rec.Lang)
 
-	total := fmt.Sprintf("%d.%02d %s", rec.Price/100, rec.Price%100, strings.ToUpper(rec.Currency))
+	formatMoney := func(minor int) string {
+		return fmt.Sprintf("%d.%02d %s", minor/100, minor%100, strings.ToUpper(rec.Currency))
+	}
+	total := formatMoney(rec.Price)
+
+	var promoCode, discount, subtotal string
+	var discountPercent int
+	if rec.Promo != nil {
+		promoCode, discountPercent = rec.Promo.Code, rec.Promo.Percent
+		discount = formatMoney(rec.Promo.Discount)
+		subtotal = formatMoney(rec.Price + rec.Promo.Discount)
+	}
 
 	orderURL := strings.ReplaceAll(n.orderURL, "{id}", rec.ID)
 
 	return TemplateData{
-		OrderID:        rec.ID,
-		OrderShortID:   short,
-		CustomerName:   name,
-		ProductTitle:   productTitle,
-		Attrs:          rec.Attrs,
-		Total:          total,
-		StatusNote:     evt.Note,
-		TrackingNumber: evt.TrackingNumber,
-		ShopName:       shopName,
-		OrderURL:       orderURL,
+		OrderID:         rec.ID,
+		OrderShortID:    short,
+		CustomerName:    name,
+		ProductTitle:    productTitle,
+		Attrs:           rec.Attrs,
+		Total:           total,
+		PromoCode:       promoCode,
+		DiscountPercent: discountPercent,
+		Discount:        discount,
+		Subtotal:        subtotal,
+		StatusNote:      evt.Note,
+		TrackingNumber:  evt.TrackingNumber,
+		ShopName:        shopName,
+		OrderURL:        orderURL,
 	}
 }
 

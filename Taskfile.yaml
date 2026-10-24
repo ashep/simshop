@@ -19,3 +19,42 @@ tasks:
     cmds:
       - rm -rf .ci
       - git clone --branch v1 https://github.com/ashep/ci.git .ci
+
+  dev:
+    desc: Run backend and frontend locally; site at http://localhost:8080 (WEB_PORT=... to change)
+    deps: [dev:api, dev:web]
+
+  dev:api:
+    desc: Run the backend with config.yaml, rebuilding on changes (air, see .air.toml)
+    # Unlike go:run, no `netgo` tag: the pure-Go resolver ignores macOS system DNS
+    # (VPN, /etc/resolver) and can time out on api.monobank.ua at startup.
+    env:
+      APP_CONFIG_PATH: config.yaml
+      APP_NAME: '{{.APP_NAME}}'
+      APP_VERSION: '{{.APP_VERSION}}'
+    preconditions:
+      - sh: command -v air
+        msg: "air is not installed: go install github.com/air-verse/air@latest"
+    cmds:
+      # data/ is a symlink: air never descends into it, so watch its resolved target explicitly.
+      - air -c .air.toml -build.include_dir "$(realpath data)" -- {{.CLI_ARGS}}
+
+  dev:web:
+    desc: Serve frontend/www via Caddy, proxying /api to the local backend
+    vars:
+      WEB_PORT: '{{.WEB_PORT | default "8104"}}'
+      API_ADDR:
+        sh: grep -A5 '^server:' config.yaml 2>/dev/null | awk '/addr:/{print $2; exit}'
+    preconditions:
+      - sh: command -v caddy
+        msg: "caddy is not installed: brew install caddy"
+      - sh: test -n "{{.API_ADDR}}"
+        msg: "server.addr not found in config.yaml"
+    cmds:
+      - mkdir -p tmp
+      - >-
+        sed -e 's#^:80 {#:{{.WEB_PORT}} {#'
+        -e 's#127.0.0.1:9000#{{.API_ADDR}}#g'
+        -e 's#/usr/share/caddy#{{.ROOT_DIR}}/frontend/www#g'
+        Caddyfile > tmp/Caddyfile.dev
+      - caddy run --config tmp/Caddyfile.dev --adapter caddyfile

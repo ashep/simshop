@@ -166,6 +166,14 @@ func Run(rt *runner.Runtime[Config]) error {
 	srv.HandleFunc("GET /products", corsMw(openapiMw(hdl.ListProducts)))
 	srv.HandleFunc("OPTIONS /products/{id}/{lang}", corsMw(nop))
 	srv.HandleFunc("GET /products/{id}/{lang}", corsMw(openapiMw(hdl.ServeProductContent)))
+	srv.HandleFunc("OPTIONS /products/{id}/promo-codes/{code}", corsMw(nop))
+	// Own limiter: this is the only brute-force guard on promo codes, and sharing the order
+	// limiter would let storefront code checks eat into the customer's order budget.
+	checkPromoHandler := hdl.CheckPromoCode
+	if cfg.RateLimit > 0 {
+		checkPromoHandler = handler.RateLimitMiddleware(cfg.RateLimit)(checkPromoHandler)
+	}
+	srv.HandleFunc("GET /products/{id}/promo-codes/{code}", corsMw(openapiMw(checkPromoHandler)))
 	srv.HandleFunc("GET /product", hdl.ServeProductPreview)
 	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
 	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))

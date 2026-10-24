@@ -61,6 +61,9 @@ func RenderOrderDetail(w io.Writer, o *Order) error {
 	p("Country", strings.ToUpper(o.Country))
 	p("City", o.City)
 	p("Address", o.Address)
+	if o.PromoCode != nil && o.DiscountPercent != nil && o.Discount != nil {
+		p("Promo code", fmt.Sprintf("%s (−%d%%, −%s)", *o.PromoCode, *o.DiscountPercent, formatPrice(*o.Discount, o.Currency)))
+	}
 	p("Total", formatPrice(o.Price, o.Currency))
 	if o.TrackingNumber != nil && *o.TrackingNumber != "" {
 		p("Tracking", *o.TrackingNumber)

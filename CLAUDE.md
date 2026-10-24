@@ -11,6 +11,9 @@
   edits outside the plan). Never `replace_all` a field into test bodies without auditing every match — a "missing X"
   test must not gain X.
 - `Write` requires the target be `Read` first this session; `Read` each target before a multi-file write pass.
+- Schema changes go in a **new numbered migration** `internal/sql/NNN_<name>.{up,down}.sql` (picked up by `go:embed`
+  + `dbmigrator`); never edit an already-applied file — existing DBs (local dev, prod) would never receive it. Use
+  `IF NOT EXISTS`/`IF EXISTS` so a DB patched by hand still migrates cleanly.
 - `data/` is a **symlink** to `../shop-content/data` (separate git repo). Commit files under it there:
   `git -C "$(dirname "$(readlink data)")" add ...`. `git add data/...` here fails ("beyond a symbolic link").
 - `vendor/` is gitignored (regen via `go mod vendor`); only `go.mod`/`go.sum` are staged. `go mod tidy` strips modules
@@ -21,7 +24,7 @@
 
 `simshop` is a Go HTTP API (`github.com/ashep/simshop`). Stack: filesystem catalog (products from YAML at startup, no
 product DB), PostgreSQL for orders, zerolog, `go-app` framework (`github.com/ashep/go-app`), OpenAPI spec in `api/` for
-request/response validation. Config from `config.yml` + env; data from `data_dir` (default `./data`). Use `api/` as
+request/response validation. Config from `config.yaml` + env; data from `data_dir` (default `./data`). Use `api/` as
 context for new features.
 
 Dirs: `internal/` (app, cli, handler, geo, loader, monobank, novaposhta, openapi, order, orderdb, page, product, resend,
@@ -69,7 +72,8 @@ Validator (`kin-openapi`) runs in 3.0 compatibility mode:
   does NOT rescue this.
 - Full `order_status` lifecycle lives in the `OrderStatus` component schema; `$ref` it from any endpoint
   surfacing/accepting a full-enum status. Operator-only subsets keep inline enums. The Postgres `order_status` enum
-  in `internal/sql/001_init.up.sql` is the runtime authority — edit it together with the OpenAPI schema.
+  (created in `internal/sql/001_init.up.sql`) is the runtime authority — change it (via a new migration) together
+  with the OpenAPI schema.
 
 ### HTTP middleware
 
@@ -78,7 +82,8 @@ Chain (inner→outer): `content-type → openapi validation → handler`.
 - **CORS**: unconditionally sets `Access-Control-Allow-Origin: *`. **Explicit `OPTIONS` routes must be registered
   alongside each `GET` in `app.go`** — stdlib mux has no implicit OPTIONS.
 - **Rate limit**: per-IP sliding window `60s/rpm`. `cfg.RateLimit`: positive → RPM; **`0`/negative → disabled**
-  (functests use `-1`).
+  (functests use `-1`). Applied only to `POST /orders` and `GET /products/{id}/promo-codes/{code}`, each with **its own
+  limiter instance** (the promo check is the sole brute-force guard on codes and must not eat the order budget).
 - **API key**: `Authorization: Bearer <token>`, constant-time compare. Empty `apiKey` is a programmer error — only
   register protected routes when `cfg.Server.APIKey != ""`; don't push the empty check into the middleware.
 
@@ -86,6 +91,13 @@ Chain (inner→outer): `content-type → openapi validation → handler`.
 
 Integer minor units (cents) across the domain boundary, never float. **Round once per amount; don't multiply
 totals** (bias compounds).
+
+### Product availability
+
+`Product.Available *bool` in `product.yaml`; absent → `nil` → treated as `true` everywhere. `CreateOrder` checks
+it before any DB write — absent or `true` → proceed; explicit `false` → 400 `"product not available"`.
+`ServeProductContent` and `joinProductImages` (loader) convert nil/true → `bool true` on `ProductDetail.Available`
+and `Item.Available` respectively; both fields are serialized to JSON and are `required` in the OpenAPI schemas.
 
 ### Country codes
 
@@ -105,6 +117,13 @@ YAML stores bare filenames; clients receive `/images/{id}/<filename>`. Rewrite i
 `Product.Images` (`[]ImageItem`) is a **single ordered media list** of stills and MP4 clips — no separate `videos`
 field. Discriminator `ImageItem.Type` (empty/`"image"` vs `"video"`) must stay on both the Go struct and the
 `ImageItem` schema. Unified (not split) because `attr_images`/carousel are index-based into it.
+`attr_images` is **two-way** in `main.js`: a variant click jumps the carousel (`_goTo`), and landing on a mapped slide
+selects that value (`carousel._onSlide`, set by `renderVariants`; it never calls `_goTo`, so no loop).
+The fullscreen lightbox pages through the same list and drives the page carousel via `_goTo` on every step, so
+the URL `?img=` and the selected variant stay in sync after it closes.
+Listing `Item.Images` (≤ `product.ItemMaxImages` = 2 stills, `Images[0]` == `Image`) feeds the card hover swap: pure
+CSS, `.card-image-alt` fades in over the opaque first image (fading both lets the background flash through), only
+under `@media (hover: hover)` so a tap doesn't stick. A position-following scrub was tried and rejected — don't redo it.
 
 ### Customer language on orders
 
@@ -191,27 +210,45 @@ via `order.InvoiceStatusToOrderStatus` and apply iff `order.ShouldApplyInvoiceTr
 ### internal/loader
 
 Missing `data_dir`/`products/` → empty catalog (not an error). Malformed YAML or validation failure → **fatal at
-startup**. `{data_dir}/shop.yaml` is **mandatory**: missing → fatal, and `shop.countries` must be non-empty. `products/
-products.yaml` missing → empty list, not an error.
+startup**. `{data_dir}/shop.yaml` is **mandatory**: missing → fatal, and `shop.countries` must be non-empty.
+
+There is **no `products.yaml`**: the catalog listing is `shop.products` (ordered ids) and each `Item` is built from
+that product's `product.yaml` (`Title`←`name`, `Description`←`summary`, `categories`), so `loadShop` must run before
+`buildProductItems`. Unknown/duplicate listed id → fatal; unlisted products load but aren't listed. `Shop.Products`
+is `json:"-"` (loader input, not part of `GET /shop`). `dropEmptyCategories` then removes `shop.categories` with no
+*listed* product — filtering is server-side so all three frontend category UIs (home rows, catalog tabs, footer) agree;
+shop tests declaring categories must list a product in each.
 
 `validate` (fatal at startup) checks: name/description non-empty and same language set; every spec/attr entry covers
 exactly `name`'s languages (attrs need ≥1 value each); `prices` contains `"default"`; every image
-`preview`/`full`/`attr_images` filename exists under `{productDir}/images/`.
+`preview`/`full`/`attr_images`/`cover` filename exists under `{productDir}/images/` (cover must not be a video); every
+`attr_colors` value is `#rrggbb`. `Product.Cover` stays a **bare filename** after loading (unlike `Images`) —
+`joinProductImages` and the OG preview build `/images/{id}/...` themselves.
+`attr_colors` is language-independent (like `attr_images`), not a field on the per-language `AttrValue` — that would
+force duplicating the hex in every language block.
+
+`Product.PromoCodes` is `json:"-"` and must **never** be serialized — any product response including it leaks every
+code. The only exposure is the single-code check `GET /products/{id}/promo-codes/{code}` (functest
+`ProductEndpointsDoNotLeakCodes` guards this). Matching is case-insensitive, hence the loader's case-insensitive
+duplicate check.
 
 ## Routes
 
 Full request/response shapes live in `api/root.yaml` — this section covers cross-file gotchas only.
 
-- **`GET /products/{id}/{lang}`**: categories live only in the listing (`product.yaml` has none) —
-  `ServeProductContent` cross-references them by matching `id` against `h.prod.List()`; a product missing from the
-  listing gets no categories. Price-field naming gotcha: YAML `prices:` / Go `Product.Prices`, but the resolved
+- **`GET /products/{id}/{lang}`**: price-field naming gotcha: YAML `prices:` / Go `Product.Prices`, but the resolved
   single-country price serialises as `"price"`.
 - **`GET /product`** (singular, crawler preview): registered **without** `openapiMw`/`corsMw`, **not** in
   `api/root.yaml`. **Never returns non-200 to a crawler** — invalid/unknown ID falls back to shop-level OG tags.
 - **`POST /orders`**: two-phase commit — tx1 `Submit` (`status='new'`, DB is truth before Monobank knows) →
   Monobank `CreateInvoice` (failure leaves order at `new`, 502, reconciled out of band) → tx2 `AttachInvoice`
   (`status='awaiting_payment'`). `country` is **request-supplied, not geo-detected** (drives price + stored
-  country); geo detection is for `ServeProductContent` only. `order_invoices` has **no unique constraint on
+  country); geo detection is for `ServeProductContent` only. **Promo code**: an invalid non-empty `promo_code` → 400
+  (never a silent full-price order); `product.Discount` works off the full subtotal incl. add-ons and
+  rounds the **discounted total** to whole units (no kopecks; integer math), and the storefront (`promoTotalCents`)
+  repeats the same formula — change both together. `orders.price` stays the charged
+  total; `promo_code`/`discount_percent`/`discount` are all-NULL or all-set (`orderdb.scanPromo` keys off
+  `promo_code`). `order_invoices` has **no unique constraint on
   `order_id`** (re-issued invoices); PK is `(id, provider)` where `id` is the provider's invoice id — a mock
   serving multiple orders must return distinct ids per call.
 - **`GET /orders`**: registered only when `cfg.Server.APIKey != ""`; `POST /orders` is registered unconditionally
@@ -234,6 +271,27 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
 not the Go app**. `js/i18n.js`: **every key must have both `en` and `uk`** (`main.js` `t()` falls back to the key
 otherwise). API base is `<origin>/api`, hardcoded in `api.js`.
 
+Header/footer are **rendered by `main.js`** (`renderHeader`/`renderFooter` into `#site-header`/`#site-footer`) on every
+page, so a language switch re-renders them — lang links are `.lang-link[data-lang]`, not fixed ids. `/catalog` is a
+**reserved route** in `index.html` (a page with id `catalog` would be shadowed). Storefront content in `shop.yaml`
+(`announcement`, `announcement_page`, `menu`, `hero`, `features`, `story`, `gallery`) is optional and passed through
+as-is; image fields are bare `assets/` filenames, not validated. `hero.images` is a slideshow (`initHeroSlider` in
+`main.js`); there is no single `hero.image` field. Each slide is a `HeroImage` (custom `UnmarshalYAML`: bare filename or
+`{file, category}`; JSON always `{file, category?}`); a click on a slide's `img[data-href]` opens its category's
+catalog, unknown/dropped ids fall back to `/catalog`. `Category` has a custom `UnmarshalYAML`: YAML keeps language keys
+flat (`{id, en, uk}`), so `id` is reserved — a new non-language key must be added to `categoryReservedKeys` or it
+becomes a bogus language. Social `links` is a flat list shared by all languages (not a per-language map) and renders
+**only in the footer**, as text; `links[].icon` is used just to find the Instagram link for the home gallery. `GET
+/products` resolves `price` per request and **skips geo detection unless some product has a non-`default` price**
+(avoids an ipinfo.io call per listing).
+
+Local run: `task dev` (backend + Caddy on :8080, generated `tmp/Caddyfile.dev`). `dev:api` deliberately builds
+**without the `netgo` tag**: on macOS the pure-Go resolver ignores system DNS and the startup Monobank pubkey fetch
+times out, while `go:run` (with `netgo`) fails. `dev:api` runs under **`air`** (`.air.toml`): ldflags read `$APP_NAME`/`$APP_VERSION`
+from the task's `env` (air's `build.cmd` runs via `sh -c`); `.sql`/`.yaml` are watched because they're `go:embed`-ed.
+Air never descends into the `data` symlink (`follow_symlink` only affects `exclude_unchanged` checksums), so the task
+passes `-build.include_dir "$(realpath data)"` — air ≥1.67 watches out-of-root include dirs as extra roots.
+
 `Caddyfile`: `/api*` reverse-proxied to `:9000` with `/api` stripped; `/product` routes to backend
 `ServeProductPreview` for bots (User-Agent regex) vs `product.html` for humans; SPA fallback to `index.html`.
 `entrypoint.sh` runs both the Go server and Caddy, exiting when either child exits.
@@ -252,6 +310,10 @@ Keys in `internal/app/config.go`:
   `{id}` pattern) required when it's set.
 - `Monobank.ServiceURL`/`NovaPoshta.ServiceURL`/`Telegram.ServiceURL`/`Resend.ServiceURL` — optional, empty → real
   upstream; tests inject `httptest.Server.URL` via `testapp.New` opts.
+
+Local dev PG on `:5432` is **shared with other projects** — the gitignored `config.yaml` DSN must use the dedicated
+`simshop` database, never `postgres` (another project's migrator owns its `schema_migrations` → "no migration found
+for version N").
 
 `uuidv7()` is built-in PostgreSQL 18 (no extension); test container pins `postgres:18-alpine`.
 

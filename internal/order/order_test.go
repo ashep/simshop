@@ -565,3 +565,15 @@ func TestNotificationEvent(main *testing.T) {
 		assert.Equal(t, "", evt.TrackingNumber)
 	})
 }
+
+func TestPromoLabel(main *testing.T) {
+	main.Run("FormatsCodePercentAndAmount", func(t *testing.T) {
+		p := &Promo{Code: "SPRING15", Percent: 15, Discount: 37485}
+		assert.Equal(t, "SPRING15 (−15%, −374.85 UAH)", p.Label("uah"))
+	})
+
+	main.Run("PadsCents", func(t *testing.T) {
+		p := &Promo{Code: "TEN", Percent: 10, Discount: 705}
+		assert.Equal(t, "TEN (−10%, −7.05 USD)", p.Label("USD"))
+	})
+}

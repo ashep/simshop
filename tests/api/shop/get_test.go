@@ -23,6 +23,16 @@ func makeDataDir(t *testing.T, shopYAML string) string {
 	return dataDir
 }
 
+// makeProduct writes a minimal valid product.yaml in the given category.
+func makeProduct(t *testing.T, dataDir, id, category string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, "products", id)
+	require.NoError(t, os.MkdirAll(dir, 0755))
+	yaml := "name:\n  en: P\ndescription:\n  en: P.\ncategories:\n  - " + category +
+		"\nprices:\n  default:\n    currency: EUR\n    value: 10\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "product.yaml"), []byte(yaml), 0644))
+}
+
 const testShopYAML = `
 shop:
   countries:
@@ -51,21 +61,52 @@ shop:
     - id: organizers
       en: Organizers
       uk: Органайзери
+    - id: lamps
+      en: Lamps
+      uk: Світильники
+  products:
+    - clock
+    - pot
   links:
-    en:
-      - title: Instagram
-        icon: instagram
-        url: https://example.com/ig
-    uk:
-      - title: Instagram
-        icon: instagram
-        url: https://example.com/ig
+    - title: Instagram
+      icon: instagram
+      url: https://example.com/ig
   google-analytics:
     id: G-ABC123
+  announcement:
+    en: Handmade
+    uk: Ручна робота
+  announcement_page: sale
+  hero:
+    title:
+      en: Objects made by hand
+    text:
+      en: Clocks and lamps
+    images:
+      - h1.jpg
+      - file: h2.jpg
+        category: clocks
+  features:
+    - icon: clock
+      title:
+        en: 2 to 7 days
+      text:
+        en: Production time
+  story:
+    title:
+      en: Not mass-produced
+    image: story.jpg
+    page: about
+  gallery:
+    - g1.jpg
+  menu:
+    - about
 `
 
 func TestGetShop(main *testing.T) {
 	dataDir := makeDataDir(main, testShopYAML)
+	makeProduct(main, dataDir, "clock", "clocks")
+	makeProduct(main, dataDir, "pot", "organizers")
 	app := testapp.New(main, dataDir)
 	app.Start()
 
@@ -122,16 +163,17 @@ func TestGetShop(main *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "Clocks", clocksTitle["en"])
 		assert.Equal(t, "Годинники", clocksTitle["uk"])
+		assert.Len(t, clocksTitle, 2)
+		assert.NotContains(t, clocks, "image")
 		organizers, ok := categories[1].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "organizers", organizers["id"])
+		// "lamps" has no listed products, so it is not served.
 
-		links, ok := body["links"].(map[string]any)
+		links, ok := body["links"].([]any)
 		require.True(t, ok)
-		enLinks, ok := links["en"].([]any)
-		require.True(t, ok)
-		require.Len(t, enLinks, 1)
-		link, ok := enLinks[0].(map[string]any)
+		require.Len(t, links, 1)
+		link, ok := links[0].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "Instagram", link["title"])
 		assert.Equal(t, "instagram", link["icon"])
@@ -140,5 +182,28 @@ func TestGetShop(main *testing.T) {
 		ga, ok := body["google_analytics"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "G-ABC123", ga["id"])
+
+		assert.Equal(t, map[string]any{"en": "Handmade", "uk": "Ручна робота"}, body["announcement"])
+		assert.Equal(t, "sale", body["announcement_page"])
+		assert.Equal(t, map[string]any{
+			"title": map[string]any{"en": "Objects made by hand"},
+			"text":  map[string]any{"en": "Clocks and lamps"},
+			"images": []any{
+				map[string]any{"file": "h1.jpg"},
+				map[string]any{"file": "h2.jpg", "category": "clocks"},
+			},
+		}, body["hero"])
+		assert.Equal(t, []any{map[string]any{
+			"icon":  "clock",
+			"title": map[string]any{"en": "2 to 7 days"},
+			"text":  map[string]any{"en": "Production time"},
+		}}, body["features"])
+		assert.Equal(t, map[string]any{
+			"title": map[string]any{"en": "Not mass-produced"},
+			"image": "story.jpg",
+			"page":  "about",
+		}, body["story"])
+		assert.Equal(t, []any{"g1.jpg"}, body["gallery"])
+		assert.Equal(t, []any{"about"}, body["menu"])
 	})
 }

@@ -81,6 +81,21 @@ func firstImageURL(imgs []product.ImageItem, publicURL, id string) string {
 	return ""
 }
 
+// coverImageURL returns the absolute URL of the product's share image: the full-size
+// version of its cover when the cover is a gallery preview, the cover file itself
+// otherwise, and the first still image when no cover is set.
+func coverImageURL(p *product.Product, publicURL, id string) string {
+	if p.Cover == "" {
+		return firstImageURL(p.Images, publicURL, id)
+	}
+	for _, img := range p.Images {
+		if img.Type != "video" && img.Preview == p.Cover && img.Full != "" {
+			return publicURL + "/images/" + id + "/" + img.Full
+		}
+	}
+	return publicURL + "/images/" + id + "/" + p.Cover
+}
+
 func shopDefaultLang(s *shop.Shop) string {
 	if s == nil {
 		return ""
@@ -192,7 +207,7 @@ func (h *Handler) ServeProductPreview(w http.ResponseWriter, r *http.Request) {
 		Title:       p.Name[lang],
 		Description: plainText(p.Description[lang], 200),
 		SiteName:    shopName(s, lang),
-		Image:       firstImageURL(p.Images, h.publicURL, id),
+		Image:       coverImageURL(&p, h.publicURL, id),
 		URL:         pageURL,
 		Locale:      lang,
 		Refresh:     "/product?id=" + id + "&lang=" + lang,

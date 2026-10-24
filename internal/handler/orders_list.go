@@ -9,28 +9,31 @@ import (
 )
 
 type orderRecordResponse struct {
-	ID             string                 `json:"id"`
-	ProductID      string                 `json:"product_id"`
-	Status         string                 `json:"status"`
-	Email          string                 `json:"email"`
-	Price          int                    `json:"price"`
-	Currency       string                 `json:"currency"`
-	Lang           string                 `json:"lang"`
-	FirstName      string                 `json:"first_name"`
-	MiddleName     *string                `json:"middle_name,omitempty"`
-	LastName       string                 `json:"last_name"`
-	Country        string                 `json:"country"`
-	City           string                 `json:"city"`
-	Phone          string                 `json:"phone"`
-	Address        string                 `json:"address"`
-	AdminNote      *string                `json:"admin_note,omitempty"`
-	CustomerNote   *string                `json:"customer_note,omitempty"`
-	TrackingNumber *string                `json:"tracking_number,omitempty"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	Attrs          []orderAttrResponse    `json:"attrs"`
-	History        []orderHistoryResponse `json:"history"`
-	Invoices       []orderInvoiceResponse `json:"invoices"`
+	ID              string                 `json:"id"`
+	ProductID       string                 `json:"product_id"`
+	Status          string                 `json:"status"`
+	Email           string                 `json:"email"`
+	Price           int                    `json:"price"`
+	Currency        string                 `json:"currency"`
+	Lang            string                 `json:"lang"`
+	FirstName       string                 `json:"first_name"`
+	MiddleName      *string                `json:"middle_name,omitempty"`
+	LastName        string                 `json:"last_name"`
+	Country         string                 `json:"country"`
+	City            string                 `json:"city"`
+	Phone           string                 `json:"phone"`
+	Address         string                 `json:"address"`
+	AdminNote       *string                `json:"admin_note,omitempty"`
+	CustomerNote    *string                `json:"customer_note,omitempty"`
+	TrackingNumber  *string                `json:"tracking_number,omitempty"`
+	PromoCode       *string                `json:"promo_code,omitempty"`
+	DiscountPercent *int                   `json:"discount_percent,omitempty"`
+	Discount        *int                   `json:"discount,omitempty"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	Attrs           []orderAttrResponse    `json:"attrs"`
+	History         []orderHistoryResponse `json:"history"`
+	Invoices        []orderInvoiceResponse `json:"invoices"`
 }
 
 type orderAttrResponse struct {
@@ -128,7 +131,7 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 			Currency: inv.Currency,
 		}
 	}
-	return orderRecordResponse{
+	resp := orderRecordResponse{
 		ID:             rec.ID,
 		ProductID:      rec.ProductID,
 		Status:         rec.Status,
@@ -152,4 +155,9 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 		History:        history,
 		Invoices:       invoices,
 	}
+	if rec.Promo != nil {
+		code, percent, discount := rec.Promo.Code, rec.Promo.Percent, rec.Promo.Discount
+		resp.PromoCode, resp.DiscountPercent, resp.Discount = &code, &percent, &discount
+	}
+	return resp
 }

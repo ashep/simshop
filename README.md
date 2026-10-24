@@ -25,19 +25,20 @@ Every product YAML is validated when the service starts. Invalid products are fa
 if any product file fails validation. Rules:
 
 - `name` and `description` are required and must define the same set of languages.
+- `summary`, when present, must define the same set of languages as `name`.
 - Every spec entry must be translated into all languages defined in `name`.
 - `prices` must define at least a `default` key.
 - Every attribute entry must be translated into all languages defined in `name`, and each language entry must have
   at least one value.
 - All image paths (`preview` and `full`) must exist on disk relative to the product's `images/` subdirectory.
+- Every `promo_codes` key must be non-empty without whitespace, unique case-insensitively, with a percent in `1..99`.
 
 ## Filesystem Layout
 
 ```
 {data_dir}/
-  shop.yaml                # shop metadata (name, title, description)
+  shop.yaml                # shop metadata, incl. the ordered catalog `products` list
   products/
-    products.yaml          # flat product listing (id, title, description)
     {product-id}/
       product.yaml         # optional: full product definition (validated at startup)
       images/
@@ -50,8 +51,8 @@ if any product file fails validation. Rules:
       uk.md
 ```
 
-`products/products.yaml` drives `GET /products`. Each product subdirectory is optional; directories without a
-`product.yaml` are silently skipped by the validator. Image files are placed in the `images/` subdirectory and
+The `products` list in `shop.yaml` drives `GET /products`. Directories without a `product.yaml` are silently skipped
+by the validator. Image files are placed in the `images/` subdirectory and
 referenced by filename in `product.yaml`.
 
 ## Data Entities
@@ -60,7 +61,9 @@ referenced by filename in `product.yaml`.
 
 Shop metadata is loaded at startup from `{data_dir}/shop.yaml`. It holds a single `shop:` key containing the
 allowed-countries map, multilingual maps for `name`, `title`, and `description`, an optional ordered list of
-product `categories`, optional per-language `links`, and an optional `google-analytics` block.
+product `categories`, the ordered catalog `products` list, optional per-language `links`, an optional
+`google-analytics` block, and optional storefront content (`announcement`, `menu`, `hero`, `features`, `story`,
+`gallery`).
 
 `shop.yaml` is **required** at startup. The application fails to start if it is missing or if `countries` is empty.
 The `countries` map is keyed by lowercase ISO alpha-2 country code; each entry carries a per-language `name`,
@@ -69,15 +72,48 @@ per-language `currency` symbol/code, an international `phone_code` (e.g. `"+380"
 orders may be created — any order whose `country` field is not a key of this map is rejected with HTTP 400
 `invalid country`.
 
-The optional `categories` list is an ordered set of product categories. Each entry has a stable `id` and a
-per-language title; in YAML the language keys sit flat alongside `id`, and the API nests them under a `title` object.
+The optional `categories` list is an ordered set of product categories. Each entry has a stable `id`, a per-language
+title; in YAML the language keys sit flat alongside `id`, and the API nests them under a `title` object. `id` is
+therefore reserved and cannot be used as a language code.
+The bundled home page shows one product row per category, in list order (products in no category go to a trailing
+"Other" row). A category that no product in the `products` list belongs to is dropped at startup, so the API (and the
+storefront's home rows, filter tabs and footer links) never offers an empty category.
 
-The optional `links` map groups external/social links by language code; each entry has a display `title`, an `icon`
-identifier the frontend maps to a glyph, and a target `url`. The optional `google-analytics` block carries the
+The optional `products` list names the product ids (directory names under `products/`) shown in the catalog, in
+display order. A listed id with no loaded `product.yaml`, or one listed twice, is fatal at startup. Products not listed
+are loaded and reachable via `GET /products/{id}/{lang}` but hidden from `GET /products`. The list is not part of the
+`GET /shop` response.
+
+The optional `links` list holds external/social links, shared by all languages; each entry has a display `title`, an
+`icon` identifier, and a target `url`. The optional `google-analytics` block carries the
 measurement `id` (e.g. `"G-XXXXXXXXXX"`); it is surfaced in the response under the `google_analytics` key.
 
+The optional storefront content drives the home page and header of the bundled frontend; every block is optional and
+the frontend hides (or falls back for) whatever is missing:
+
+- `announcement` — per-language text of the thin bar above the header.
+- `announcement_page` — optional content page id (from `pages.yaml`); the whole announcement bar then links to it.
+  An id with no matching page leaves the bar unlinked.
+- `menu` — ordered list of content page ids (from `pages.yaml`) shown in the header navigation after the category
+  links. Ids with no matching page are skipped.
+- `hero` — the home-page lead block: per-language `eyebrow`, `title` and `text`, plus an optional `images` list
+  shown as a slideshow under the same text (auto-advances every 6 s, also arrows, dots and swipe; pauses on hover, in
+  a hidden tab and under reduced motion). Without them the frontend uses the shop `title`/`description` and the first
+  product image. Each `images` entry is a bare filename or `{file, category}`; `category` (a `categories` id) is where
+  a click on that slide leads (`/catalog?category=<id>`). No category, or one dropped for having no products, links to
+  the whole catalog. The API always emits entries as `{file, category?}`.
+- `features` — the benefits strip: a list of `{icon, title, text}` with per-language `title`/`text`. `icon` is one of
+  the frontend's glyph names (`hand`, `clock`, `box`, `truck`, `mail`, `shield`, `heart`, `star`, `gift`, `leaf`);
+  unknown names render without an icon.
+- `story` — the "about us" band: per-language `eyebrow`, `title`, `text`, an optional `image`, and an optional `page`
+  id the band links to.
+- `gallery` — list of image filenames for the photo strip next to the Instagram link; hidden when empty.
+
+Image fields (`hero.images[].file`, `story.image`, `gallery`) are **bare filenames under `{data_dir}/assets/`**, served by
+`GET /assets/{name}`; they are not validated at startup.
+
 `GET /shop` returns the shop object as JSON, including the full `countries` map, the `categories` list, the `links`
-map, and the `google_analytics` block.
+map, the `google_analytics` block, and the storefront content fields above.
 
 Example `shop.yaml`:
 
@@ -119,40 +155,65 @@ shop:
       en: Organizers
       uk: Органайзери
   links:
-    en:
-      - title: Instagram
-        icon: instagram
-        url: https://www.instagram.com/example/
+    - title: Instagram
+      icon: instagram
+      url: https://www.instagram.com/example/
   google-analytics:
     id: G-XXXXXXXXXX
+  announcement:
+    en: Handmade · Free returns
+    uk: Ручна робота · Безкоштовне повернення
+  announcement_page: returns
+  menu:
+    - about
+  hero:
+    title:
+      en: Objects made by hand
+      uk: Речі, зроблені руками
+    text:
+      en: Shelves and organizers for your desk.
+      uk: Полиці й органайзери для вашого столу.
+    images:
+      - file: hero-1.jpg
+        category: organizers
+      - hero-2.jpg
+  features:
+    - icon: clock
+      title:
+        en: Made in 3 days
+        uk: Виготовлення за 3 дні
+  story:
+    title:
+      en: Not mass-produced
+      uk: Не серійний товар
+    page: about
+  gallery:
+    - gallery-1.jpg
+    - gallery-2.jpg
 ```
 
 ### Product listing
 
-The product listing served by `GET /products` comes from `{data_dir}/products/products.yaml`. This is a flat YAML
-file containing lightweight product entries: an `id`, an optional list of `categories`, a multilingual `title`, and a
-multilingual `description`. A missing `products.yaml` results in an empty list — it is not an error.
+`GET /products` returns one entry per id in `shop.yaml`'s `products` list, in that order, built from each product's
+`product.yaml`: `title` is the product's `name`, `description` is its short `summary` (omitted when absent), and
+`categories` is its `categories` list. Without a `products` list the catalog is empty — it is not an error.
 
-Each entry's optional `categories` is a list of category ids referencing the `id`s of the `categories` list in
-`shop.yaml`. It is returned as-is in the listing response and omitted when empty.
+Each entry in the listing response also includes an optional `image` field — the URL path of the product's `cover`,
+or else of the first still preview image (e.g. `/images/oak-shelf/thumb.png`). The field is omitted when the product
+has no images. Alongside it, `images` lists up to 2 still preview paths starting with `image` (cover first, then the
+gallery's stills in order, videos skipped); the storefront card crossfades to the second one on hover.
 
-Each entry in the listing response also includes an optional `image` field — the URL path of the first preview image
-from the product's `product.yaml` (e.g. `/images/oak-shelf/thumb.png`). The field is omitted when the product has no
-images or when the product subdirectory has no `product.yaml`.
+Each entry also carries a `price` (`{currency, value}`): the base price resolved for the client's country exactly
+like `GET /products/{id}/{lang}` (falling back to `prices.default`). Geo detection only runs when some product defines
+a country-specific price.
 
-Example `products.yaml`:
+Example `shop.yaml` fragment:
 
 ```yaml
-products:
-  - id: oak-shelf
-    categories:
-      - organizers
-    title:
-      en: Oak Shelf
-      uk: Дубова полиця
-    description:
-      en: A handcrafted solid oak wall shelf.
-      uk: Настінна полиця з масиву дуба, виготовлена вручну.
+shop:
+  products:
+    - oak-shelf
+    - walnut-box
 ```
 
 ### Product
@@ -164,14 +225,15 @@ validated at startup to enforce data integrity. Subdirectories without a `produc
 price for the caller's country, and returns a JSON `ProductDetail` object. Returns 404 if the product or language is
 not found.
 
-The detail response also includes the product's `categories`, cross-referenced from the matching entry in
-`products.yaml` (the categories live in the listing, not in `product.yaml`). The field is omitted when the product has
-no listing entry or no categories.
+The detail response also includes the product's `categories` from `product.yaml`; the field is omitted when empty.
 
 Fields in `product.yaml`:
 
 - **name** — multilingual product name (e.g. `en`, `uk`).
+- **summary** — optional multilingual short blurb shown on catalog cards (the listing's `description`); must cover
+  the same languages as `name` when present.
 - **description** — multilingual long-form description; must cover the same languages as `name`.
+- **categories** — optional list of category ids referencing the `categories` list in `shop.yaml`.
 - **specs** — optional map of specification keys, each translated into every language defined in `name`.
   Each spec entry has a `title` and `value`.
 - **prices** — map of country/region codes (lowercase, e.g. `ua`, `us`) to `{currency, value}` pairs. Must contain
@@ -188,6 +250,17 @@ Fields in `product.yaml`:
 - **attr_images** — optional map of per-attribute-value image filenames. Shape: `attr_key → value_key → filename`.
   Filenames are relative to the product's `images/` subdirectory. The API response returns them as URL paths
   (e.g. `/images/{id}/red-thumb.jpg`). No country resolution is applied — each value maps to exactly one image.
+- **attr_colors** — optional map of per-attribute-value swatch colors. Shape: `attr_key → value_key → "#rrggbb"`
+  (validated at startup). Language-independent, returned as-is. When every value of an attribute has a color, the
+  storefront shows that attribute as round color swatches instead of text buttons; a partial set falls back to text.
+- **promo_codes** — optional map of promo code → integer discount percent (`1..99`), e.g. `SPRING15: 15`. Codes
+  work only for this product, match case-insensitively, and stay valid until removed from the YAML (no expiry or
+  usage limits). Never returned by product endpoints; checked via `GET /products/{id}/promo-codes/{code}`.
+- **cover** — optional filename of a still image under the product's `images/` subdirectory (usually one of the
+  gallery previews, e.g. `03-preview.png`). It becomes the listing `image` — the picture on product cards and the
+  fallback for the home hero — instead of the first gallery image. For link previews (OG tags) the
+  matching gallery entry's `full` file is used when the cover is a gallery preview. Validated at startup: the file must
+  exist and must not be a video. The product page gallery order is unaffected.
 - **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's `images/`
   subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that can be appended to
   the server's base URL to download the file.
@@ -252,6 +325,11 @@ attr_images:
     natural: finish-natural.jpg
     dark: finish-dark.jpg
 
+attr_colors:
+  finish:
+    natural: "#d8b98c"
+    dark: "#5a3b24"
+
 images:
   - preview: 01-preview.png
     full: 01.png
@@ -287,6 +365,7 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/shop`                            | Get shop metadata (name, title, description, categories, links, analytics) |
 | `GET`    | `/products`                        | List all products (id, categories, title, description, image) |
 | `GET`    | `/products/{id}/{lang}`            | Get full product detail in the requested language     |
+| `GET`    | `/products/{id}/promo-codes/{code}` | Check a product promo code (percent off, or 404)     |
 | `GET`    | `/images/{product_id}/{file_name}` | Download a product image by filename                  |
 | `GET`    | `/assets/{path...}`                | Download a static asset (favicon, logo, etc.) by path |
 | `GET`    | `/pages`                           | List all pages (id, title)                            |
@@ -375,7 +454,17 @@ which always wins because the customer's money was returned.
 ```
 
 Required fields: `product_id`, `lang`, `first_name`, `last_name`, `phone`, `email`, `country`, `city`, `address`.
-Optional: `middle_name`, `attributes`, `notes` (stored in the `customer_note` column).
+Optional: `middle_name`, `attributes`, `notes` (stored in the `customer_note` column), `promo_code`.
+
+**Promo codes.** When `promo_code` is non-empty it must be one of the product's `promo_codes` (case-insensitive),
+otherwise the request is rejected with HTTP 400 `invalid promo code` before anything is written — an order is never
+silently placed at full price. The percent is taken off the whole subtotal (base price plus add-ons) and the discounted
+total is rounded to whole currency units, half up (no kopecks): `total = round(subtotal × (100 − percent) / 100)`,
+`discount = subtotal − total` (e.g. 2499 at 15% → 2124, discount 375). The Monobank invoice is for that total. The
+storefront previews the discount via `GET /products/{id}/promo-codes/{code}`, which returns `{"code": "SPRING15",
+"discount_percent": 15}` (canonical spelling) or 404 `promo code not found` for an unknown product or code. That
+endpoint is per-IP rate-limited like `POST /orders` (separate limiter, same `rate_limit`). The applied code, percent and
+discount show up in `GET /orders`, the Telegram new-order message, customer emails and `simshop order get`.
 
 The supplied `country` must be a key of the `shop.countries` map defined in `shop.yaml`; otherwise the request
 is rejected with HTTP 400 `invalid country`. The server resolves the price from `product.yaml` using the
@@ -388,10 +477,11 @@ consulted at order time. Returns 201 on success, 400 for invalid input (includin
 
 #### Schema
 
-`orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int,
-minor units, total = base + sum of attr add-ons), `currency`, `lang` (checkout language code captured from the
-request, drives downstream localized notifications), `first_name`, `middle_name` (nullable), `last_name`,
-`country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
+`orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int, minor
+units, charged total = base + sum of attr add-ons − discount), `promo_code`, `discount_percent`, `discount` (all
+nullable — set together when a promo code was applied; `discount` in minor units), `currency`, `lang` (checkout language
+code captured from the request, drives downstream localized notifications), `first_name`, `middle_name` (nullable),
+`last_name`, `country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
 `tracking_number` (nullable; populated by the operator on the `shipped` transition, write-once), `created_at`,
 `updated_at`.
 
@@ -431,7 +521,7 @@ full status history inlined into each record. It is intended for operator/admin 
 token.
 
 **Auth:** the request must carry an `Authorization: Bearer <key>` header whose value matches the configured
-`server.api_key` from `config.yml`. A missing or malformed header returns HTTP 401 with
+`server.api_key` from `config.yaml`. A missing or malformed header returns HTTP 401 with
 `{"error": "missing or invalid authorization header"}`; a well-formed header carrying the wrong key returns HTTP 401
 with `{"error": "invalid api key"}`.
 
@@ -532,7 +622,7 @@ a JSON error body — Monobank does not consume them.
 
 ## Configuration
 
-Config is loaded from `config.yml`:
+Config is loaded from `config.yaml`:
 
 ```yaml
 debug: false
@@ -757,11 +847,18 @@ A static single-page storefront lives under `frontend/www/`. It is plain HTML/CS
 served as static files (by Caddy in the deployment image; see below). It consumes this service's JSON API to render the
 catalog, product pages, the checkout form, and the post-payment order-status page.
 
-- **Pages.** `index.html` (home: hero, category filter, product grid, and Markdown content pages), `product.html`
-  (product detail, image/video carousel, attribute selection, and the order form), and `order-status.html` (polls
-  `GET /orders/{id}` and shows a localized payment/fulfillment status).
+- **Pages.** `index.html` serves three routes: the home page at `/` (hero, benefits strip, one product
+  row per category, "about" band and photo gallery — all driven by `GET /shop` storefront content), the catalog at `/catalog`
+  (category filter and full product grid; `catalog` is therefore a reserved id a content page cannot use), and
+  Markdown content pages at `/<page id>`. `product.html` holds the product detail (breadcrumbs, carousel with
+  thumbnails and a fullscreen gallery, attribute selection, specs, description, related products) and the order form; `order-status.html`
+  polls `GET /orders/{id}` and shows a localized payment/fulfillment status. The header (announcement bar, wordmark,
+  navigation: one `/catalog?category=<id>` link per category, falling back to a single "Products" link when there are
+  none, then pages from `menu`; language switch) and the footer (logo, categories, pages, social links) are rendered by
+  `main.js` on every page.
 - **Scripts.** `js/api.js` wraps every API call; `js/i18n.js` holds the English and Ukrainian UI strings; `js/main.js`
-  drives routing (page state lives in query params: `?id=`, `?lang=`, `?category=`, `?img=`), rendering, the order
+  drives routing (page state lives in query params: `?id=`, `?lang=`, `?category=`, `?img=`; an old home-page
+  `/?category=` link redirects to `/catalog?category=`), rendering, the order
   form, and the carousel. Markdown is rendered with `marked` (loaded from a CDN).
 - **API base.** `api.js` calls `<origin>/api`.
 - **Languages.** English and Ukrainian. The active language is resolved from `?lang=`, then `localStorage`, then the
@@ -769,7 +866,8 @@ catalog, product pages, the checkout form, and the post-payment order-status pag
 - **Branding assets.** `applyAssets()` injects the favicons and footer logo from the backend `/assets/<file>` path
   (conventional filenames); none are bundled in the frontend.
 - **Analytics.** When `GET /shop` returns a `google_analytics.id`, `main.js` loads Google Analytics (gtag.js) at
-  runtime; with no id, no analytics code runs. The footer renders the per-language `links` from `GET /shop`.
+  runtime; with no id, no analytics code runs. The header and footer render the per-language `links` from
+  `GET /shop`.
 
 ## Deployment
 

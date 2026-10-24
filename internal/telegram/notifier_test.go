@@ -208,6 +208,36 @@ func TestNotifier(main *testing.T) {
 		assert.Contains(t, got[0].text, `*Customer:* Jane Q\. Doe`)
 	})
 
+	main.Run("NewOrderShowsPromoBeforeTotal", func(t *testing.T) {
+		r := newFakeReader()
+		rec := sampleRecord()
+		rec.Price = 4249
+		rec.Promo = &order.Promo{Code: "SPRING15", Percent: 15, Discount: 750}
+		r.put(rec)
+		s := &fakeSender{}
+		n := newTestNotifier(t, s, r)
+
+		n.Notify(context.Background(), order.NotificationEvent{OrderID: rec.ID, Status: "new"})
+
+		got := waitForCalls(t, s, 1, time.Second)
+		promoLine := "*Promo code:* " + mdv2Escape("SPRING15 (−15%, −7.50 USD)")
+		assert.Contains(t, got[0].text, promoLine)
+		assert.Less(t, strings.Index(got[0].text, promoLine), strings.Index(got[0].text, "*Total:*"))
+		assert.Contains(t, got[0].text, `*Total:* 42\.49 USD`)
+	})
+
+	main.Run("NewOrderWithoutPromoHasNoPromoLine", func(t *testing.T) {
+		r := newFakeReader()
+		r.put(sampleRecord())
+		s := &fakeSender{}
+		n := newTestNotifier(t, s, r)
+
+		n.Notify(context.Background(), order.NotificationEvent{OrderID: "018f4e3a-0000-7000-8000-000000000001", Status: "new"})
+
+		got := waitForCalls(t, s, 1, time.Second)
+		assert.NotContains(t, got[0].text, "Promo code")
+	})
+
 	main.Run("NewOrderAttrsRendered", func(t *testing.T) {
 		r := newFakeReader()
 		rec := sampleRecord()

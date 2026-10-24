@@ -27,16 +27,22 @@ var markdown = goldmark.New(goldmark.WithExtensions(extension.Table))
 // All fields are pre-formatted strings; callers (Notifier) compute Total,
 // resolve OrderURL, and render names before invoking Render.
 type TemplateData struct {
-	OrderID        string
-	OrderShortID   string
-	CustomerName   string
-	ProductTitle   string
-	Attrs          []order.Attr
-	Total          string
-	StatusNote     string
-	TrackingNumber string
-	ShopName       string
-	OrderURL       string
+	OrderID      string
+	OrderShortID string
+	CustomerName string
+	ProductTitle string
+	Attrs        []order.Attr
+	Total        string
+	// Promo fields are zero values when the order has no promo code.
+	// Subtotal is the pre-discount amount; Discount is formatted like Total.
+	PromoCode       string
+	DiscountPercent int
+	Discount        string
+	Subtotal        string
+	StatusNote      string
+	TrackingNumber  string
+	ShopName        string
+	OrderURL        string
 }
 
 // TemplateStore holds parsed subject and body templates per (status, lang).

@@ -36,28 +36,31 @@ type OrderInvoice struct {
 
 // Order mirrors the API OrderRecord schema (read side).
 type Order struct {
-	ID             string              `json:"id"`
-	ProductID      string              `json:"product_id"`
-	Status         string              `json:"status"`
-	Email          string              `json:"email"`
-	Price          int                 `json:"price"`
-	Currency       string              `json:"currency"`
-	Lang           string              `json:"lang"`
-	FirstName      string              `json:"first_name"`
-	MiddleName     *string             `json:"middle_name"`
-	LastName       string              `json:"last_name"`
-	Country        string              `json:"country"`
-	City           string              `json:"city"`
-	Phone          string              `json:"phone"`
-	Address        string              `json:"address"`
-	AdminNote      *string             `json:"admin_note"`
-	CustomerNote   *string             `json:"customer_note"`
-	TrackingNumber *string             `json:"tracking_number"`
-	CreatedAt      string              `json:"created_at"`
-	UpdatedAt      string              `json:"updated_at"`
-	Attrs          []OrderAttr         `json:"attrs"`
-	History        []OrderHistoryEntry `json:"history"`
-	Invoices       []OrderInvoice      `json:"invoices"`
+	ID              string              `json:"id"`
+	ProductID       string              `json:"product_id"`
+	Status          string              `json:"status"`
+	Email           string              `json:"email"`
+	Price           int                 `json:"price"`
+	Currency        string              `json:"currency"`
+	Lang            string              `json:"lang"`
+	FirstName       string              `json:"first_name"`
+	MiddleName      *string             `json:"middle_name"`
+	LastName        string              `json:"last_name"`
+	Country         string              `json:"country"`
+	City            string              `json:"city"`
+	Phone           string              `json:"phone"`
+	Address         string              `json:"address"`
+	AdminNote       *string             `json:"admin_note"`
+	CustomerNote    *string             `json:"customer_note"`
+	TrackingNumber  *string             `json:"tracking_number"`
+	PromoCode       *string             `json:"promo_code"`
+	DiscountPercent *int                `json:"discount_percent"`
+	Discount        *int                `json:"discount"`
+	CreatedAt       string              `json:"created_at"`
+	UpdatedAt       string              `json:"updated_at"`
+	Attrs           []OrderAttr         `json:"attrs"`
+	History         []OrderHistoryEntry `json:"history"`
+	Invoices        []OrderInvoice      `json:"invoices"`
 }
 
 // Client is a thin Bearer-authenticated HTTP client for the simshop API.

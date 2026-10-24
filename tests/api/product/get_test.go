@@ -14,24 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testProductsYAML = `
-products:
-  - id: widget
-    categories:
-      - clocks
-      - organizers
-    title:
-      en: Widget
-      uk: Віджет
-    description:
-      en: A test product
-      uk: Тестовий продукт
-`
-
 const testProductYAML = `
 name:
   en: Widget
   uk: Віджет
+summary:
+  en: A short widget blurb
+  uk: Короткий опис віджета
+categories:
+  - clocks
+  - organizers
 description:
   en: A test product
   uk: Тестовий продукт
@@ -112,19 +104,20 @@ shop:
       phone_code: "+380"
 `
 
-// makeDataDir creates a data directory with a products.yaml listing and per-product
-// product.yaml detail files.
-func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]string) string {
+// makeDataDir creates a data directory with per-product product.yaml files and a
+// shop.yaml whose products list names the listed ids, in order.
+func makeDataDir(t *testing.T, listed []string, productYAMLs map[string]string) string {
 	t.Helper()
 	dataDir := t.TempDir()
 
-	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(testShopYAML), 0644))
-
-	if productsYAML != "" {
-		productsDir := filepath.Join(dataDir, "products")
-		require.NoError(t, os.MkdirAll(productsDir, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(productsDir, "products.yaml"), []byte(productsYAML), 0644))
+	shopYAML := testShopYAML
+	if len(listed) > 0 {
+		shopYAML += "  products:\n"
+		for _, id := range listed {
+			shopYAML += "    - " + id + "\n"
+		}
 	}
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "shop.yaml"), []byte(shopYAML), 0644))
 
 	for id, yaml := range productYAMLs {
 		productDir := filepath.Join(dataDir, "products", id)
@@ -136,7 +129,7 @@ func makeDataDir(t *testing.T, productsYAML string, productYAMLs map[string]stri
 }
 
 func TestListProducts(main *testing.T) {
-	dataDir := makeDataDir(main, testProductsYAML, map[string]string{
+	dataDir := makeDataDir(main, []string{"widget"}, map[string]string{
 		"widget": testProductYAML,
 	})
 	app := testapp.New(main, dataDir)
@@ -146,6 +139,8 @@ func TestListProducts(main *testing.T) {
 		t.Parallel()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, app.URL("/products"), nil)
 		require.NoError(t, err)
+		// CF-IPCountry: XX has no price entry → falls back to default. Avoids live ipinfo.io call.
+		req.Header.Set("CF-IPCountry", "XX")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -155,20 +150,21 @@ func TestListProducts(main *testing.T) {
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		require.Len(t, body, 1)
 		assert.Equal(t, "widget", body[0]["id"])
+		assert.Equal(t, map[string]any{"currency": "USD", "value": 49.99}, body[0]["price"])
 		title, ok := body[0]["title"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "Widget", title["en"])
 		assert.Equal(t, "Віджет", title["uk"])
 		description, ok := body[0]["description"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "A test product", description["en"])
+		assert.Equal(t, "A short widget blurb", description["en"])
 		categories, ok := body[0]["categories"].([]any)
 		require.True(t, ok)
 		assert.Equal(t, []any{"clocks", "organizers"}, categories)
 	})
 
-	main.Run("EmptyListWhenNoProductsYAML", func(t *testing.T) {
-		emptyDir := makeDataDir(t, "", nil)
+	main.Run("EmptyListWhenShopListsNoProducts", func(t *testing.T) {
+		emptyDir := makeDataDir(t, nil, nil)
 		emptyApp := testapp.New(t, emptyDir)
 		emptyApp.Start()
 
@@ -285,7 +281,7 @@ func TestListProducts(main *testing.T) {
 	})
 
 	main.Run("GetReturnsAttrPricesResolvedByCountry", func(t *testing.T) {
-		apDir := makeDataDir(t, "", map[string]string{"widget": testProductWithAttrPricesYAML})
+		apDir := makeDataDir(t, nil, map[string]string{"widget": testProductWithAttrPricesYAML})
 		apApp := testapp.New(t, apDir)
 		apApp.Start()
 
@@ -341,7 +337,7 @@ func TestListProducts(main *testing.T) {
 	})
 
 	main.Run("GetReturnsAttrPricesWithDefaultFallback", func(t *testing.T) {
-		apDir := makeDataDir(t, "", map[string]string{"widget": testProductWithAttrPricesYAML})
+		apDir := makeDataDir(t, nil, map[string]string{"widget": testProductWithAttrPricesYAML})
 		apApp := testapp.New(t, apDir)
 		apApp.Start()
 

@@ -3,7 +3,7 @@
 .idea
 .worktrees
 
-config.yml
+config.yaml
 /data
 /docs
 /public

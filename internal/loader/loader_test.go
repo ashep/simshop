@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/ashep/simshop/internal/loader"
+	"github.com/ashep/simshop/internal/product"
+	"github.com/ashep/simshop/internal/shop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,11 +68,19 @@ func makePageFile(t *testing.T, dataDir, content string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "pages.yaml"), []byte(content), 0644))
 }
 
-func makeProductsFile(t *testing.T, dataDir, content string) {
+// listProducts rewrites shop.yaml as minimalShopYAML plus a `products` listing of the given ids.
+func listProducts(t *testing.T, dataDir string, ids ...string) {
 	t.Helper()
-	dir := filepath.Join(dataDir, "products")
-	require.NoError(t, os.MkdirAll(dir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "products.yaml"), []byte(content), 0644))
+	content := minimalShopYAML + "  products:\n"
+	for _, id := range ids {
+		content += "    - " + id + "\n"
+	}
+	makeShopFile(t, dataDir, content)
+}
+
+// categorizedProductYAML is a minimal valid product.yaml in the given category.
+func categorizedProductYAML(category string) string {
+	return minimalValidYAML + "categories:\n  - " + category + "\n"
 }
 
 func makeShopFile(t *testing.T, dataDir, content string) {
@@ -314,46 +324,100 @@ pages:
 		assert.Error(t, err)
 	})
 
-	main.Run("MissingProductsYAML_EmptyProductItems", func(t *testing.T) {
+	main.Run("NoShopProducts_EmptyProductItems", func(t *testing.T) {
 		dataDir := setupDataDir(t)
-		require.NoError(t, os.MkdirAll(filepath.Join(dataDir, "products"), 0755))
+		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
+		require.Len(t, cat.Products, 1)
 		assert.Empty(t, cat.ProductItems)
-	})
-
-	main.Run("MalformedProductsYAML", func(t *testing.T) {
-		dataDir := t.TempDir()
-		makeProductsFile(t, dataDir, `products: [not a list of maps`)
-
-		_, err := loader.Load(dataDir)
-		assert.Error(t, err)
 	})
 
 	main.Run("LoadsProductItems", func(t *testing.T) {
 		dataDir := setupDataDir(t)
-		makeProductsFile(t, dataDir, `
-products:
-  - id: widget
-    categories:
-      - clocks
-      - organizers
-    title:
-      en: Widget
-      uk: Widget
-    description:
-      en: A test product
-      uk: Настільний годинник
-`)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+  uk: Віджет
+summary:
+  en: A test product
+  uk: Тестовий продукт
+description:
+  en: A long description.
+  uk: Довгий опис.
+categories:
+  - clocks
+  - organizers
+prices:
+  default:
+    currency: EUR
+    value: 10
+`, nil)
+		listProducts(t, dataDir, "widget")
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
 		require.Len(t, cat.ProductItems, 1)
 		assert.Equal(t, "widget", cat.ProductItems[0].ID)
-		assert.Equal(t, "Widget", cat.ProductItems[0].Title["en"])
-		assert.Equal(t, "A test product", cat.ProductItems[0].Description["en"])
+		assert.Equal(t, map[string]string{"en": "Widget", "uk": "Віджет"}, cat.ProductItems[0].Title)
+		assert.Equal(t, map[string]string{"en": "A test product", "uk": "Тестовий продукт"},
+			cat.ProductItems[0].Description)
 		assert.Equal(t, []string{"clocks", "organizers"}, cat.ProductItems[0].Categories)
+		assert.Equal(t, []string{"clocks", "organizers"}, cat.Products[0].Categories)
+	})
+
+	main.Run("ProductItemsFollowShopOrderAndSkipUnlisted", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "alpha", minimalValidYAML, nil)
+		makeProductDir(t, dataDir, "beta", minimalValidYAML, nil)
+		makeProductDir(t, dataDir, "gamma", minimalValidYAML, nil)
+		listProducts(t, dataDir, "gamma", "alpha")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Products, 3)
+		require.Len(t, cat.ProductItems, 2)
+		assert.Equal(t, "gamma", cat.ProductItems[0].ID)
+		assert.Equal(t, "alpha", cat.ProductItems[1].ID)
+	})
+
+	main.Run("Validation_UnknownListedProduct", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		listProducts(t, dataDir, "ghost")
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, `shop.yaml products: unknown product "ghost"`)
+	})
+
+	main.Run("Validation_DuplicateListedProduct", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
+		listProducts(t, dataDir, "widget", "widget")
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, `shop.yaml products: duplicate product "widget"`)
+	})
+
+	main.Run("Validation_SummaryLanguageMismatch", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+  uk: Продукт
+summary:
+  en: Short
+description:
+  en: A product.
+  uk: Продукт.
+prices:
+  default:
+    currency: EUR
+    value: 10
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, `summary missing language "uk"`)
 	})
 
 	main.Run("MissingShopYAML_Fatal", func(t *testing.T) {
@@ -365,6 +429,8 @@ products:
 
 	main.Run("LoadsShop", func(t *testing.T) {
 		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "clock", categorizedProductYAML("clocks"), nil)
+		makeProductDir(t, dataDir, "pot", categorizedProductYAML("organizers"), nil)
 		makeShopFile(t, dataDir, `
 shop:
   countries:
@@ -394,12 +460,48 @@ shop:
       en: Organizers
       uk: Органайзери
   links:
-    en:
-      - title: Instagram
-        icon: instagram
-        url: https://example.com/ig
+    - title: Instagram
+      icon: instagram
+      url: https://example.com/ig
   google-analytics:
     id: G-ABC123
+  announcement:
+    en: Handmade
+    uk: Ручна робота
+  announcement_page: sale
+  hero:
+    eyebrow:
+      en: Studio
+    title:
+      en: Objects made by hand
+    text:
+      en: Clocks and lamps
+    images:
+      - h1.jpg
+      - file: h2.jpg
+        category: clocks
+  features:
+    - icon: clock
+      title:
+        en: 2 to 7 days
+      text:
+        en: Production time
+  story:
+    title:
+      en: Not mass-produced
+    text:
+      en: Every piece is unique
+    image: story.jpg
+    page: about
+  gallery:
+    - g1.jpg
+    - g2.jpg
+  menu:
+    - about
+    - contacts
+  products:
+    - clock
+    - pot
 `)
 
 		cat, err := loader.Load(dataDir)
@@ -421,15 +523,62 @@ shop:
 		assert.Equal(t, "clocks", cat.Shop.Categories[0].ID)
 		assert.Equal(t, "Clocks", cat.Shop.Categories[0].Title["en"])
 		assert.Equal(t, "Годинники", cat.Shop.Categories[0].Title["uk"])
+		assert.Equal(t, map[string]string{"en": "Clocks", "uk": "Годинники"}, cat.Shop.Categories[0].Title)
 		assert.Equal(t, "organizers", cat.Shop.Categories[1].ID)
 		assert.Equal(t, "Organizers", cat.Shop.Categories[1].Title["en"])
 		assert.Equal(t, "Органайзери", cat.Shop.Categories[1].Title["uk"])
-		require.Len(t, cat.Shop.Links["en"], 1)
-		assert.Equal(t, "Instagram", cat.Shop.Links["en"][0].Title)
-		assert.Equal(t, "instagram", cat.Shop.Links["en"][0].Icon)
-		assert.Equal(t, "https://example.com/ig", cat.Shop.Links["en"][0].URL)
+		require.Len(t, cat.Shop.Links, 1)
+		assert.Equal(t, "Instagram", cat.Shop.Links[0].Title)
+		assert.Equal(t, "instagram", cat.Shop.Links[0].Icon)
+		assert.Equal(t, "https://example.com/ig", cat.Shop.Links[0].URL)
 		require.NotNil(t, cat.Shop.GoogleAnalytics)
 		assert.Equal(t, "G-ABC123", cat.Shop.GoogleAnalytics.ID)
+		assert.Equal(t, map[string]string{"en": "Handmade", "uk": "Ручна робота"}, cat.Shop.Announcement)
+		assert.Equal(t, "sale", cat.Shop.AnnouncementPage)
+		require.NotNil(t, cat.Shop.Hero)
+		assert.Equal(t, "Studio", cat.Shop.Hero.Eyebrow["en"])
+		assert.Equal(t, "Objects made by hand", cat.Shop.Hero.Title["en"])
+		assert.Equal(t, "Clocks and lamps", cat.Shop.Hero.Text["en"])
+		assert.Equal(t, []*shop.HeroImage{{File: "h1.jpg"}, {File: "h2.jpg", Category: "clocks"}}, cat.Shop.Hero.Images)
+		require.Len(t, cat.Shop.Features, 1)
+		assert.Equal(t, "clock", cat.Shop.Features[0].Icon)
+		assert.Equal(t, "2 to 7 days", cat.Shop.Features[0].Title["en"])
+		assert.Equal(t, "Production time", cat.Shop.Features[0].Text["en"])
+		require.NotNil(t, cat.Shop.Story)
+		assert.Equal(t, "Not mass-produced", cat.Shop.Story.Title["en"])
+		assert.Equal(t, "story.jpg", cat.Shop.Story.Image)
+		assert.Equal(t, "about", cat.Shop.Story.Page)
+		assert.Equal(t, []string{"g1.jpg", "g2.jpg"}, cat.Shop.Gallery)
+		assert.Equal(t, []string{"about", "contacts"}, cat.Shop.Menu)
+	})
+
+	main.Run("DropsShopCategoriesWithoutListedProducts", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "clock", categorizedProductYAML("clocks"), nil)
+		makeProductDir(t, dataDir, "pot", categorizedProductYAML("organizers"), nil)
+		makeProductDir(t, dataDir, "hidden-lamp", categorizedProductYAML("lamps"), nil)
+		makeShopFile(t, dataDir, minimalShopYAML+`  categories:
+    - id: organizers
+      en: Organizers
+    - id: lamps
+      en: Lamps
+    - id: empty
+      en: Empty
+    - id: clocks
+      en: Clocks
+  products:
+    - clock
+    - pot
+`)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		ids := make([]string, 0, len(cat.Shop.Categories))
+		for _, c := range cat.Shop.Categories {
+			ids = append(ids, c.ID)
+		}
+		// "lamps" only has an unlisted product and "empty" has none; order is preserved.
+		assert.Equal(t, []string{"organizers", "clocks"}, ids)
 	})
 
 	main.Run("MalformedShopYAML", func(t *testing.T) {
@@ -483,14 +632,7 @@ images:
 			"images/thumb.png": []byte("fake"),
 			"images/full.png":  []byte("fake"),
 		})
-		makeProductsFile(t, dataDir, `
-products:
-  - id: widget
-    title:
-      en: Widget
-    description:
-      en: A test product
-`)
+		listProducts(t, dataDir, "widget")
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
@@ -499,39 +641,325 @@ products:
 		assert.Equal(t, "/images/widget/thumb.png", *cat.ProductItems[0].Image)
 	})
 
+	main.Run("ProductItemAvailableTrueByDefault", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.True(t, cat.ProductItems[0].Available)
+	})
+
+	main.Run("ProductItemAvailableFalseWhenSet", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+description:
+  en: A test product
+available: false
+prices:
+  default:
+    currency: EUR
+    value: 10
+`, nil)
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.False(t, cat.ProductItems[0].Available)
+	})
+
+	main.Run("ProductItemImageUsesCover", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: EUR
+    value: 10
+cover: 02-preview.png
+images:
+  - preview: 01-preview.png
+    full: 01.png
+  - preview: 02-preview.png
+    full: 02.png
+`, map[string][]byte{
+			"images/01-preview.png": []byte("fake"),
+			"images/01.png":         []byte("fake"),
+			"images/02-preview.png": []byte("fake"),
+			"images/02.png":         []byte("fake"),
+		})
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		require.NotNil(t, cat.ProductItems[0].Image)
+		assert.Equal(t, "/images/widget/02-preview.png", *cat.ProductItems[0].Image)
+	})
+
+	main.Run("Validation_CoverNotFound", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+cover: missing.png
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "cover file not found")
+	})
+
+	main.Run("Validation_CoverIsVideo", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+cover: clip.mp4
+images:
+  - type: video
+    preview: clip.mp4
+    full: clip.mp4
+`, map[string][]byte{"images/clip.mp4": []byte("fake")})
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "cover must be a still image")
+	})
+
+	main.Run("ProductItemGetsPricesFromProduct", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: EUR
+    value: 10
+  ua:
+    currency: UAH
+    value: 400
+`, nil)
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Equal(t, map[string]product.PriceItem{
+			"default": {Currency: "EUR", Value: 10},
+			"ua":      {Currency: "UAH", Value: 400},
+		}, cat.ProductItems[0].Prices)
+	})
+
 	main.Run("ProductItemImageAbsentWhenProductHasNoImages", func(t *testing.T) {
 		dataDir := setupDataDir(t)
 		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
-		makeProductsFile(t, dataDir, `
-products:
-  - id: widget
-    title:
-      en: Widget
-    description:
-      en: A test product
-`)
+		listProducts(t, dataDir, "widget")
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
 		require.Len(t, cat.ProductItems, 1)
 		assert.Nil(t, cat.ProductItems[0].Image)
+		assert.Nil(t, cat.ProductItems[0].Images)
 	})
 
-	main.Run("ProductItemImageAbsentWhenNoMatchingProduct", func(t *testing.T) {
+	main.Run("ProductItemImagesAreFirstTwoStills", func(t *testing.T) {
 		dataDir := setupDataDir(t)
-		makeProductsFile(t, dataDir, `
-products:
-  - id: ghost
-    title:
-      en: Ghost
-    description:
-      en: No product dir
-`)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: EUR
+    value: 10
+images:
+  - preview: 01-preview.png
+    full: 01.png
+  - type: video
+    preview: clip.mp4
+    full: clip.mp4
+  - preview: 02-preview.png
+    full: 02.png
+  - preview: 03-preview.png
+    full: 03.png
+  - preview: 04-preview.png
+    full: 04.png
+  - preview: 05-preview.png
+    full: 05.png
+`, map[string][]byte{
+			"images/01-preview.png": []byte("fake"),
+			"images/01.png":         []byte("fake"),
+			"images/clip.mp4":       []byte("fake"),
+			"images/02-preview.png": []byte("fake"),
+			"images/02.png":         []byte("fake"),
+			"images/03-preview.png": []byte("fake"),
+			"images/03.png":         []byte("fake"),
+			"images/04-preview.png": []byte("fake"),
+			"images/04.png":         []byte("fake"),
+			"images/05-preview.png": []byte("fake"),
+			"images/05.png":         []byte("fake"),
+		})
+		listProducts(t, dataDir, "widget")
 
 		cat, err := loader.Load(dataDir)
 		require.NoError(t, err)
 		require.Len(t, cat.ProductItems, 1)
-		assert.Nil(t, cat.ProductItems[0].Image)
+		assert.Equal(t, []string{
+			"/images/widget/01-preview.png",
+			"/images/widget/02-preview.png",
+		}, cat.ProductItems[0].Images)
+	})
+
+	main.Run("ProductItemImagesStartWithCover", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", `
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: EUR
+    value: 10
+cover: 02-preview.png
+images:
+  - preview: 01-preview.png
+    full: 01.png
+  - preview: 02-preview.png
+    full: 02.png
+  - preview: 03-preview.png
+    full: 03.png
+`, map[string][]byte{
+			"images/01-preview.png": []byte("fake"),
+			"images/01.png":         []byte("fake"),
+			"images/02-preview.png": []byte("fake"),
+			"images/02.png":         []byte("fake"),
+			"images/03-preview.png": []byte("fake"),
+			"images/03.png":         []byte("fake"),
+		})
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Equal(t, []string{
+			"/images/widget/02-preview.png",
+			"/images/widget/01-preview.png",
+		}, cat.ProductItems[0].Images)
+	})
+
+	main.Run("LoadsProductWithAttrColors", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+attr_colors:
+  color:
+    red: "#D92D20"
+`, nil)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Products, 1)
+		assert.Equal(t, map[string]map[string]string{"color": {"red": "#D92D20"}}, cat.Products[0].AttrColors)
+	})
+
+	main.Run("Validation_AttrColorInvalid", func(t *testing.T) {
+		dataDir := t.TempDir()
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+attr_colors:
+  color:
+    red: red
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "attr_colors[color][red]")
+	})
+
+	promoYAML := func(codes string) string {
+		return `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+promo_codes:
+` + codes
+	}
+
+	main.Run("LoadsPromoCodes", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", promoYAML("  SPRING15: 15\n"), nil)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Products, 1)
+		assert.Equal(t, map[string]int{"SPRING15": 15}, cat.Products[0].PromoCodes)
+	})
+
+	main.Run("Validation_PromoPercentOutOfRange", func(t *testing.T) {
+		for _, pct := range []string{"0", "100"} {
+			dataDir := setupDataDir(t)
+			makeProductDir(t, dataDir, "p", promoYAML("  SPRING15: "+pct+"\n"), nil)
+
+			_, err := loader.Load(dataDir)
+			assert.ErrorContains(t, err, "promo_codes[SPRING15]", pct)
+		}
+	})
+
+	main.Run("Validation_PromoCodeWhitespace", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", promoYAML("  \"SPRING 15\": 15\n"), nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "promo_codes")
+	})
+
+	main.Run("Validation_PromoCodeDuplicateCase", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", promoYAML("  Sale: 10\n  SALE: 20\n"), nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "duplicate promo code")
 	})
 
 	main.Run("Validation_AttrImageNotFound", func(t *testing.T) {

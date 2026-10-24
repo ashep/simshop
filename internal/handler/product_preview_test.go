@@ -63,6 +63,19 @@ func TestFirstImageURL(t *testing.T) {
 		[]product.ImageItem{{Type: "video", Full: "v.mp4"}}, "https://host/api", "abc"))
 }
 
+func TestCoverImageURL(t *testing.T) {
+	imgs := []product.ImageItem{
+		{Preview: "01-p.png", Full: "01.png"},
+		{Preview: "02-p.png", Full: "02.png"},
+	}
+	require.Equal(t, "https://host/api/images/abc/01.png",
+		coverImageURL(&product.Product{Images: imgs}, "https://host/api", "abc"))
+	require.Equal(t, "https://host/api/images/abc/02.png",
+		coverImageURL(&product.Product{Images: imgs, Cover: "02-p.png"}, "https://host/api", "abc"))
+	require.Equal(t, "https://host/api/images/abc/cover.jpg",
+		coverImageURL(&product.Product{Images: imgs, Cover: "cover.jpg"}, "https://host/api", "abc"))
+}
+
 func TestShopLangHelpers(t *testing.T) {
 	s := &shop.Shop{
 		Name:        map[string]string{"uk": "Крамниця", "en": "Shop"},

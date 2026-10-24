@@ -49,8 +49,8 @@ func TestServeShop(main *testing.T) {
 			Categories: []*shop.Category{
 				{ID: "clocks", Title: map[string]string{"en": "Clocks", "uk": "Годинники"}},
 			},
-			Links: map[string][]*shop.Link{
-				"en": {{Title: "Instagram", Icon: "instagram", URL: "https://example.com/ig"}},
+			Links: []*shop.Link{
+				{Title: "Instagram", Icon: "instagram", URL: "https://example.com/ig"},
 			},
 			GoogleAnalytics: &shop.GoogleAnalytics{ID: "G-ABC123"},
 		}, nil)
@@ -81,12 +81,10 @@ func TestServeShop(main *testing.T) {
 		assert.Equal(t, "Clocks", catTitle["en"])
 		assert.Equal(t, "Годинники", catTitle["uk"])
 
-		links, ok := body["links"].(map[string]any)
+		links, ok := body["links"].([]any)
 		require.True(t, ok)
-		enLinks, ok := links["en"].([]any)
-		require.True(t, ok)
-		require.Len(t, enLinks, 1)
-		link, ok := enLinks[0].(map[string]any)
+		require.Len(t, links, 1)
+		link, ok := links[0].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "Instagram", link["title"])
 		assert.Equal(t, "instagram", link["icon"])

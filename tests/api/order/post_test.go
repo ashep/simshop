@@ -56,6 +56,8 @@ attr_prices:
   display_color:
     red:
       default: 10.00
+promo_codes:
+  SAVE15: 15
 `
 
 const testShopYAML = `
@@ -144,8 +146,11 @@ type orderRow struct {
 	Country      string
 	City         string
 	Phone        string
-	Address      string
-	CustomerNote *string
+	Address         string
+	CustomerNote    *string
+	PromoCode       *string
+	DiscountPercent *int
+	Discount        *int
 }
 
 type orderAttrRow struct {
@@ -171,7 +176,8 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 		SELECT id::text, product_id, status::text, email, price, currency, lang,
 		       first_name, middle_name, last_name,
 		       country, city, phone, address,
-		       customer_note
+		       customer_note,
+		       promo_code, discount_percent, discount
 		FROM orders
 		ORDER BY created_at`)
 	require.NoError(t, err)
@@ -185,6 +191,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 			&r.FirstName, &r.MiddleName, &r.LastName,
 			&r.Country, &r.City, &r.Phone, &r.Address,
 			&r.CustomerNote,
+			&r.PromoCode, &r.DiscountPercent, &r.Discount,
 		))
 		out = append(out, r)
 	}
@@ -321,6 +328,9 @@ func TestCreateOrder(main *testing.T) {
 		assert.Equal(t, "+380501234567", r.Phone)
 		assert.Equal(t, "Відділення №5", r.Address)
 		assert.Nil(t, r.CustomerNote)
+		assert.Nil(t, r.PromoCode)
+		assert.Nil(t, r.DiscountPercent)
+		assert.Nil(t, r.Discount)
 
 		assert.Empty(t, fetchOrderAttrs(t, a.DSN(), r.ID))
 
@@ -352,6 +362,35 @@ func TestCreateOrder(main *testing.T) {
 		assert.Equal(t, "Display color", attrs[0].AttrName)
 		assert.Equal(t, "Red", attrs[0].AttrValue)
 		assert.Equal(t, 1000, attrs[0].AttrPrice) // 10.00 → 1000 cents
+	})
+
+	main.Run("WithPromoCodePersistsDiscount", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"promo_code": "save15"}))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		r := rows[0]
+		assert.Equal(t, 4200, r.Price)
+		require.NotNil(t, r.PromoCode)
+		assert.Equal(t, "SAVE15", *r.PromoCode)
+		require.NotNil(t, r.DiscountPercent)
+		assert.Equal(t, 15, *r.DiscountPercent)
+		require.NotNil(t, r.Discount)
+		assert.Equal(t, 799, *r.Discount)
+	})
+
+	main.Run("InvalidPromoCodeReturns400AndDoesNotInsert", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"promo_code": "BOGUS"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error": "invalid promo code"}`, string(body))
+		assert.Empty(t, fetchOrders(t, a.DSN()))
 	})
 
 	main.Run("MissingProductIDReturns400AndDoesNotInsert", func(t *testing.T) {
@@ -557,6 +596,33 @@ func TestCreateOrder_Monobank(main *testing.T) {
 		assert.Equal(t, 840, body.Ccy)
 		assert.NotEmpty(t, body.MerchantPaymInfo.Reference)
 		assert.Contains(t, body.RedirectURL, "order_id=")
+	})
+
+	main.Run("RequestShapeWithPromoCode", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"invoiceId":"inv-promo","pageUrl":"https://pay.example/inv-promo"}`))
+		}
+
+		promoBody := `{"product_id":"widget","lang":"en","promo_code":"SAVE15","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(promoBody)))
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var body struct {
+			Amount           int `json:"amount"`
+			MerchantPaymInfo struct {
+				BasketOrder []struct {
+					Sum int `json:"sum"`
+				} `json:"basketOrder"`
+			} `json:"merchantPaymInfo"`
+		}
+		require.NoError(t, json.Unmarshal(lastBody, &body))
+		assert.Equal(t, 4249, body.Amount)
+		require.Len(t, body.MerchantPaymInfo.BasketOrder, 1)
+		assert.Equal(t, 4249, body.MerchantPaymInfo.BasketOrder[0].Sum)
 	})
 }
 

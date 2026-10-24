@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -86,6 +88,22 @@ type Order struct {
 	Address      string
 	Attrs        []Attr // sorted by attribute key for deterministic ordering
 	CustomerNote string
+	Promo        *Promo // nil when no promo code was applied
+}
+
+// Promo is the promo code applied to an order. Discount is in minor units;
+// the order's Price is already net of it.
+type Promo struct {
+	Code     string // canonical spelling from product.yaml
+	Percent  int
+	Discount int
+}
+
+// Label renders the promo for operator-facing output, e.g.
+// "SPRING15 (−15%, −374.85 UAH)".
+func (p *Promo) Label(currency string) string {
+	return fmt.Sprintf("%s (−%d%%, −%d.%02d %s)",
+		p.Code, p.Percent, p.Discount/100, p.Discount%100, strings.ToUpper(currency))
 }
 
 // HistoryEntry is one row of an order's status timeline.
@@ -112,28 +130,29 @@ type InvoiceEvent struct {
 // Record is a fully-populated order read from the store, including DB-generated
 // fields and all related attrs and history entries.
 type Record struct {
-	ID           string
-	ProductID    string
-	Status       string // order_status enum, as text
-	Email        string
-	Price        int
-	Currency     string
-	Lang         string // checkout language code persisted at order creation
-	FirstName    string
-	MiddleName   *string // nil when SQL NULL
-	LastName     string
-	Country      string
-	City         string
-	Phone        string
-	Address      string
-	AdminNote      *string         `json:",omitempty"`
-	CustomerNote   *string         `json:",omitempty"`
-	TrackingNumber *string         `json:"tracking_number,omitempty"`
+	ID             string
+	ProductID      string
+	Status         string // order_status enum, as text
+	Email          string
+	Price          int
+	Currency       string
+	Lang           string // checkout language code persisted at order creation
+	FirstName      string
+	MiddleName     *string // nil when SQL NULL
+	LastName       string
+	Country        string
+	City           string
+	Phone          string
+	Address        string
+	AdminNote      *string `json:",omitempty"`
+	CustomerNote   *string `json:",omitempty"`
+	TrackingNumber *string `json:"tracking_number,omitempty"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-	Attrs        []Attr         // never nil; possibly empty
-	History      []HistoryEntry // chronological, oldest first; never nil
-	Invoices     []Invoice      // never nil; possibly empty
+	Promo          *Promo         // nil when no promo code was applied
+	Attrs          []Attr         // never nil; possibly empty
+	History        []HistoryEntry // chronological, oldest first; never nil
+	Invoices       []Invoice      // never nil; possibly empty
 }
 
 // Writer persists an order to a backing store and returns the assigned id.

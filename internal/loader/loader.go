@@ -6,6 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/ashep/simshop/internal/page"
 	"github.com/ashep/simshop/internal/product"
@@ -32,14 +37,14 @@ func Load(dataDir string) (*Catalog, error) {
 	if err := loadProducts(dataDir, c); err != nil {
 		return nil, err
 	}
-	if err := loadProductsList(dataDir, c); err != nil {
-		return nil, err
-	}
-	joinProductImages(c)
-	if err := loadPages(dataDir, c); err != nil {
-		return nil, err
-	}
 	if err := loadShop(dataDir, c); err != nil {
+		return nil, err
+	}
+	if err := buildProductItems(c); err != nil {
+		return nil, err
+	}
+	dropEmptyCategories(c)
+	if err := loadPages(dataDir, c); err != nil {
 		return nil, err
 	}
 	if err := loadEmailTemplates(dataDir, c); err != nil {
@@ -61,32 +66,77 @@ type pagesFile struct {
 	Pages []*page.Page `yaml:"pages"`
 }
 
-// joinProductImages sets Item.Image to the first preview path from the
-// corresponding full Product, if one exists.
-func joinProductImages(c *Catalog) {
-	if len(c.ProductItems) == 0 || len(c.Products) == 0 {
-		return
-	}
+// buildProductItems builds the catalog listing from shop.yaml's products list:
+// one Item per listed id, in list order, populated from that product's
+// product.yaml. Unlisted products are loaded (and reachable by id) but not
+// listed. An unknown or duplicate id is fatal.
+func buildProductItems(c *Catalog) error {
 	byID := make(map[string]*product.Product, len(c.Products))
 	for _, p := range c.Products {
 		byID[p.ID] = p
 	}
-	for _, item := range c.ProductItems {
-		p, ok := byID[item.ID]
+	seen := make(map[string]bool, len(c.Shop.Products))
+	for _, id := range c.Shop.Products {
+		p, ok := byID[id]
 		if !ok {
-			continue
+			return fmt.Errorf("shop.yaml products: unknown product %q", id)
 		}
-		// Use the first image entry's preview as the list thumbnail, skipping video entries
-		// (their preview is an .mp4, which can't render in the grid's <img>).
-		for _, img := range p.Images {
-			if img.Type == "video" || img.Preview == "" {
-				continue
-			}
-			preview := img.Preview
-			item.Image = &preview
-			break
+		if seen[id] {
+			return fmt.Errorf("shop.yaml products: duplicate product %q", id)
+		}
+		seen[id] = true
+		c.ProductItems = append(c.ProductItems, newProductItem(p))
+	}
+	return nil
+}
+
+// dropEmptyCategories removes shop categories that no listed product belongs to,
+// so the storefront never offers a category with nothing in it. Order is kept.
+func dropEmptyCategories(c *Catalog) {
+	used := make(map[string]bool)
+	for _, item := range c.ProductItems {
+		for _, id := range item.Categories {
+			used[id] = true
 		}
 	}
+	kept := c.Shop.Categories[:0]
+	for _, cat := range c.Shop.Categories {
+		if used[cat.ID] {
+			kept = append(kept, cat)
+		}
+	}
+	c.Shop.Categories = kept
+}
+
+// newProductItem builds a listing Item from a loaded product. The thumbnail is
+// the cover when set, else the first still image's preview; Images holds the
+// thumbnail followed by the next still previews, up to product.ItemMaxImages.
+func newProductItem(p *product.Product) *product.Item {
+	item := &product.Item{
+		ID:          p.ID,
+		Available:   p.Available == nil || *p.Available,
+		Categories:  p.Categories,
+		Title:       p.Name,
+		Description: p.Summary,
+		Prices:      p.Prices,
+	}
+	if p.Cover != "" {
+		item.Images = append(item.Images, "/images/"+p.ID+"/"+p.Cover)
+	}
+	// Skip video entries: their preview is an .mp4, which can't render in the grid's <img>.
+	for _, img := range p.Images {
+		if len(item.Images) == product.ItemMaxImages {
+			break
+		}
+		if img.Type == "video" || img.Preview == "" || slices.Contains(item.Images, img.Preview) {
+			continue
+		}
+		item.Images = append(item.Images, img.Preview)
+	}
+	if len(item.Images) > 0 {
+		item.Image = &item.Images[0]
+	}
+	return item
 }
 
 func loadPages(dataDir string, c *Catalog) error {
@@ -134,29 +184,6 @@ func loadShop(dataDir string, c *Catalog) error {
 		return fmt.Errorf("shop.yaml must define a non-empty countries list")
 	}
 	c.Shop = f.Shop
-	return nil
-}
-
-type productsFile struct {
-	Products []*product.Item `yaml:"products"`
-}
-
-func loadProductsList(dataDir string, c *Catalog) error {
-	path := filepath.Join(dataDir, "products", "products.yaml")
-
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read products.yaml: %w", err)
-	}
-
-	var f productsFile
-	if err := yaml.Unmarshal(data, &f); err != nil {
-		return fmt.Errorf("parse products.yaml: %w", err)
-	}
-	c.ProductItems = f.Products
 	return nil
 }
 
@@ -219,6 +246,16 @@ func loadProduct(dir, id string) (*product.Product, error) {
 	return &p, nil
 }
 
+var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+func isVideoFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".mp4", ".mov", ".webm", ".m4v":
+		return true
+	}
+	return false
+}
+
 func validate(p *product.Product, dir string) error {
 	if len(p.Name) == 0 {
 		return fmt.Errorf("name is required")
@@ -236,6 +273,20 @@ func validate(p *product.Product, dir string) error {
 	for lang := range p.Description {
 		if _, ok := p.Name[lang]; !ok {
 			return fmt.Errorf("description has extra language %q not present in name", lang)
+		}
+	}
+
+	// summary is optional; when present it must cover exactly name's languages.
+	if len(p.Summary) > 0 {
+		for lang := range p.Name {
+			if _, ok := p.Summary[lang]; !ok {
+				return fmt.Errorf("summary missing language %q (defined in name)", lang)
+			}
+		}
+		for lang := range p.Summary {
+			if _, ok := p.Name[lang]; !ok {
+				return fmt.Errorf("summary has extra language %q not present in name", lang)
+			}
 		}
 	}
 
@@ -305,6 +356,54 @@ func validate(p *product.Product, dir string) error {
 				return fmt.Errorf("attr_images[%s][%s]: %w", attrKey, valueKey, statErr)
 			}
 		}
+	}
+
+	// cover must be an existing still image under images/ (it is shown in an <img>).
+	if p.Cover != "" {
+		if isVideoFile(p.Cover) {
+			return fmt.Errorf("cover must be a still image, got video %q", p.Cover)
+		}
+		for _, img := range p.Images {
+			if img.Type == "video" && (img.Preview == p.Cover || img.Full == p.Cover) {
+				return fmt.Errorf("cover must be a still image, got video %q", p.Cover)
+			}
+		}
+		if _, statErr := os.Stat(filepath.Join(imagesDir, p.Cover)); errors.Is(statErr, fs.ErrNotExist) {
+			return fmt.Errorf("cover file not found: %s", p.Cover)
+		} else if statErr != nil {
+			return fmt.Errorf("cover: %w", statErr)
+		}
+	}
+
+	// attr_colors values are swatch colors and must be #rrggbb.
+	for attrKey, valueColors := range p.AttrColors {
+		for valueKey, color := range valueColors {
+			if !hexColorRe.MatchString(color) {
+				return fmt.Errorf("attr_colors[%s][%s] must be a #rrggbb color, got %q", attrKey, valueKey, color)
+			}
+		}
+	}
+
+	// promo_codes: codes match case-insensitively, so two keys differing only by
+	// case would silently shadow each other.
+	codes := make([]string, 0, len(p.PromoCodes))
+	for code := range p.PromoCodes {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	seenCodes := make(map[string]struct{}, len(codes))
+	for _, code := range codes {
+		if code == "" || strings.IndexFunc(code, unicode.IsSpace) >= 0 {
+			return fmt.Errorf("promo_codes: code %q must be non-empty and contain no whitespace", code)
+		}
+		if pct := p.PromoCodes[code]; pct < 1 || pct > 99 {
+			return fmt.Errorf("promo_codes[%s] must be 1..99, got %d", code, pct)
+		}
+		upper := strings.ToUpper(code)
+		if _, dup := seenCodes[upper]; dup {
+			return fmt.Errorf("duplicate promo code %q", code)
+		}
+		seenCodes[upper] = struct{}{}
 	}
 
 	return nil

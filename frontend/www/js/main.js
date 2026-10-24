@@ -35,18 +35,6 @@ function syncCarouselUrl(index) {
   history.replaceState(null, '', `?${p.toString()}`);
 }
 
-// Reflect the selected home category into the URL (?category=<id>) so a copied link
-// reopens on the same filter and the choice survives reload. Omitted for "All" (null)
-// to keep URLs clean. Preserves any other params (e.g. ?lang=); drops the query string
-// entirely when nothing is left so "All" is the bare pathname, not a trailing "?".
-function syncCategoryUrl() {
-  const p = new URLSearchParams(window.location.search);
-  if (activeCategory) p.set('category', activeCategory);
-  else p.delete('category');
-  const qs = p.toString();
-  history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
-}
-
 let availableLangs = [];
 let currentLang = 'en'; // resolved after fetchShop() in DOMContentLoaded
 
@@ -85,20 +73,25 @@ function productTagline(product, lang) {
   return desc.split('\n')[0];
 }
 
+// Localised string from a {lang: text} map: the active language, else the first
+// available one, else ''.
+function loc(map) {
+  if (!map || typeof map !== 'object') return '';
+  return map[currentLang] || Object.values(map)[0] || '';
+}
+
+function assetUrl(name) {
+  return `${API_BASE}/assets/${encodeURIComponent(name)}`;
+}
+
 async function applyShopContent() {
   try {
     const shop = await fetchShop();
-    const name = (shop.name && shop.name[currentLang]) || (shop.title && shop.title[currentLang]);
-    const title = shop.title && shop.title[currentLang];
-    const desc = shop.description && shop.description[currentLang];
-    if (name) document.title = name;
-    if (title) {
-      const heading = document.querySelector('.hero-heading');
-      if (heading) heading.textContent = title;
-    }
+    const name = loc(shop.name) || loc(shop.title);
+    const desc = loc(shop.description);
+    // Only the home page is titled by the shop name; other views set their own title.
+    if (name && !getPageId()) document.title = name;
     if (desc) {
-      const tagline = document.querySelector('.hero-tagline');
-      if (tagline) tagline.textContent = desc;
       const meta = document.querySelector('meta[name="description"]');
       if (meta) meta.content = desc;
     }
@@ -133,46 +126,195 @@ function applyAnalytics() {
 // `API_BASE` once at startup; idempotent. Filenames are the conventional ones
 // the backend exposes.
 function applyAssets() {
-  const asset = name => `${API_BASE}/assets/${name}`;
   const icons = [
-    { rel: 'icon', href: asset('favicon.svg'), type: 'image/svg+xml' },
-    { rel: 'icon', href: asset('favicon.ico'), sizes: 'any' },
-    { rel: 'apple-touch-icon', href: asset('apple-touch-icon.png') },
+    { rel: 'icon', href: assetUrl('favicon.svg'), type: 'image/svg+xml' },
+    { rel: 'icon', href: assetUrl('favicon.ico'), sizes: 'any' },
+    { rel: 'apple-touch-icon', href: assetUrl('apple-touch-icon.png') },
   ];
   icons.forEach(spec => {
     const link = document.createElement('link');
     Object.entries(spec).forEach(([k, v]) => link.setAttribute(k, v));
     document.head.appendChild(link);
   });
-  document.querySelectorAll('.footer-logo').forEach(img => { img.src = asset('logo.png'); });
 }
 
-// Map of social-link icon names (ShopLink.icon from /shop) to inline SVG markup.
-// A link whose icon isn't here falls back to its title text.
-const SOCIAL_ICONS = {
-  instagram: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4.5"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>',
+/* ---- Icons ---- */
+
+// Stroke icons (24×24 grid, currentColor). Feature icons are keyed by
+// ShopFeature.icon from /shop; an unknown name renders nothing.
+const ICON_PATHS = {
+  instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor"/>',
+  facebook: '<path d="M15 3h-2a4 4 0 0 0-4 4v3H7v4h2v7h4v-7h3l1-4h-4V7a1 1 0 0 1 1-1h2z"/>',
+  telegram: '<path d="M21 4 3 11l6 2 2 6 3-4 5 4z"/><path d="m9 13 8-6"/>',
+  youtube: '<rect x="2" y="5" width="20" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
+  tiktok: '<path d="M14 3v11a4 4 0 1 1-4-4"/><path d="M14 3a5 5 0 0 0 5 5"/>',
+  threads: '<path d="M17.5 8C16.5 6 14.6 4.5 12 4.5 7.8 4.5 5 7.6 5 12s2.8 7.5 7 7.5c3.4 0 5.8-2 5.8-4.8 0-2.8-2.5-4.2-5.3-4.2-2 0-3.5 1-3.5 2.6 0 1.4 1.1 2.3 2.6 2.3 2.4 0 3.6-1.8 3.6-5"/>',
+  hand: '<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  box: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
+  truck: '<path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 7 9 6 9-6"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  heart: '<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>',
+  star: '<path d="m12 3 2.8 5.6 6.2.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.2-.9z"/>',
+  gift: '<rect x="3" y="8" width="18" height="4"/><path d="M5 12v9h14v-9"/><path d="M12 8v13"/><path d="M12 8S10 3 7.5 4.5 9 8 12 8zm0 0s2-5 4.5-3.5S15 8 12 8z"/>',
+  leaf: '<path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14z"/><path d="M5 19 13 11"/>',
+  menu: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
+  close: '<path d="M6 6l12 12"/><path d="M18 6 6 18"/>',
+  chevronLeft: '<path d="m15 5-7 7 7 7"/>',
+  chevronRight: '<path d="m9 5 7 7-7 7"/>',
 };
 
-// Render the footer social links from `shop.links[currentLang]` (array of
-// {title, icon, url}). Re-runs on language switch. Empty when the shop provides
-// no links for the active language.
-function renderSocialLinks() {
-  const container = document.getElementById('footer-social');
-  if (!container) return;
+function icon(name, size = 24) {
+  const paths = ICON_PATHS[name];
+  if (!paths) return '';
+  return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+/* ---- Header & Footer ---- */
+
+const LANG_LABELS = { uk: 'UA' };
+function langLabel(lang) {
+  return LANG_LABELS[lang] || lang.toUpperCase();
+}
+
+function langSwitchHtml() {
+  if (availableLangs.length < 2) return '';
+  return `<div class="lang-switch" role="group" aria-label="${esc(t('nav.lang'))}">${availableLangs.map((lang, i) =>
+    (i > 0 ? '<span class="lang-sep" aria-hidden="true">/</span>' : '') +
+    `<a href="#" class="lang-link${lang === currentLang ? ' active' : ''}" data-lang="${esc(lang)}" lang="${esc(lang)}">${esc(langLabel(lang))}</a>`
+  ).join('')}</div>`;
+}
+
+function socialLinks() {
   const shop = getCachedShop();
-  const links = (shop && shop.links && shop.links[currentLang]) || [];
-  container.innerHTML = links.map(l => {
-    const inner = SOCIAL_ICONS[l.icon] || esc(l.title);
-    return `<a href="${esc(l.url)}" target="_blank" rel="noopener" class="footer-social-link" aria-label="${esc(l.title)}">${inner}</a>`;
-  }).join('');
+  return (shop && Array.isArray(shop.links) && shop.links) || [];
+}
+
+// Header nav: one link per shop category (catalog filtered by ?category=), falling back
+// to a single catalog link when there are none, plus the content pages listed in
+// shop.menu (titles come from /pages; ids missing there are skipped).
+function navItems(pages) {
+  const shop = getCachedShop() || {};
+  const path = window.location.pathname.replace(/^\/|\/$/g, '');
+  const categories = Array.isArray(shop.categories) ? shop.categories : [];
+  const items = categories.length
+    ? categories.map(c => ({
+        href: `/catalog?category=${encodeURIComponent(c.id)}`,
+        label: loc(c.title) || c.id,
+        active: path === 'catalog' && activeCategory === c.id,
+      }))
+    : [{ href: '/catalog', label: t('nav.products'), active: path === 'catalog' || path === 'product' || path === 'product.html' }];
+  (shop.menu || []).forEach(id => {
+    const page = (pages || []).find(p => p.id === id);
+    if (!page) return;
+    items.push({ href: `/${id}`, label: loc(page.title) || id, active: path === id });
+  });
+  return items;
+}
+
+// Marquee: two identical groups so a -50% shift loops seamlessly. The copies are
+// aria-hidden; screen readers (and reduced-motion users) get the static text.
+// With href the whole bar is one link (shop.announcement_page).
+const ANNOUNCEMENT_REPEAT = 8;
+
+function announcementHtml(text, href) {
+  const items = `<span class="announcement-item">${esc(text)}</span>`.repeat(ANNOUNCEMENT_REPEAT);
+  const tag = href ? 'a' : 'div';
+  return `
+    <${tag} class="announcement"${href ? ` href="${esc(href)}"` : ''}>
+      <span class="announcement-static">${esc(text)}</span>
+      <div class="announcement-track" aria-hidden="true">
+        <div class="announcement-group">${items}</div>
+        <div class="announcement-group">${items}</div>
+      </div>
+    </${tag}>`;
+}
+
+async function renderHeader() {
+  const el = document.getElementById('site-header');
+  if (!el) return;
+  const shop = getCachedShop() || {};
+  let pages = [];
+  try { pages = await fetchPages(); } catch (e) { /* nav falls back to the catalog link */ }
+  const name = loc(shop.name) || loc(shop.title);
+  const announcement = loc(shop.announcement);
+  // Link only to a page /pages actually serves, so a stale id never leads to a 404.
+  const announcementPage = shop.announcement_page && pages.find(p => p.id === shop.announcement_page);
+  const nav = navItems(pages).map(i =>
+    `<a href="${esc(i.href)}"${i.active ? ' class="active" aria-current="page"' : ''}>${esc(i.label)}</a>`
+  ).join('');
+  el.innerHTML = `
+    ${announcement ? announcementHtml(announcement, announcementPage && `/${announcementPage.id}`) : ''}
+    <header class="site-header">
+      <div class="container header-inner">
+        <button type="button" class="icon-link menu-toggle" aria-expanded="false" aria-controls="mobile-menu" aria-label="${esc(t('nav.menu'))}">${icon('menu', 22)}</button>
+        <a href="/" class="wordmark">${esc(name)}</a>
+        <nav class="main-nav" aria-label="${esc(t('nav.menu'))}">${nav}</nav>
+        <div class="header-tools">${langSwitchHtml()}</div>
+      </div>
+      <div class="mobile-menu" id="mobile-menu" hidden>
+        <nav class="container mobile-nav">${nav}</nav>
+        <div class="container mobile-tools">${langSwitchHtml()}</div>
+      </div>
+    </header>
+  `;
+  const toggle = el.querySelector('.menu-toggle');
+  const menu = el.querySelector('.mobile-menu');
+  toggle.addEventListener('click', () => {
+    const open = menu.hidden;
+    menu.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', t(open ? 'nav.close' : 'nav.menu'));
+    toggle.innerHTML = icon(open ? 'close' : 'menu', 22);
+  });
+  bindLangLinks(el);
+}
+
+async function renderFooter() {
+  const el = document.getElementById('site-footer');
+  if (!el) return;
+  const shop = getCachedShop() || {};
+  let pages = [];
+  try { pages = await fetchPages(); } catch (e) { /* info column stays empty */ }
+  const name = loc(shop.name) || loc(shop.title);
+  const categories = Array.isArray(shop.categories) ? shop.categories : [];
+  const shopLinks = categories.length
+    ? categories.map(c => `<a href="/catalog?category=${encodeURIComponent(c.id)}">${esc(loc(c.title) || c.id)}</a>`).join('')
+    : `<a href="/catalog">${esc(t('nav.products'))}</a>`;
+  const pageLinks = pages.map(p => `<a href="/${esc(p.id)}">${esc(loc(p.title) || p.id)}</a>`).join('');
+  const social = socialLinks().map(l =>
+    `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)}</a>`
+  ).join('');
+  el.innerHTML = `
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <a href="/" class="footer-logo-link" aria-label="${esc(name)}"><img class="footer-logo" src="${esc(assetUrl('logo3.png'))}" alt="${esc(name)}"></a>
+            ${loc(shop.title) ? `<p>${esc(loc(shop.title))}</p>` : ''}
+          </div>
+          <div class="footer-col"><h2>${esc(t('footer.shop'))}</h2>${shopLinks}</div>
+          ${pageLinks ? `<div class="footer-col"><h2>${esc(t('footer.info'))}</h2>${pageLinks}</div>` : ''}
+          ${social ? `<div class="footer-col"><h2>${esc(t('footer.follow'))}</h2>${social}</div>` : ''}
+        </div>
+        <div class="footer-bottom">
+          <span>© ${new Date().getFullYear()} ${esc(name)}</span>
+          ${langSwitchHtml()}
+        </div>
+      </div>
+    </footer>
+  `;
+  const logo = el.querySelector('.footer-logo');
+  if (logo) logo.addEventListener('error', () => { logo.closest('a').remove(); }, { once: true });
+  bindLangLinks(el);
 }
 
 // Trailing " — <shop name>" appended to document titles, derived from the cached
 // /shop response. Empty (no suffix) until the shop loads or if it's unreachable.
 function titleSuffix() {
   const shop = getCachedShop();
-  const map = (shop && (shop.name || shop.title)) || {};
-  const name = map[currentLang] || Object.values(map)[0] || '';
+  const name = shop ? (loc(shop.name) || loc(shop.title)) : '';
   return name ? ` — ${name}` : '';
 }
 
@@ -183,48 +325,294 @@ function applyI18n() {
   document.documentElement.lang = currentLang;
 }
 
-function updateLangLinks() {
-  availableLangs.forEach(lang => {
-    const el = document.getElementById(`lang-${lang}`);
-    if (el) el.classList.toggle('active', lang === currentLang);
+function setLang(lang) {
+  if (lang === currentLang) return;
+  currentLang = lang;
+  localStorage.setItem(LANG_KEY, currentLang);
+  applyI18n();
+  applyShopContent();
+  renderHeader();
+  renderFooter();
+  if (document.getElementById('home-view') && document.getElementById('home-view').style.display !== 'none') renderHome();
+  if (document.getElementById('catalog-view') && document.getElementById('catalog-view').style.display !== 'none') renderCatalog();
+  if (document.getElementById('product-view')) {
+    const isOrderView = Boolean(new URLSearchParams(window.location.search).get('order'));
+    if (isOrderView) renderOrderView();
+    else renderProduct();
+  }
+  if (document.getElementById('page-view') && document.getElementById('page-view').style.display !== 'none') renderMarkdownPage();
+  if (document.getElementById('order-status-view')) renderOrderStatus();
+}
+
+function bindLangLinks(root) {
+  root.querySelectorAll('.lang-link').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      setLang(a.dataset.lang);
+    });
   });
 }
 
-function initLangToggle() {
-  availableLangs.forEach(lang => {
-    const el = document.getElementById(`lang-${lang}`);
-    if (!el) return;
-    el.addEventListener('click', e => {
-      e.preventDefault();
-      currentLang = lang;
-      localStorage.setItem(LANG_KEY, currentLang);
-      applyI18n();
-      updateLangLinks();
-      applyShopContent();
-      renderFooterLinks();
-      renderSocialLinks();
-      if (document.getElementById('product-grid')) renderHome();
-      if (document.getElementById('product-view')) {
-        const isOrderView = Boolean(new URLSearchParams(window.location.search).get('order'));
-        if (isOrderView) renderOrderView();
-        else renderProduct();
-      }
-      if (document.getElementById('markdown-content')) renderMarkdownPage();
-      if (document.getElementById('order-status-view')) renderOrderStatus();
-    });
-  });
-  updateLangLinks();
+/* ---- Product cards ---- */
+
+function categoryTitle(shop, id) {
+  const c = ((shop && shop.categories) || []).find(x => x.id === id);
+  return c ? (loc(c.title) || c.id) : '';
+}
+
+function productCard(p, shop) {
+  const title = loc(p.title);
+  const cat = Array.isArray(p.categories) && p.categories.length ? categoryTitle(shop, p.categories[0]) : '';
+  return `
+    <a class="card" href="/product?id=${encodeURIComponent(p.id)}">
+      ${cardMedia(p, title)}
+      <div class="card-body">
+        ${cat ? `<div class="eyebrow">${esc(cat)}</div>` : ''}
+        <div class="card-name">${esc(title)}</div>
+        <div class="card-tagline">${esc(productTagline(p, currentLang))}</div>
+        ${p.price ? `<div class="card-price">${esc(formatPrice(p.price))}</div>` : ''}
+      </div>
+    </a>
+  `;
+}
+
+// Card media: the thumbnail plus, when the listing carries a second preview, that
+// one stacked on top for the CSS hover swap (.card-image-alt).
+function cardMedia(p, title) {
+  const srcs = (Array.isArray(p.images) && p.images.length ? p.images : (p.image ? [p.image] : []))
+    .map(src => API_BASE + src);
+  return `<div class="card-media">${
+    srcs[0] ? `<img class="card-image" src="${esc(srcs[0])}" alt="${esc(title)}" loading="lazy">` : ''}${
+    srcs[1] ? `<img class="card-image card-image-alt" src="${esc(srcs[1])}" alt="" aria-hidden="true" loading="lazy">` : ''
+  }</div>`;
 }
 
 /* ---- Home Page ---- */
 
+async function renderHome() {
+  const view = document.getElementById('home-view');
+  if (!view) return;
+  let products, shop, pages = [];
+  try {
+    [products, shop] = await Promise.all([fetchProducts(), fetchShop()]);
+  } catch (e) {
+    view.innerHTML = '<p class="container loading">Failed to load products.</p>';
+    return;
+  }
+  try { pages = await fetchPages(); } catch (e) { /* story link falls back to no link */ }
+
+  const productImages = products.filter(p => p.image).map(p => API_BASE + p.image);
+  const hero = shop.hero || {};
+  const heroTitle = loc(hero.title) || loc(shop.title) || loc(shop.name);
+  const heroText = loc(hero.text) || loc(shop.description);
+  const heroEyebrow = loc(hero.eyebrow);
+  // Each slide links to its own category's catalog; no category, or one the backend
+  // dropped (no products left), falls back to the whole catalog.
+  const catIds = new Set((shop.categories || []).map(c => c.id));
+  const heroHref = cat => cat && catIds.has(cat) ? `/catalog?category=${encodeURIComponent(cat)}` : '/catalog';
+  const heroSlides = (hero.images || []).filter(i => i && i.file)
+    .map(i => ({ src: assetUrl(i.file), href: heroHref(i.category) }));
+  if (!heroSlides.length && productImages[0]) heroSlides.push({ src: productImages[0], href: '/catalog' });
+  const story = shop.story || null;
+  const storyPage = story && story.page && pages.find(p => p.id === story.page);
+
+  const heroHtml = `
+    <section class="hero">
+      <div class="hero-text">
+        ${heroEyebrow ? `<div class="eyebrow">${esc(heroEyebrow)}</div>` : ''}
+        <h1 class="hero-heading">${esc(heroTitle)}</h1>
+        ${heroText ? `<p class="hero-tagline">${esc(heroText)}</p>` : ''}
+        <div class="btn-row">
+          <a href="/catalog" class="btn btn-primary">${esc(t('home.cta'))}</a>
+          ${storyPage ? `<a href="/${esc(storyPage.id)}" class="btn btn-outline">${esc(loc(storyPage.title))}</a>` : ''}
+        </div>
+      </div>
+      <div class="hero-media">${heroSlidesHtml(heroSlides)}</div>
+    </section>`;
+
+  const features = (shop.features || []).filter(f => loc(f.title));
+  const featuresHtml = features.length ? `
+    <section class="features">
+      <div class="container features-grid">
+        ${features.map(f => `
+          <div class="feature">
+            ${icon(f.icon, 28)}
+            <div><div class="feature-title">${esc(loc(f.title))}</div>${loc(f.text) ? `<div class="feature-text">${esc(loc(f.text))}</div>` : ''}</div>
+          </div>`).join('')}
+      </div>
+    </section>` : '';
+
+  // One product row per category (in shop order), each linking to its filtered catalog;
+  // empty categories are skipped. Products with no known category land in a trailing row.
+  // Cards get no shop so they drop the category eyebrow — the row title already says it.
+  const productRow = (title, href, items) => `
+    <section class="section container">
+      <div class="section-head">
+        <h2 class="section-title">${esc(title)}</h2>
+        <a href="${esc(href)}" class="text-link">${esc(t('home.viewAll'))}</a>
+      </div>
+      <div class="grid">${items.slice(0, 8).map(p => productCard(p, null)).join('')}</div>
+    </section>`;
+  const cats = shop.categories || [];
+  const inCat = (p, id) => Array.isArray(p.categories) && p.categories.includes(id);
+  const rest = products.filter(p => !cats.some(c => inCat(p, c.id)));
+  const productsHtml = cats.map(c => {
+    const items = products.filter(p => inCat(p, c.id));
+    return items.length ? productRow(loc(c.title) || c.id, `/catalog?category=${encodeURIComponent(c.id)}`, items) : '';
+  }).join('') + (rest.length ? productRow(t(cats.length ? 'home.other' : 'home.products'), '/catalog', rest) : '');
+
+  const storyImg = story && (story.image ? assetUrl(story.image) : (productImages[1] || productImages[0]));
+  const storyHtml = story && loc(story.title) ? `
+    <section class="story">
+      <div class="story-media">${storyImg ? `<img src="${esc(storyImg)}" alt="" loading="lazy">` : ''}</div>
+      <div class="story-text">
+        ${loc(story.eyebrow) ? `<div class="eyebrow">${esc(loc(story.eyebrow))}</div>` : ''}
+        <h2>${esc(loc(story.title))}</h2>
+        ${loc(story.text) ? `<p>${esc(loc(story.text))}</p>` : ''}
+        ${storyPage ? `<a href="/${esc(storyPage.id)}" class="text-link">${esc(t('home.story.more'))}</a>` : ''}
+      </div>
+    </section>` : '';
+
+  const gallery = shop.gallery || [];
+  const ig = socialLinks().find(l => l.icon === 'instagram') || socialLinks()[0];
+  const handle = ig && ig.icon === 'instagram' ? '@' + ig.url.replace(/\/+$/, '').split('/').pop() : '';
+  const galleryHtml = gallery.length ? `
+    <section class="section container">
+      <div class="section-head">
+        <div>
+          <h2 class="section-title">${esc(handle || t('home.gallery.title'))}</h2>
+          <p class="section-sub">${esc(t('home.gallery.text'))}</p>
+        </div>
+        ${ig ? `<a href="${esc(ig.url)}" class="btn btn-outline" target="_blank" rel="noopener">${esc(t('home.gallery.follow'))}</a>` : ''}
+      </div>
+      <div class="gallery">${gallery.slice(0, 6).map(g => `<img src="${esc(assetUrl(g))}" alt="" loading="lazy">`).join('')}</div>
+    </section>` : '';
+
+  view.innerHTML = heroHtml + featuresHtml + productsHtml + storyHtml + galleryHtml;
+  const heroMedia = view.querySelector('.hero-media');
+  // Clicking a slide opens its catalog; the slideshow's own arrows and dots don't.
+  heroMedia.addEventListener('click', e => {
+    const slide = e.target.closest('img[data-href]');
+    if (slide) window.location.href = slide.dataset.href;
+  });
+  initHeroSlider(heroMedia);
+}
+
+const HERO_INTERVAL = 6000;
+
+function heroSlidesHtml(slides) {
+  if (!slides.length) return '';
+  if (slides.length === 1) return `<img src="${esc(slides[0].src)}" data-href="${esc(slides[0].href)}" alt="">`;
+  return `
+    <div class="hero-track">
+      ${slides.map(s => `<img class="hero-slide" src="${esc(s.src)}" data-href="${esc(s.href)}" alt="">`).join('')}
+    </div>
+    <button type="button" class="carousel-btn carousel-prev" aria-label="${esc(t('product.prev'))}">${icon('chevronLeft', 22)}</button>
+    <button type="button" class="carousel-btn carousel-next" aria-label="${esc(t('product.next'))}">${icon('chevronRight', 22)}</button>
+    <div class="carousel-dots">
+      ${slides.map((_, i) => `<button type="button" class="carousel-dot${i === 0 ? ' active' : ''}" data-index="${i}" aria-label="${esc(t('product.photo'))} ${i + 1}"></button>`).join('')}
+    </div>`;
+}
+
+// Hero slideshow: advances every HERO_INTERVAL, also by arrows, dots and swipe. Any manual
+// move restarts the timer; hovering (desktop) or a hidden tab pauses it, and reduced-motion
+// users get no autoplay at all.
+function initHeroSlider(media) {
+  const track = media && media.querySelector('.hero-track');
+  if (!track) return;
+  const count = track.children.length;
+  const dots = media.querySelectorAll('.carousel-dot');
+  const autoplay = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let current = 0;
+  let timer = null;
+  let hovered = false;
+
+  function goTo(index) {
+    current = (index + count) % count;
+    track.style.transform = `translateX(-${current * 100}%)`;
+    dots.forEach(d => d.classList.toggle('active', Number(d.dataset.index) === current));
+  }
+  function stop() { clearInterval(timer); timer = null; }
+  function start() {
+    stop();
+    if (autoplay && !hovered && !document.hidden && media.isConnected) {
+      timer = setInterval(() => {
+        if (!media.isConnected) { stop(); return; }
+        goTo(current + 1);
+      }, HERO_INTERVAL);
+    }
+  }
+  function manual(index) { goTo(index); start(); }
+
+  media.querySelector('.carousel-prev').addEventListener('click', () => manual(current - 1));
+  media.querySelector('.carousel-next').addEventListener('click', () => manual(current + 1));
+  dots.forEach(d => d.addEventListener('click', () => manual(Number(d.dataset.index))));
+  media.addEventListener('mouseenter', () => { hovered = true; stop(); });
+  media.addEventListener('mouseleave', () => { hovered = false; start(); });
+  document.addEventListener('visibilitychange', start);
+
+  let touchStartX = null;
+  let dragging = false;
+  track.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    dragging = false;
+    track.style.transition = 'none';
+    stop();
+  }, { passive: true });
+  track.addEventListener('touchmove', e => {
+    if (touchStartX === null) return;
+    dragging = true;
+    const delta = e.touches[0].clientX - touchStartX;
+    track.style.transform = `translateX(${-(current * media.offsetWidth) + delta}px)`;
+  }, { passive: true });
+  track.addEventListener('touchend', e => {
+    if (touchStartX === null) return;
+    track.style.transition = '';
+    const delta = e.changedTouches[0].clientX - touchStartX;
+    if (dragging && Math.abs(delta) > media.offsetWidth * 0.2) goTo(current + (delta < 0 ? 1 : -1));
+    else goTo(current);
+    touchStartX = null;
+    dragging = false;
+    start();
+  }, { passive: true });
+
+  start();
+}
+
+/* ---- Catalog ---- */
+
 // null = "All". Module-level so it survives re-renders (e.g. language switch).
 let activeCategory = null;
 
-async function renderHome() {
+// Reflect the selected category into the URL (?category=<id>) so a copied link
+// reopens on the same filter and the choice survives reload. Omitted for "All" (null)
+// to keep URLs clean. Preserves any other params (e.g. ?lang=); drops the query string
+// entirely when nothing is left so "All" is the bare pathname, not a trailing "?".
+function syncCategoryUrl() {
+  const p = new URLSearchParams(window.location.search);
+  if (activeCategory) p.set('category', activeCategory);
+  else p.delete('category');
+  const qs = p.toString();
+  history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+  syncNavActive();
+}
+
+// Re-mark the header's category links after the catalog filter changes in place.
+function syncNavActive() {
+  const want = activeCategory ? `/catalog?category=${encodeURIComponent(activeCategory)}` : null;
+  document.querySelectorAll('#site-header .main-nav a, #site-header .mobile-nav a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href.startsWith('/catalog?category=')) return;
+    const on = href === want;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+}
+
+async function renderCatalog() {
   const grid = document.getElementById('product-grid');
   if (!grid) return;
-  grid.innerHTML = '<p class="loading">…</p>';
+  document.title = `${t('catalog.title')}${titleSuffix()}`;
   let products, shop;
   try {
     [products, shop] = await Promise.all([fetchProducts(), fetchShop()]);
@@ -232,8 +620,10 @@ async function renderHome() {
     grid.innerHTML = '<p class="loading">Failed to load products.</p>';
     return;
   }
+  const sub = document.getElementById('catalog-sub');
+  if (sub) sub.textContent = loc(shop.title);
   renderCategoryBar(shop, products);
-  renderProductGrid(products);
+  renderProductGrid(products, shop);
 }
 
 // Categories come from /shop (localised title maps); product membership from p.categories (id list).
@@ -253,41 +643,44 @@ function renderCategoryBar(shop, products) {
   }
   bar.style.display = '';
   const tabs = [{id: null, label: t('category.all')}].concat(
-    categories.map(c => ({id: c.id, label: (c.title && c.title[currentLang]) || c.id}))
+    categories.map(c => ({id: c.id, label: loc(c.title) || c.id}))
   );
   // innerHTML rewrite discards old listeners, so no clone-and-replace needed here.
   bar.innerHTML = tabs.map(tab =>
-    `<button class="category-tab${tab.id === activeCategory ? ' active' : ''}" data-cat="${esc(tab.id || '')}">${esc(tab.label)}</button>`
+    `<button type="button" class="category-tab${tab.id === activeCategory ? ' active' : ''}" aria-pressed="${tab.id === activeCategory}" data-cat="${esc(tab.id || '')}">${esc(tab.label)}</button>`
   ).join('');
   bar.querySelectorAll('.category-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       activeCategory = btn.dataset.cat || null;
       syncCategoryUrl();
-      bar.querySelectorAll('.category-tab').forEach(b => b.classList.toggle('active', b === btn));
-      renderProductGrid(products);
+      bar.querySelectorAll('.category-tab').forEach(b => {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      renderProductGrid(products, shop);
     });
   });
 }
 
-function renderProductGrid(products) {
+function countLabel(n) {
+  let form = 'other';
+  try { form = new Intl.PluralRules(currentLang).select(n); } catch (e) { /* keep 'other' */ }
+  const key = `catalog.count.${form}`;
+  const tpl = t(key) === key ? t('catalog.count.other') : t(key);
+  return tpl.replace('{n}', n);
+}
+
+function renderProductGrid(products, shop) {
   const grid = document.getElementById('product-grid');
   if (!grid) return;
   const filtered = activeCategory
     ? products.filter(p => Array.isArray(p.categories) && p.categories.includes(activeCategory))
     : products;
-  grid.innerHTML = filtered.map(p => {
-    const imgSrc = p.image ? API_BASE + p.image : '';
-    return `
-      <a class="card" href="/product?id=${esc(p.id)}">
-        ${imgSrc ? `<img class="card-image" src="${esc(imgSrc)}" alt="${esc(p.title[currentLang] || '')}">` : ''}
-        <div class="card-body">
-          <div class="card-name">${esc(p.title[currentLang] || '')}</div>
-          <div class="card-tagline">${esc(productTagline(p, currentLang))}</div>
-          <div class="card-link">${esc(t('card.view'))}</div>
-        </div>
-      </a>
-    `;
-  }).join('');
+  const count = document.getElementById('catalog-count');
+  if (count) count.textContent = countLabel(filtered.length);
+  grid.innerHTML = filtered.length
+    ? filtered.map(p => productCard(p, shop)).join('')
+    : `<p class="loading">${esc(t('catalog.empty'))}</p>`;
 }
 
 /* ---- Product Page ---- */
@@ -296,18 +689,62 @@ function getProductId() {
   return new URLSearchParams(window.location.search).get('id');
 }
 
-function openLightbox(src, alt, type) {
+// Fullscreen gallery over `images` starting at `index`. Arrows / keys / swipe step through
+// the set; onChange(index) lets the page carousel follow along.
+function openLightbox(images, index, alt, onChange) {
+  const multi = images.length > 1;
+  let current = index;
   const lb = document.createElement('div');
   lb.className = 'lightbox';
-  const media = type === 'video'
-    ? `<video src="${esc(src)}" autoplay loop muted playsinline></video>`
-    : `<img src="${esc(src)}" alt="${esc(alt)}">`;
-  lb.innerHTML = `<button class="lightbox-close" aria-label="Close">&#215;</button>${media}`;
+  lb.innerHTML = `
+    <button type="button" class="lightbox-close" aria-label="Close">&#215;</button>
+    <div class="lightbox-media"></div>
+    ${multi ? `
+      <button type="button" class="lightbox-btn lightbox-prev" aria-label="${esc(t('product.prev'))}">${icon('chevronLeft', 28)}</button>
+      <button type="button" class="lightbox-btn lightbox-next" aria-label="${esc(t('product.next'))}">${icon('chevronRight', 28)}</button>
+      <div class="lightbox-counter"></div>
+    ` : ''}`;
+  const mediaEl = lb.querySelector('.lightbox-media');
+  const counter = lb.querySelector('.lightbox-counter');
+
+  function show(i) {
+    current = (i + images.length) % images.length;
+    const img = images[current];
+    mediaEl.innerHTML = img.type === 'video'
+      ? `<video src="${esc(img.full)}" autoplay loop muted playsinline></video>`
+      : `<img src="${esc(img.full)}" alt="${esc(alt)}">`;
+    if (counter) counter.textContent = `${current + 1} / ${images.length}`;
+    if (onChange && current !== index) { index = current; onChange(current); }
+  }
+
   const close = () => { lb.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', onKey); };
-  lb.addEventListener('click', close);
+  const onKey = e => {
+    if (e.key === 'Escape') close();
+    else if (multi && e.key === 'ArrowLeft') show(current - 1);
+    else if (multi && e.key === 'ArrowRight') show(current + 1);
+  };
+
+  let touchStartX = null;
+  let swiped = false;
+  lb.addEventListener('click', e => {
+    if (swiped) { swiped = false; return; }
+    if (e.target.closest('.lightbox-prev')) show(current - 1);
+    else if (e.target.closest('.lightbox-next')) show(current + 1);
+    else close();
+  });
+  if (multi) {
+    lb.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; swiped = false; }, { passive: true });
+    lb.addEventListener('touchend', e => {
+      if (touchStartX === null) return;
+      const delta = e.changedTouches[0].clientX - touchStartX;
+      touchStartX = null;
+      if (Math.abs(delta) > 50) { swiped = true; show(current + (delta < 0 ? 1 : -1)); }
+    }, { passive: true });
+  }
+
+  show(current);
   document.body.appendChild(lb);
   document.body.style.overflow = 'hidden';
-  const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
 }
 
@@ -318,23 +755,33 @@ function renderCarousel(container, images, altText) {
     ? `<video class="carousel-slide" src="${esc(img.preview)}" loop muted playsinline preload="auto"></video>`
     : `<img class="carousel-slide" src="${esc(img.preview)}" alt="${esc(altText)}">`;
 
+  const thumbHtml = (img, i) => `
+    <button type="button" class="carousel-thumb${i === 0 ? ' active' : ''}" data-index="${i}" aria-label="${esc(t('product.photo'))} ${i + 1}">
+      ${img.type === 'video'
+        ? `<video src="${esc(img.preview)}" muted playsinline preload="metadata"></video>`
+        : `<img src="${esc(img.preview)}" alt="" loading="lazy">`}
+    </button>`;
+
   container.innerHTML = `
-    <div class="carousel-track">
-      ${images.map(slideHtml).join('')}
-    </div>
-    ${multi ? `
-      <button class="carousel-btn carousel-prev">&#8249;</button>
-      <button class="carousel-btn carousel-next">&#8250;</button>
-      <div class="carousel-dots">
-        ${images.map((_, i) => `<button class="carousel-dot${i === 0 ? ' active' : ''}" data-index="${i}"></button>`).join('')}
+    <div class="carousel-viewport">
+      <div class="carousel-track">
+        ${images.map(slideHtml).join('')}
       </div>
-    ` : ''}
+      ${multi ? `
+        <button type="button" class="carousel-btn carousel-prev" aria-label="${esc(t('product.prev'))}">${icon('chevronLeft', 22)}</button>
+        <button type="button" class="carousel-btn carousel-next" aria-label="${esc(t('product.next'))}">${icon('chevronRight', 22)}</button>
+        <div class="carousel-dots">
+          ${images.map((_, i) => `<button type="button" class="carousel-dot${i === 0 ? ' active' : ''}" data-index="${i}" aria-label="${esc(t('product.photo'))} ${i + 1}"></button>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+    ${multi ? `<div class="carousel-thumbs">${images.map(thumbHtml).join('')}</div>` : ''}
   `;
 
   const slides = container.querySelectorAll('.carousel-slide');
   slides.forEach((slide, i) => {
     slide.style.cursor = 'zoom-in';
-    slide.addEventListener('click', () => openLightbox(images[i].full, altText, images[i].type));
+    slide.addEventListener('click', () => openLightbox(images, i, altText, container._goTo));
   });
 
   // Mobile Chrome only autoplays a muted video while it is actually visible; an off-screen
@@ -352,20 +799,22 @@ function renderCarousel(container, images, altText) {
   if (!multi) { container._goTo = () => {}; return; }
 
   let current = 0;
+  const viewport = container.querySelector('.carousel-viewport');
   const track = container.querySelector('.carousel-track');
-  const dots = container.querySelectorAll('.carousel-dot');
+  const pickers = container.querySelectorAll('.carousel-dot, .carousel-thumb');
 
   function goTo(index) {
     current = (index + images.length) % images.length;
     track.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+    pickers.forEach(d => d.classList.toggle('active', Number(d.dataset.index) === current));
     syncVideoPlayback(current);
     syncCarouselUrl(current);
+    if (container._onSlide) container._onSlide(current);
   }
 
   container.querySelector('.carousel-prev').addEventListener('click', () => goTo(current - 1));
   container.querySelector('.carousel-next').addEventListener('click', () => goTo(current + 1));
-  dots.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.index))));
+  pickers.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.index))));
 
   container._goTo = goTo;
 
@@ -382,7 +831,7 @@ function renderCarousel(container, images, altText) {
     if (touchStartX === null) return;
     dragging = true;
     const delta = e.touches[0].clientX - touchStartX;
-    const w = container.offsetWidth;
+    const w = viewport.offsetWidth;
     track.style.transform = `translateX(${-(current * w) + delta}px)`;
   }, { passive: true });
 
@@ -391,7 +840,7 @@ function renderCarousel(container, images, altText) {
     track.style.transition = '';
     if (dragging) {
       const delta = e.changedTouches[0].clientX - touchStartX;
-      if (Math.abs(delta) > container.offsetWidth * 0.25) {
+      if (Math.abs(delta) > viewport.offsetWidth * 0.25) {
         goTo(current + (delta < 0 ? 1 : -1));
       } else {
         track.style.transform = `translateX(-${current * 100}%)`;
@@ -400,6 +849,15 @@ function renderCarousel(container, images, altText) {
     touchStartX = null;
     dragging = false;
   }, { passive: true });
+}
+
+// Swatch colors for one attribute: {valueKey: '#rrggbb'} from product.attr_colors, or null
+// unless every listed value has a valid color (a partial set falls back to text pills).
+function swatchColors(product, attrKey, valKeys) {
+  const map = product.attr_colors && product.attr_colors[attrKey];
+  if (!map) return null;
+  const ok = valKeys.length > 0 && valKeys.every(v => /^#[0-9a-fA-F]{6}$/.test(map[v] || ''));
+  return ok ? map : null;
 }
 
 function renderVariants(product, carouselEl) {
@@ -449,16 +907,31 @@ function renderVariants(product, carouselEl) {
       const langData = attrs[key];
       if (!langData) return '';
       const descHtml = langData.description ? `<div class="variant-desc">${marked.parse(langData.description)}</div>` : '';
+      const valKeys = attrValuesOrder[key] || Object.keys(langData.values);
+      const colors = swatchColors(product, key, valKeys);
+      const selected = langData.values[selections[key]];
+      const nameHtml = colors
+        ? `${esc(langData.title)}: <span class="variant-selected">${esc((selected && selected.title) || '')}</span>`
+        : esc(langData.title);
       return `
         <div class="variant-group">
-          <div class="variant-name">${esc(langData.title)}</div>
+          <div class="variant-name">${nameHtml}</div>
           <div class="variant-options">
-            ${(attrValuesOrder[key] || Object.keys(langData.values)).map(valKey => {
+            ${valKeys.map(valKey => {
               const val = langData.values[valKey];
               if (!val) return '';
+              const active = selections[key] === valKey;
+              if (colors) {
+                return `
+              <button type="button" class="variant-option variant-swatch${active ? ' active' : ''}" aria-pressed="${active}"
+                      aria-label="${esc(val.title)}" title="${esc(val.title)}"
+                      data-variant="${esc(key)}" data-option="${esc(valKey)}">
+                <span class="swatch-dot" style="background:${esc(colors[valKey])}"></span>
+              </button>`;
+              }
               const label = val.prefix ? `${val.prefix} ${val.title}` : val.title;
               return `
-              <button class="variant-option${selections[key] === valKey ? ' active' : ''}"
+              <button type="button" class="variant-option${active ? ' active' : ''}" aria-pressed="${active}"
                       data-variant="${esc(key)}" data-option="${esc(valKey)}">
                 ${esc(label)}
               </button>`;
@@ -484,6 +957,29 @@ function renderVariants(product, carouselEl) {
         }
       });
     });
+  }
+
+  // Reverse of the variant→image jump: landing on a slide that attr_images maps to a
+  // value selects that value. Never calls _goTo, so the two directions can't loop.
+  if (carouselEl) {
+    carouselEl._onSlide = idx => {
+      const img = rawImages[idx];
+      if (!img) return;
+      let changed = false;
+      attrKeys.forEach(key => {
+        const map = attrImages[key];
+        if (!map || map[selections[key]] === img.preview) return;
+        const val = Object.keys(map).find(v => map[v] === img.preview);
+        if (val && attrs[key] && attrs[key].values[val]) {
+          selections[key] = val;
+          changed = true;
+        }
+      });
+      if (!changed) return;
+      syncUrl();
+      render();
+      updatePrice();
+    };
   }
 
   syncUrl();
@@ -526,13 +1022,18 @@ async function renderProduct() {
   // Replace order button to avoid stacking listeners across re-renders
   const orderBtn = document.querySelector('#product-view .order-btn');
   if (orderBtn) {
-    const newBtn = orderBtn.cloneNode(true);
-    orderBtn.parentNode.replaceChild(newBtn, orderBtn);
-    newBtn.addEventListener('click', () => {
-      const p = new URLSearchParams(window.location.search);
-      p.set('order', '1');
-      window.location.search = p.toString();
-    });
+    if (product.available === false) {
+      orderBtn.disabled = true;
+      orderBtn.textContent = t('product.unavailable');
+    } else {
+      const newBtn = orderBtn.cloneNode(true);
+      orderBtn.parentNode.replaceChild(newBtn, orderBtn);
+      newBtn.addEventListener('click', () => {
+        const p = new URLSearchParams(window.location.search);
+        p.set('order', '1');
+        window.location.search = p.toString();
+      });
+    }
   }
 
   const priceEl = document.getElementById('spec-price');
@@ -550,13 +1051,49 @@ async function renderProduct() {
   }
 
   renderVariants(product, carouselEl || null);
+  renderProductContext(product);
 
   // Restore the carousel slide from the URL (URL wins on load). Variant init never
   // moves the carousel — only variant clicks do — so the URL is the sole authority here.
+  // A slide mapped in attr_images also selects its variant (_onSlide).
   const imgIdx = parseInt(new URLSearchParams(window.location.search).get('img'), 10);
   if (carouselEl && carouselEl._goTo && imgIdx > 0 && imgIdx < (product.images || []).length) {
     carouselEl._goTo(imgIdx);
   }
+}
+
+// Breadcrumbs, category eyebrow, short tagline and the "you may also like" row.
+// All come from the /products listing and /shop; failures just leave them empty.
+async function renderProductContext(product) {
+  let products = [], shop = {};
+  try {
+    [products, shop] = await Promise.all([fetchProducts(), fetchShop()]);
+  } catch (e) { /* context is decorative */ }
+  const item = products.find(p => p.id === product.id);
+  const catId = (product.categories && product.categories[0]) || (item && item.categories && item.categories[0]);
+  const catTitle = catId ? categoryTitle(shop, catId) : '';
+
+  const crumbs = document.getElementById('product-breadcrumbs');
+  if (crumbs) {
+    crumbs.innerHTML = `<a href="/">${esc(t('nav.home'))}</a><span aria-hidden="true">/</span>` +
+      (catTitle
+        ? `<a href="/catalog?category=${encodeURIComponent(catId)}">${esc(catTitle)}</a>`
+        : `<a href="/catalog">${esc(t('nav.products'))}</a>`) +
+      `<span aria-hidden="true">/</span><span aria-current="page">${esc(product.name || '')}</span>`;
+  }
+  const eyebrow = document.getElementById('product-category');
+  if (eyebrow) eyebrow.textContent = catTitle;
+  const tagline = document.getElementById('product-tagline');
+  if (tagline) tagline.textContent = item ? productTagline(item, currentLang) : '';
+
+  const related = document.getElementById('related-products');
+  const section = document.getElementById('related-section');
+  if (!related || !section) return;
+  const others = products.filter(p => p.id !== product.id);
+  const sameCat = others.filter(p => catId && Array.isArray(p.categories) && p.categories.includes(catId));
+  const picks = sameCat.concat(others.filter(p => !sameCat.includes(p))).slice(0, 3);
+  section.hidden = picks.length === 0;
+  related.innerHTML = picks.map(p => productCard(p, shop)).join('');
 }
 
 /* ---- Order View ---- */
@@ -568,6 +1105,13 @@ async function renderOrderView() {
     product = await fetchProduct(id, currentLang);
   } catch (e) {
     window.location.href = '/';
+    return;
+  }
+
+  if (product.available === false) {
+    const p = new URLSearchParams(window.location.search);
+    p.delete('order');
+    window.location.search = p.toString();
     return;
   }
 
@@ -586,6 +1130,39 @@ async function renderOrderView() {
   if (formOrig) {
     const formFresh = formOrig.cloneNode(true);
     formOrig.parentNode.replaceChild(formFresh, formOrig);
+  }
+
+  // Promo code state. The discount is previewed here and re-validated by POST /orders,
+  // which applies the same formula (product.Discount) to the same subtotal in cents.
+  let summarySubtotalCents = 0;
+  let summaryCurrency = '';
+  let appliedPromo = null; // {code, discount_percent} from GET /products/{id}/promo-codes/{code}
+
+  // The discounted total is rounded to whole currency units (2124.15 → 2124).
+  function promoTotalCents() {
+    if (!appliedPromo) return summarySubtotalCents;
+    return Math.round(summarySubtotalCents * (100 - appliedPromo.discount_percent) / 10000) * 100;
+  }
+
+  // The subtotal can still carry cents (attr addons); show them exactly so the form
+  // matches the invoice.
+  function formatCents(cents) {
+    const s = formatPrice({ currency: summaryCurrency, value: cents / 100 });
+    if (cents % 100 === 0) return s;
+    const whole = formatPrice({ currency: summaryCurrency, value: Math.trunc(cents / 100) });
+    return whole.replace(/\d(?!.*\d)/, m => `${m}.${String(cents % 100).padStart(2, '0')}`);
+  }
+
+  function renderSummaryPrice() {
+    const el = document.querySelector('#order-summary .order-summary-price');
+    if (!el) return;
+    if (!appliedPromo) {
+      el.textContent = formatPrice({ currency: summaryCurrency, value: summarySubtotalCents / 100 });
+      return;
+    }
+    el.innerHTML = `<s class="order-summary-price-old">${esc(formatCents(summarySubtotalCents))}</s> `
+      + `${esc(formatCents(promoTotalCents()))}`
+      + `<div class="order-summary-promo">${esc(appliedPromo.code)}: ${esc(String(appliedPromo.discount_percent))}%</div>`;
   }
 
   // Build product summary
@@ -611,6 +1188,8 @@ async function renderOrderView() {
       total += (attrPrices[key] && attrPrices[key][selections[key]]) || 0;
     });
     const priceStr = formatPrice({ currency: base.currency, value: total });
+    summarySubtotalCents = Math.round(total * 100);
+    summaryCurrency = base.currency;
 
     const attrsHtml = attrKeys.map(key => {
       const langData = attrs[key];
@@ -618,9 +1197,12 @@ async function renderOrderView() {
       const valKey = selections[key];
       const val = langData.values[valKey];
       const valTitle = (val && val.title) || valKey;
-      const valLabel = (val && val.prefix) ? `${val.prefix} ${valTitle}` : valTitle;
+      const colors = swatchColors(product, key, attrValuesOrder[key] || Object.keys(langData.values));
+      const valHtml = colors
+        ? `<span class="swatch-dot swatch-dot-sm" style="background:${esc(colors[valKey])}"></span>${esc(valTitle)}`
+        : esc((val && val.prefix) ? `${val.prefix} ${valTitle}` : valTitle);
       const descHtml = langData.description ? `<div class="order-summary-attr-desc">${marked.parse(langData.description)}</div>` : '';
-      return `<div class="order-summary-attr"><span class="order-summary-attr-label">${esc(langData.title)}:</span> ${esc(valLabel)}${descHtml}</div>`;
+      return `<div class="order-summary-attr"><span class="order-summary-attr-label">${esc(langData.title)}:</span> ${valHtml}${descHtml}</div>`;
     }).join('');
 
     // Resolve image: prefer attr_images match for current selections, fall back to first image
@@ -642,6 +1224,45 @@ async function renderOrderView() {
       <div class="order-summary-price">${esc(priceStr)}</div>
     `;
   }
+
+  // Promo code field
+  const promoInput = document.getElementById('order-promo');
+  const promoApply = document.getElementById('order-promo-apply');
+  const promoMsg = document.getElementById('order-promo-msg');
+
+  function showPromoMsg(key) {
+    if (!promoMsg) return;
+    promoMsg.textContent = key ? t(key) : '';
+    promoMsg.style.display = key ? '' : 'none';
+  }
+
+  async function applyPromo() {
+    const code = (promoInput && promoInput.value || '').trim();
+    appliedPromo = null;
+    showPromoMsg('');
+    if (!code) { renderSummaryPrice(); return; }
+    try {
+      const res = await fetchPromoCode(getProductId(), code);
+      if (res) appliedPromo = res;
+      else showPromoMsg('order.promo.invalid');
+    } catch (_) {
+      showPromoMsg('order.promo.error');
+    }
+    renderSummaryPrice();
+  }
+
+  if (promoInput) {
+    promoInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); applyPromo(); }
+    });
+    promoInput.addEventListener('input', () => {
+      if (appliedPromo) { appliedPromo = null; renderSummaryPrice(); }
+      showPromoMsg('');
+    });
+    // The form is re-cloned on every render (e.g. language switch), which keeps the typed value.
+    if (promoInput.value.trim()) applyPromo();
+  }
+  if (promoApply) promoApply.addEventListener('click', applyPromo);
 
   // Back link: remove order=1, reload to product view
   const backOrig = document.getElementById('order-back');
@@ -1174,6 +1795,7 @@ async function renderOrderView() {
       if (Object.keys(attributes).length) payload.attributes = attributes;
       if (notes) payload.notes = notes;
       if (middleName) payload.middle_name = middleName;
+      if (appliedPromo) payload.promo_code = appliedPromo.code;
 
       if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
       if (submitBtn) {
@@ -1192,6 +1814,13 @@ async function renderOrderView() {
         if (submitBtn) {
           submitBtn.disabled = consentEl ? !consentEl.checked : false;
           submitBtn.textContent = t('order.submit');
+        }
+        if (err && err.status === 400 && err.message === 'invalid promo code') {
+          appliedPromo = null;
+          renderSummaryPrice();
+          showPromoMsg('order.promo.invalid');
+          if (promoInput) promoInput.focus();
+          return;
         }
         if (errorEl) {
           errorEl.textContent = (err && err.message) || t('order.error');
@@ -1334,10 +1963,16 @@ async function renderOrderStatus() {
 
 /* ---- Markdown Pages ---- */
 
+// First path segment of the URL, or null on the home page. index.html serves the
+// home page, the catalog (/catalog) and every content page (/<page id>).
 function getPageId() {
   const p = window.location.pathname.replace(/^\/|\/$/g, '');
   return p || null;
 }
+
+// Reserved route served by index.html's catalog view; a content page with this
+// id would be shadowed.
+const CATALOG_ROUTE = 'catalog';
 
 async function renderMarkdownPage() {
   const container = document.getElementById('markdown-content');
@@ -1353,26 +1988,26 @@ async function renderMarkdownPage() {
     return;
   }
   const meta = pages && pages.find(p => p.id === id);
-  if (meta && meta.title) document.title = `${meta.title[currentLang] || meta.title}${titleSuffix()}`;
-  container.innerHTML = md ? marked.parse(md) : '';
-}
-
-/* ---- Footer Links ---- */
-
-async function renderFooterLinks() {
-  const container = document.getElementById('footer-links');
-  if (!container) return;
-  let pages;
-  try {
-    pages = await fetchPages();
-  } catch (e) {
-    return;
+  const title = meta ? loc(meta.title) : '';
+  if (title) document.title = `${title}${titleSuffix()}`;
+  const crumbs = document.getElementById('page-breadcrumbs');
+  if (crumbs) {
+    crumbs.innerHTML = `<a href="/">${esc(t('nav.home'))}</a><span aria-hidden="true">/</span><span aria-current="page">${esc(title || id)}</span>`;
   }
-  container.innerHTML = pages.map((p, i) => {
-    const title = (p.title && p.title[currentLang]) || p.id;
-    return (i > 0 ? '<span class="footer-lang-sep">·</span>' : '') +
-      `<a href="/${esc(p.id)}">${esc(title)}</a>`;
-  }).join('');
+  let html = md ? marked.parse(md) : '';
+  // The page title is shown in the band above the content; drop a leading H1 that repeats it.
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const first = tmp.firstElementChild;
+  const heading = document.getElementById('page-title');
+  if (first && first.tagName === 'H1') {
+    if (heading) heading.textContent = first.textContent;
+    first.remove();
+    html = tmp.innerHTML;
+  } else if (heading) {
+    heading.textContent = title || id;
+  }
+  container.innerHTML = html;
 }
 
 function hideLoader() {
@@ -1385,13 +2020,20 @@ function hideLoader() {
 /* ---- Init ---- */
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Route index.html: show page view when URL path is not root
+  // Route index.html: home at "/", the catalog at /catalog, content pages elsewhere.
   const homeView = document.getElementById('home-view');
+  const catalogView = document.getElementById('catalog-view');
   const pageView = document.getElementById('page-view');
   if (homeView && pageView) {
-    const isPageView = Boolean(getPageId());
-    homeView.style.display = isPageView ? 'none' : '';
-    pageView.style.display = isPageView ? '' : 'none';
+    const route = getPageId();
+    // Old links filtered the home grid with ?category=; the grid now lives in the catalog.
+    if (!route && new URLSearchParams(window.location.search).get('category')) {
+      window.location.replace(`/${CATALOG_ROUTE}${window.location.search}`);
+      return;
+    }
+    homeView.style.display = route ? 'none' : '';
+    if (catalogView) catalogView.style.display = route === CATALOG_ROUTE ? '' : 'none';
+    pageView.style.display = route && route !== CATALOG_ROUTE ? '' : 'none';
   }
 
   // Ensure the loader is painted at least once before starting async work.
@@ -1413,11 +2055,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   applyAnalytics();
   applyI18n();
   applyShopContent();
-  initLangToggle();
-  renderFooterLinks();
-  renderSocialLinks();
-  const renders = [];
-  if (document.getElementById('product-grid')) renders.push(renderHome());
+  const renders = [renderHeader(), renderFooter()];
+  if (homeView && homeView.style.display !== 'none') renders.push(renderHome());
+  if (catalogView && catalogView.style.display !== 'none') renders.push(renderCatalog());
   const productView = document.getElementById('product-view');
   if (productView) {
     const isOrderView = Boolean(new URLSearchParams(window.location.search).get('order'));
@@ -1427,7 +2067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isOrderView) renders.push(renderOrderView());
     else renders.push(renderProduct());
   }
-  if (document.getElementById('markdown-content')) renders.push(renderMarkdownPage());
+  if (pageView && pageView.style.display !== 'none') renders.push(renderMarkdownPage());
   if (document.getElementById('order-status-view')) renders.push(renderOrderStatus());
   await Promise.all(renders);
   hideLoader();

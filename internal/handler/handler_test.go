@@ -28,6 +28,17 @@ type geoDetectorStub struct{ country string }
 
 func (s *geoDetectorStub) Detect(_ *http.Request) string { return s.country }
 
+// geoDetectorCounter records how many times Detect was called.
+type geoDetectorCounter struct {
+	country string
+	calls   int
+}
+
+func (s *geoDetectorCounter) Detect(_ *http.Request) string {
+	s.calls++
+	return s.country
+}
+
 type shopServiceStub struct {
 	shop *shop.Shop
 	err  error

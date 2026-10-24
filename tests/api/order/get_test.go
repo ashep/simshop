@@ -100,6 +100,33 @@ func TestListOrders(main *testing.T) {
 		assert.JSONEq(t, `[]`, string(body))
 	})
 
+	main.Run("PromoCodeFieldsReturned", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		postOrder(t, mustJSON(map[string]any{
+			"product_id": "widget",
+			"lang":       "en",
+			"promo_code": "SAVE15",
+			"first_name": "Alice",
+			"last_name":  "Smith",
+			"phone":      "+1",
+			"email":      "alice@example.com",
+			"country":    "ua",
+			"city":       "Kyiv",
+			"address":    "Addr 1",
+		}))
+
+		resp := getOrders(t, "Bearer "+testAPIKey, "")
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		var got []map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+		require.Len(t, got, 1)
+		assert.Equal(t, "SAVE15", got[0]["promo_code"])
+		assert.InDelta(t, 15, got[0]["discount_percent"], 0)
+		assert.InDelta(t, 799, got[0]["discount"], 0)
+		assert.InDelta(t, 4249, got[0]["price"], 0)
+	})
+
 	main.Run("PopulatedDBReturnsRecords", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
 		mbCounter.Store(0)

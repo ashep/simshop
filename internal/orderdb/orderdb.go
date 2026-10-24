@@ -29,12 +29,14 @@ const insertOrderSQL = `INSERT INTO orders (
 	product_id, email, price, currency, lang,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
-	customer_note
+	customer_note,
+	promo_code, discount_percent, discount
 ) VALUES (
 	$1, $2, $3, $4, $5,
 	$6, $7, $8,
 	$9, $10, $11, $12,
-	$13
+	$13,
+	$14, $15, $16
 ) RETURNING id`
 
 const insertAttrSQL = `INSERT INTO order_attrs
@@ -71,12 +73,18 @@ func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 		}
 	}()
 
+	var promoCode, discountPercent, discount any
+	if o.Promo != nil {
+		promoCode, discountPercent, discount = o.Promo.Code, o.Promo.Percent, o.Promo.Discount
+	}
+
 	var orderID string
 	if err := tx.QueryRow(ctx, insertOrderSQL,
 		o.ProductID, o.Email, o.Price, o.Currency, o.Lang,
 		o.FirstName, nullIfEmpty(o.MiddleName), o.LastName,
 		o.Country, o.City, o.Phone, o.Address,
 		nullIfEmpty(o.CustomerNote),
+		promoCode, discountPercent, discount,
 	).Scan(&orderID); err != nil {
 		return "", fmt.Errorf("insert order: %w", err)
 	}
@@ -159,7 +167,8 @@ const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, 
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	admin_note, customer_note, tracking_number,
-	created_at, updated_at
+	created_at, updated_at,
+	promo_code, discount_percent, discount
 FROM orders
 ORDER BY created_at DESC`
 
@@ -167,7 +176,8 @@ const listOrdersByStatusSQL = `SELECT id::text, product_id, status::text, email,
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	admin_note, customer_note, tracking_number,
-	created_at, updated_at
+	created_at, updated_at,
+	promo_code, discount_percent, discount
 FROM orders
 WHERE status = ANY($1::order_status[])
 ORDER BY created_at DESC`
@@ -233,13 +243,15 @@ func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, e
 	var ids []string
 	for rows.Next() {
 		var rec order.Record
-		var middleName, adminNote, customerNote, trackingNumber pgtype.Text
+		var middleName, adminNote, customerNote, trackingNumber, promoCode pgtype.Text
+		var discountPercent, discount pgtype.Int4
 		if err := rows.Scan(
 			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 			&rec.FirstName, &middleName, &rec.LastName,
 			&rec.Country, &rec.City, &rec.Phone, &rec.Address,
 			&adminNote, &customerNote, &trackingNumber,
 			&rec.CreatedAt, &rec.UpdatedAt,
+			&promoCode, &discountPercent, &discount,
 		); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan order: %w", err)
@@ -260,6 +272,7 @@ func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, e
 			v := trackingNumber.String
 			rec.TrackingNumber = &v
 		}
+		rec.Promo = scanPromo(promoCode, discountPercent, discount)
 		rec.Attrs = []order.Attr{}
 		rec.History = []order.HistoryEntry{}
 		rec.Invoices = []order.Invoice{}
@@ -367,7 +380,8 @@ const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price
 	first_name, middle_name, last_name,
 	country, city, phone, address,
 	admin_note, customer_note, tracking_number,
-	created_at, updated_at
+	created_at, updated_at,
+	promo_code, discount_percent, discount
 FROM orders
 WHERE id = $1::uuid`
 
@@ -375,13 +389,15 @@ WHERE id = $1::uuid`
 // Returns order.ErrNotFound when no row matches.
 func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) {
 	var rec order.Record
-	var middleName, adminNote, customerNote, trackingNumber pgtype.Text
+	var middleName, adminNote, customerNote, trackingNumber, promoCode pgtype.Text
+	var discountPercent, discount pgtype.Int4
 	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
 		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
 		&rec.FirstName, &middleName, &rec.LastName,
 		&rec.Country, &rec.City, &rec.Phone, &rec.Address,
 		&adminNote, &customerNote, &trackingNumber,
 		&rec.CreatedAt, &rec.UpdatedAt,
+		&promoCode, &discountPercent, &discount,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, order.ErrNotFound
@@ -405,6 +421,7 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 		v := trackingNumber.String
 		rec.TrackingNumber = &v
 	}
+	rec.Promo = scanPromo(promoCode, discountPercent, discount)
 	rec.Attrs = []order.Attr{}
 	rec.History = []order.HistoryEntry{}
 	rec.Invoices = []order.Invoice{}
@@ -621,4 +638,13 @@ func (w *Writer) RecordInvoiceEvent(ctx context.Context, evt order.InvoiceEvent)
 		return "", fmt.Errorf("commit tx: %w", err)
 	}
 	return candidate, nil
+}
+
+// scanPromo rebuilds an order's promo from its nullable columns; a NULL
+// promo_code means no promo was applied.
+func scanPromo(code pgtype.Text, percent, discount pgtype.Int4) *order.Promo {
+	if !code.Valid {
+		return nil
+	}
+	return &order.Promo{Code: code.String, Percent: int(percent.Int32), Discount: int(discount.Int32)}
 }

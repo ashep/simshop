@@ -22,7 +22,28 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	if err := h.resp.Write(w, r, http.StatusOK, products); err != nil {
+
+	// Geo detection may cost an ipinfo.io round trip, so only run it when some
+	// product actually has a country-specific price; otherwise "default" wins anyway.
+	country := "default"
+	if h.geo != nil && hasCountryPrices(products) {
+		country = h.geo.Detect(r)
+	}
+
+	out := make([]product.ListItem, 0, len(products))
+	for _, p := range products {
+		li := product.ListItem{Item: p}
+		price, ok := p.Prices[country]
+		if !ok {
+			price, ok = p.Prices["default"]
+		}
+		if ok {
+			li.Price = &price
+		}
+		out = append(out, li)
+	}
+
+	if err := h.resp.Write(w, r, http.StatusOK, out); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
 }
@@ -76,6 +97,8 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 
 	detail := product.ProductDetail{
 		ID:          p.ID,
+		Available:   p.Available == nil || *p.Available,
+		Categories:  p.Categories,
 		Name:        p.Name[lang],
 		Description: p.Description[lang],
 		Prices:      prices,
@@ -120,25 +143,24 @@ func (h *Handler) ServeProductContent(w http.ResponseWriter, r *http.Request) {
 			detail.AttrImages[attrKey] = resolved
 		}
 	}
-
-	// Categories live in the products.yaml listing (product.Item), not in the
-	// per-product product.yaml, so cross-reference them by id. h.prod is always
-	// wired in production; guard for tests that omit it. A product without a
-	// listing entry simply has no categories.
-	if h.prod != nil {
-		if items, err := h.prod.List(r.Context()); err != nil {
-			h.l.Warn().Err(err).Msg("failed to load product listing for categories")
-		} else {
-			for _, item := range items {
-				if item.ID == id {
-					detail.Categories = item.Categories
-					break
-				}
-			}
-		}
+	if len(p.AttrColors) > 0 {
+		detail.AttrColors = p.AttrColors
 	}
 
 	if err := h.resp.Write(w, r, http.StatusOK, detail); err != nil {
 		h.l.Error().Err(err).Msg("response validation failed")
 	}
+}
+
+// hasCountryPrices reports whether any listed product defines a price beyond
+// the mandatory "default" key.
+func hasCountryPrices(items []*product.Item) bool {
+	for _, p := range items {
+		for k := range p.Prices {
+			if k != "default" {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -51,6 +51,30 @@ Thanks {{ .CustomerName }}.`)
 		assert.Equal(t, "Thanks Jane.", strings.TrimSpace(text))
 	})
 
+	main.Run("PromoRowsRenderOnlyWhenSet", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTpl(t, dir, "paid", "en", `---
+subject: s
+---
+Items
+{{- if .PromoCode }}
+Subtotal {{ .Subtotal }}; {{ .PromoCode }} -{{ .DiscountPercent }}% -{{ .Discount }}
+{{- end }}
+Total {{ .Total }}`)
+		store, err := LoadTemplates(dir)
+		require.NoError(t, err)
+
+		_, _, text, err := store.Render("paid", "en", TemplateData{
+			PromoCode: "SPRING15", DiscountPercent: 15, Discount: "7.50 USD", Subtotal: "49.99 USD", Total: "42.49 USD",
+		})
+		require.NoError(t, err)
+		assert.Contains(t, text, "Subtotal 49.99 USD; SPRING15 -15% -7.50 USD")
+
+		_, _, text, err = store.Render("paid", "en", TemplateData{Total: "49.99 USD"})
+		require.NoError(t, err)
+		assert.NotContains(t, text, "Subtotal")
+	})
+
 	main.Run("MissingSubjectIsFatal", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTpl(t, dir, "paid", "en", `---

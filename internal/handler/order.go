@@ -51,6 +51,7 @@ type createOrderRequest struct {
 	City       string            `json:"city"`
 	Address    string            `json:"address"`
 	Notes      string            `json:"notes"`
+	PromoCode  string            `json:"promo_code"`
 }
 
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +122,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if p.Available != nil && !*p.Available {
+		h.writeError(w, &BadRequestError{Reason: "product not available"})
+		return
+	}
+
 	if _, ok := p.Name[req.Lang]; !ok {
 		h.writeError(w, &BadRequestError{Reason: "language not found"})
 		return
@@ -178,6 +184,18 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	var promo *order.Promo
+	if strings.TrimSpace(req.PromoCode) != "" {
+		code, percent, ok := p.LookupPromo(req.PromoCode)
+		if !ok {
+			h.writeError(w, &BadRequestError{Reason: "invalid promo code"})
+			return
+		}
+		discount := product.Discount(totalCents, percent)
+		totalCents -= discount
+		promo = &order.Promo{Code: code, Percent: percent, Discount: discount}
+	}
+
 	if totalCents <= 0 {
 		h.writeError(w, &BadRequestError{Reason: "order amount must be positive"})
 		return
@@ -198,6 +216,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Address:      req.Address,
 		Attrs:        attrs,
 		CustomerNote: req.Notes,
+		Promo:        promo,
 	}
 
 	orderID, err := h.orders.Submit(r.Context(), o)

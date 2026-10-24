@@ -42,6 +42,35 @@ func TestListOrders(main *testing.T) {
 		assert.JSONEq(t, `[]`, w.Body.String())
 	})
 
+	main.Run("PromoFieldsSerializedOnlyWhenSet", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		defer svc.AssertExpectations(t)
+		base := order.Record{
+			ProductID: "widget", Status: "new", Email: "a@b", Price: 4249, Currency: "USD", Lang: "en",
+			FirstName: "A", LastName: "B", Country: "ua", City: "C", Phone: "1", Address: "D",
+			Attrs: []order.Attr{}, History: []order.HistoryEntry{}, Invoices: []order.Invoice{},
+		}
+		withPromo := base
+		withPromo.ID = "018f4e3a-0000-7000-8000-000000000001"
+		withPromo.Promo = &order.Promo{Code: "SPRING15", Percent: 15, Discount: 750}
+		withoutPromo := base
+		withoutPromo.ID = "018f4e3a-0000-7000-8000-000000000002"
+		svc.On("List", mock.Anything, ([]string)(nil)).Return([]order.Record{withPromo, withoutPromo}, nil)
+
+		w := doRequest(t, svc, "")
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		var body []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body, 2)
+		assert.Equal(t, "SPRING15", body[0]["promo_code"])
+		assert.InDelta(t, 15, body[0]["discount_percent"], 0)
+		assert.InDelta(t, 750, body[0]["discount"], 0)
+		assert.NotContains(t, body[1], "promo_code")
+		assert.NotContains(t, body[1], "discount_percent")
+		assert.NotContains(t, body[1], "discount")
+	})
+
 	main.Run("PopulatedListReturnsRecords", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
