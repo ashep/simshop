@@ -1234,6 +1234,18 @@ async function renderOrderView() {
     if (!promoMsg) return;
     promoMsg.textContent = key ? t(key) : '';
     promoMsg.style.display = key ? '' : 'none';
+    promoMsg.classList.remove('promo-msg-ok');
+  }
+
+  // The summary with the discounted price sits above the fold on phones, so confirm
+  // the discount next to the field too.
+  function showPromoApplied() {
+    if (!promoMsg) return;
+    promoMsg.textContent = t('order.promo.applied')
+      .replace('{percent}', String(appliedPromo.discount_percent))
+      .replace('{total}', formatCents(promoTotalCents()));
+    promoMsg.style.display = '';
+    promoMsg.classList.add('promo-msg-ok');
   }
 
   async function applyPromo() {
@@ -1243,7 +1255,7 @@ async function renderOrderView() {
     if (!code) { renderSummaryPrice(); return; }
     try {
       const res = await fetchPromoCode(getProductId(), code);
-      if (res) appliedPromo = res;
+      if (res) { appliedPromo = res; showPromoApplied(); }
       else showPromoMsg('order.promo.invalid');
     } catch (_) {
       showPromoMsg('order.promo.error');

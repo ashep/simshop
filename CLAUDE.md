@@ -286,6 +286,9 @@ becomes a bogus language. Social `links` is a flat list shared by all languages 
 /products` resolves `price` per request and **skips geo detection unless some product has a non-`default` price**
 (avoids an ipinfo.io call per listing).
 
+Order-form feedback must sit **next to the field that triggers it**: on phones the order summary (price, applied promo)
+is far above the fold, so the promo result is also echoed in `#order-promo-msg` (`.promo-msg-ok` for success).
+
 **Touch swipes** (hero, product carousel, lightbox) all go through `addSwipe` in `main.js`, paired with CSS
 `touch-action: pan-y pinch-zoom` on the swiped element. Without `touch-action` the browser may claim a horizontal drag
 and send `touchcancel` instead of `touchend` — handlers that only listen for `touchend` get stuck. Listen on the

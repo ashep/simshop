@@ -454,12 +454,16 @@ a.announcement:focus-visible { outline: 2px solid var(--on-dark); outline-offset
 @media (max-width: 1023px) {
   .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-brand { grid-column: 1 / -1; }
+  /* Brand is child 1, so an odd column count leaves the last one alone in its row:
+     give it the full width instead of the left cell. */
+  .footer-col:last-child:nth-child(even) { grid-column: 1 / -1; }
 }
 
 @media (max-width: 639px) {
-  .site-footer { padding-top: 48px; }
+  .site-footer { padding-top: 48px; text-align: center; }
+  .footer-brand, .footer-col { align-items: center; }
   .footer-logo { width: 64px; height: 64px; }
-  .footer-bottom { margin-top: 36px; }
+  .footer-bottom { margin-top: 36px; flex-direction: column; }
 }
 
 /* ---- Home: hero ---- */
@@ -1369,6 +1373,8 @@ a.announcement:focus-visible { outline: 2px solid var(--on-dark); outline-offset
   color: #b42318;
   font-size: 14px;
 }
+
+.promo-msg-ok { color: #067647; }
 
 .order-form-heading {
   font-size: 28px;
