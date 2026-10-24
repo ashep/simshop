@@ -14,7 +14,8 @@
 - Schema changes go in a **new numbered migration** `internal/sql/NNN_<name>.{up,down}.sql` (picked up by `go:embed`
   + `dbmigrator`); never edit an already-applied file — existing DBs (local dev, prod) would never receive it. Use
   `IF NOT EXISTS`/`IF EXISTS` so a DB patched by hand still migrates cleanly.
-- `data/` is a **symlink** to `../shop-content/data` (separate git repo). Commit files under it there:
+- `data/` is a **symlink** to `../shop-content/data` (separate git repo). **Never commit data from this repo** —
+  "commit everything" here excludes it. Commit it only when asked, in its own repo:
   `git -C "$(dirname "$(readlink data)")" add ...`. `git add data/...` here fails ("beyond a symbolic link").
 - `vendor/` is gitignored (regen via `go mod vendor`); only `go.mod`/`go.sum` are staged. `go mod tidy` strips modules
   no real import reaches — to land a dep before its consumer, `go get` it (records `// indirect`) and **skip `go mod
