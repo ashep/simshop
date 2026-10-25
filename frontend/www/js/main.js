@@ -1827,10 +1827,12 @@ async function renderOrderView() {
           submitBtn.disabled = consentEl ? !consentEl.checked : false;
           submitBtn.textContent = t('order.submit');
         }
-        if (err && err.status === 400 && err.message === 'invalid promo code') {
+        const promoErrKey = err && err.status === 400 &&
+          { 'invalid promo code': 'order.promo.invalid', 'promo code already used': 'order.promo.used' }[err.message];
+        if (promoErrKey) {
           appliedPromo = null;
           renderSummaryPrice();
-          showPromoMsg('order.promo.invalid');
+          showPromoMsg(promoErrKey);
           if (promoInput) promoInput.focus();
           return;
         }

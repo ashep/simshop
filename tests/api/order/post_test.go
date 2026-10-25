@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -257,8 +258,17 @@ func TestCreateOrder(main *testing.T) {
 			_, _ = w.Write(pubPayload)
 			return
 		}
+		// order_invoices' PK is the invoice id, so subtests creating several orders need a
+		// distinct one per call: derive it from the order id the handler sends as reference.
+		var req struct {
+			MerchantPaymInfo struct {
+				Reference string `json:"reference"`
+			} `json:"merchantPaymInfo"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"invoiceId":"inv-existing","pageUrl":"https://pay.example/inv-existing"}`))
+		_, _ = fmt.Fprintf(w, `{"invoiceId":"inv-%s","pageUrl":"https://pay.example/inv-existing"}`,
+			req.MerchantPaymInfo.Reference)
 	}))
 	main.Cleanup(mbServer.Close)
 
@@ -391,6 +401,52 @@ func TestCreateOrder(main *testing.T) {
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"error": "invalid promo code"}`, string(body))
 		assert.Empty(t, fetchOrders(t, a.DSN()))
+	})
+
+	main.Run("PromoCodeUsedTwiceBySamePhoneReturns400", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"promo_code": "SAVE15"}))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		// Different code case and phone formatting still match.
+		resp = do(t, validBody(map[string]any{"promo_code": "save15", "phone": "+38 (050) 123-45-67"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"error": "promo code already used"}`, string(body))
+		assert.Len(t, fetchOrders(t, a.DSN()), 1)
+
+		// Ordering without the code is still allowed.
+		resp = do(t, validBody(nil))
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	})
+
+	main.Run("PromoCodeUsedByAnotherPhoneIsAccepted", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"promo_code": "SAVE15"}))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		resp = do(t, validBody(map[string]any{"promo_code": "SAVE15", "phone": "+380509999999"}))
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Len(t, fetchOrders(t, a.DSN()), 2)
+	})
+
+	main.Run("PromoCodeFromCancelledOrderCanBeReused", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"promo_code": "SAVE15"}))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		pool, err := pgxpool.New(t.Context(), a.DSN())
+		require.NoError(t, err)
+		_, err = pool.Exec(t.Context(), `UPDATE orders SET status = 'cancelled'`)
+		pool.Close()
+		require.NoError(t, err)
+
+		resp = do(t, validBody(map[string]any{"promo_code": "SAVE15"}))
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	})
 
 	main.Run("MissingProductIDReturns400AndDoesNotInsert", func(t *testing.T) {

@@ -703,6 +703,19 @@ prices:
 		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
 	})
 
+	main.Run("UsedPromoCodeReturns400", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.Anything).Return("", order.ErrPromoCodeUsed)
+
+		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"SPRING15",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"promo code already used"}`, w.Body.String())
+		mb.AssertNotCalled(t, "CreateInvoice", mock.Anything, mock.Anything)
+	})
+
 	main.Run("EmptyPromoCodeIgnored", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}

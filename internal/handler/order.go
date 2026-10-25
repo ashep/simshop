@@ -220,6 +220,10 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orderID, err := h.orders.Submit(r.Context(), o)
+	if stderrors.Is(err, order.ErrPromoCodeUsed) {
+		h.writeError(w, &BadRequestError{Reason: "promo code already used"})
+		return
+	}
 	if err != nil {
 		h.l.Error().Err(err).Msg("submit order failed")
 		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})

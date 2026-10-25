@@ -39,6 +39,22 @@ const insertOrderSQL = `INSERT INTO orders (
 	$14, $15, $16
 ) RETURNING id`
 
+// lockPromoPhoneSQL serializes concurrent orders carrying the same promo code
+// and phone number, so both cannot pass promoUsedSQL before either commits.
+const lockPromoPhoneSQL = `SELECT pg_advisory_xact_lock(
+	hashtextextended(lower($1) || ':' || regexp_replace($2, '\D', '', 'g'), 0))`
+
+// promoUsedSQL counts a code as used by any order with the same phone digits,
+// except cancelled ones (failed/expired payment, operator abort), so the
+// customer can retry with the code after a failed payment. 'new' counts too:
+// it is the state of a concurrent order between its tx1 and tx2.
+const promoUsedSQL = `SELECT EXISTS (
+	SELECT 1 FROM orders
+	WHERE promo_code IS NOT NULL
+	  AND lower(promo_code) = lower($1)
+	  AND regexp_replace(phone, '\D', '', 'g') = regexp_replace($2, '\D', '', 'g')
+	  AND status <> 'cancelled')`
+
 const insertAttrSQL = `INSERT INTO order_attrs
 	(order_id, attr_name, attr_value, attr_price)
 	VALUES ($1, $2, $3, $4)`
@@ -76,6 +92,17 @@ func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 	var promoCode, discountPercent, discount any
 	if o.Promo != nil {
 		promoCode, discountPercent, discount = o.Promo.Code, o.Promo.Percent, o.Promo.Discount
+
+		if _, err := tx.Exec(ctx, lockPromoPhoneSQL, o.Promo.Code, o.Phone); err != nil {
+			return "", fmt.Errorf("lock promo code: %w", err)
+		}
+		var used bool
+		if err := tx.QueryRow(ctx, promoUsedSQL, o.Promo.Code, o.Phone).Scan(&used); err != nil {
+			return "", fmt.Errorf("check promo code usage: %w", err)
+		}
+		if used {
+			return "", order.ErrPromoCodeUsed
+		}
 	}
 
 	var orderID string

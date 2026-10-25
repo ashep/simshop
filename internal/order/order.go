@@ -29,6 +29,11 @@ var ErrNotFound = errors.New("order not found")
 // next step from the order's current status. The handler maps it to 409.
 var ErrTransitionNotAllowed = errors.New("transition not allowed")
 
+// ErrPromoCodeUsed is returned by Writer.Write when the order's promo code was
+// already used by another order with the same phone number. The handler maps
+// it to 400.
+var ErrPromoCodeUsed = errors.New("promo code already used")
+
 // Attr is a single selected attribute on an order, ready to be persisted as a
 // row in the order_attrs table.
 type Attr struct {

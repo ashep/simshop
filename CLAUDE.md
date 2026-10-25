@@ -196,6 +196,11 @@ UpdateStatus.
 `Attr.Name`/`Attr.Value` store **rendered titles** in the customer's language, not raw IDs (orders stay
 self-documenting and immutable to YAML renames) — `handler.CreateOrder` resolves titles first.
 
+**One promo code per phone**: `Writer.Write` takes `pg_advisory_xact_lock` on `(lower(code), phone digits)`, then
+rejects with `order.ErrPromoCodeUsed` (→ 400) if a **non-`cancelled`** order matches. `new` must count — it's the
+state of a concurrent order between tx1 and tx2, so excluding it reopens the race. Functests creating 2+ orders on
+the shared Monobank stub rely on it returning a distinct `invoiceId` per call (derived from `reference`).
+
 `Writer.UpdateStatusByOperator` writes `tracking_number` write-once via a `CASE WHEN` SQL guard (defense-in-depth;
 handler already enforces "tracking required iff `shipped`").
 

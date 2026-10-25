@@ -647,7 +647,9 @@ components:
         promo_code:
           type: string
           nullable: true
-          description: Optional product promo code; matched case-insensitively. Unknown code → 400.
+          description: >-
+            Optional product promo code; matched case-insensitively. Unknown code → 400 "invalid promo code".
+            A code already used by a non-cancelled order with the same phone digits → 400 "promo code already used".
         notes:
           type: string
           nullable: true

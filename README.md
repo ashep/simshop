@@ -254,8 +254,9 @@ Fields in `product.yaml`:
   (validated at startup). Language-independent, returned as-is. When every value of an attribute has a color, the
   storefront shows that attribute as round color swatches instead of text buttons; a partial set falls back to text.
 - **promo_codes** — optional map of promo code → integer discount percent (`1..99`), e.g. `SPRING15: 15`. Codes
-  work only for this product, match case-insensitively, and stay valid until removed from the YAML (no expiry or
-  usage limits). Never returned by product endpoints; checked via `GET /products/{id}/promo-codes/{code}`.
+  work only for this product, match case-insensitively, and stay valid until removed from the YAML (no expiry).
+  Each phone number can use a code once (see *Promo codes* under `POST /orders`). Never returned by product
+  endpoints; checked via `GET /products/{id}/promo-codes/{code}`.
 - **cover** — optional filename of a still image under the product's `images/` subdirectory (usually one of the
   gallery previews, e.g. `03-preview.png`). It becomes the listing `image` — the picture on product cards and the
   fallback for the home hero — instead of the first gallery image. For link previews (OG tags) the
@@ -463,7 +464,16 @@ total is rounded to whole currency units, half up (no kopecks): `total = round(s
 `discount = subtotal − total` (e.g. 2499 at 15% → 2124, discount 375). The Monobank invoice is for that total. The
 storefront previews the discount via `GET /products/{id}/promo-codes/{code}`, which returns `{"code": "SPRING15",
 "discount_percent": 15}` (canonical spelling) or 404 `promo code not found` for an unknown product or code. That
-endpoint is per-IP rate-limited like `POST /orders` (separate limiter, same `rate_limit`). The applied code, percent and
+endpoint is per-IP rate-limited like `POST /orders` (separate limiter, same `rate_limit`).
+
+A phone number can use a given code only once: if any non-`cancelled` order already carries the same code
+(case-insensitive) and the same phone digits (formatting ignored), the request is rejected with HTTP 400 `promo code
+already used` and nothing is written. Orders of any status count, including unpaid `new`/`awaiting_payment` ones; a
+failed or expired payment moves the order to `cancelled`, which frees the code for a retry. The check runs inside the
+order-insert transaction under an advisory lock, so two concurrent requests can't both use the code. The storefront
+shows this error next to the promo field.
+
+The applied code, percent and
 discount show up in `GET /orders`, the Telegram new-order message, customer emails and `simshop order get`.
 
 The supplied `country` must be a key of the `shop.countries` map defined in `shop.yaml`; otherwise the request
