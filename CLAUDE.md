@@ -264,11 +264,11 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
   don't compare the two. Report is cached 10 min per `days` in `internal/stats`; any Cloudflare failure →
   `ErrUpstream` → generic 502 (detail logged). The Web Analytics beacon itself is the theme's job
   (`cloudflare_analytics.token` in `shop.yaml`).
-  **Cloudflare is unverified against the live API** (no credentials were available): the GraphQL filter/field names in
-  the `internal/cloudflare` query consts are unverified against the live schema; `rumPageloadEventsAdaptiveGroups`
-  limits are unknown and **range splitting is not implemented**. Before relying on it, run
-  `settings { rumPageloadEventsAdaptiveGroups { enabled maxDuration notOlderThan maxPageSize maxNumberOfFields } }`
-  and check that 30 days fits `maxDuration` (daily visits use a fixed `limit` of 100, paths 1000).
+  Both queries were checked against the live schema (2026-10-25, Free plan). Live `settings` for
+  `rumPageloadEventsAdaptiveGroups`: `maxDuration` 93 days, `notOlderThan` 184 days, `maxPageSize` 10000. A 30-day
+  query fits in one request, so there is **no range splitting**; add it only if `days` ever exceeds 93. The API token
+  only needs Account Analytics: Read. It can't list RUM sites, so `site_tag` (the id in the dashboard's Web Analytics
+  "Manage site" URL) is confirmed only once beacon data arrives.
 - **`POST /orders`**: two-phase commit — tx1 `Submit` (`status='new'`, DB is truth before Monobank knows) →
   Monobank `CreateInvoice` (failure leaves order at `new`, 502, reconciled out of band) → tx2 `AttachInvoice`
   (`status='awaiting_payment'`). `country` is **request-supplied, not geo-detected** (drives price + stored

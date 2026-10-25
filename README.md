@@ -700,8 +700,9 @@ rate_limit: 1
   (tests only). Env form: `SIMSHOP_CLOUDFLARE_APITOKEN`, `SIMSHOP_CLOUDFLARE_ACCOUNTID`, `SIMSHOP_CLOUDFLARE_SITETAG`.
   Operator setup: enable Web Analytics for the domain in Cloudflare; **turn off its automatic beacon injection** (the
   theme injects the beacon itself, so auto-injection double-counts); put the beacon token in `shop.yaml`
-  `cloudflare_analytics.token`; create an API token with Account Analytics: Read for `api_token`. Whether the beacon
-  token equals `site_tag` is unverified — if stats come back empty, check both values in the Cloudflare dashboard.
+  `cloudflare_analytics.token`; create an API token with Account Analytics: Read for `api_token`. `site_tag` is the
+  site id in the address of the site's Web Analytics "Manage site" page, which is not the beacon token. If stats stay
+  empty after the beacon is live, recheck both values in the Cloudflare dashboard.
 - `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
 - `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
 - `resend.api_key` — Resend API key. Optional; empty disables customer email notifications.
