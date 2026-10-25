@@ -22,13 +22,18 @@ func (o *globalOpts) load() (*Config, error) {
 	return LoadConfig(path)
 }
 
-// client resolves the selected shop and builds an API client for it.
-func (o *globalOpts) client() (*Client, error) {
+// selectShop resolves the shop chosen by --shop (or the default one).
+func (o *globalOpts) selectShop() (*Shop, error) {
 	cfg, err := o.load()
 	if err != nil {
 		return nil, err
 	}
-	s, err := cfg.Select(*o.shop)
+	return cfg.Select(*o.shop)
+}
+
+// client resolves the selected shop and builds an API client for it.
+func (o *globalOpts) client() (*Client, error) {
+	s, err := o.selectShop()
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +46,13 @@ func NewRootCmd() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:           "simshop",
-		Short:         "CLI for the simshop backend",
+		Short:         "CLI for the simshop backend (runs the interactive UI when no command is given)",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runTUI(cmd.Context(), opts)
+		},
 	}
 	root.PersistentFlags().StringVar(opts.shop, "shop", "", "shop name from ~/.simshop.yaml (default: the default shop)")
 	root.PersistentFlags().StringVar(opts.cfgPath, "config", "", "config file path (default: ~/.simshop.yaml)")
@@ -51,5 +60,6 @@ func NewRootCmd() *cobra.Command {
 
 	root.AddCommand(newOrderCmd(opts))
 	root.AddCommand(newShopsCmd(opts))
+	root.AddCommand(newTUICmd(opts))
 	return root
 }

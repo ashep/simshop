@@ -30,10 +30,14 @@ func TestResolveStatusFilter(main *testing.T) {
 		assert.Equal(t, in, resolveStatusFilter(in))
 	})
 
-	main.Run("active set excludes terminal statuses", func(t *testing.T) {
-		for _, terminal := range []string{"delivered", "cancelled", "returned", "refunded"} {
-			assert.NotContains(t, activeStatuses, terminal)
+	main.Run("active set excludes closed statuses", func(t *testing.T) {
+		for _, closed := range []string{"delivered", "cancelled", "refunded"} {
+			assert.NotContains(t, activeStatuses, closed)
 		}
+	})
+
+	main.Run("active set keeps returned awaiting a refund", func(t *testing.T) {
+		assert.Contains(t, activeStatuses, "returned")
 	})
 }
 
@@ -59,7 +63,7 @@ func TestOrderListStatusWiring(main *testing.T) {
 	}
 
 	main.Run("no flag sends the active status set", func(t *testing.T) {
-		assert.Equal(t, "new,awaiting_payment,payment_processing,payment_hold,paid,processing,shipped,refund_requested", run(t))
+		assert.Equal(t, "new,awaiting_payment,payment_processing,payment_hold,paid,processing,shipped,refund_requested,returned", run(t))
 	})
 
 	main.Run("--status all sends no filter", func(t *testing.T) {

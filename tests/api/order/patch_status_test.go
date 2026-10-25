@@ -140,7 +140,7 @@ func TestPatchOrderStatus(main *testing.T) {
 		for _, from := range []string{
 			"new", "awaiting_payment", "payment_processing", "payment_hold",
 			"paid", "processing", "shipped", "delivered",
-			"refund_requested", "returned", "refunded",
+			"refund_requested", "returned",
 		} {
 			truncateOrders(t, dsn)
 			drainTGChannel(tgCh)
@@ -243,6 +243,17 @@ func TestPatchOrderStatus(main *testing.T) {
 		code, body := patchStatus(t, a, id, operatorAPIKey, map[string]any{"status": "delivered"})
 		assert.Equal(t, http.StatusConflict, code)
 		assert.Equal(t, "transition not allowed", body["error"])
+	})
+
+	main.Run("Err_RefundedIsTerminal", func(t *testing.T) {
+		for _, target := range []string{"cancelled", "processing", "refund_requested"} {
+			truncateOrders(t, dsn)
+			drainTGChannel(tgCh)
+			id := seedOrderInStatus(t, dsn, "refunded", "en")
+			code, body := patchStatus(t, a, id, operatorAPIKey, map[string]any{"status": target})
+			assert.Equal(t, http.StatusConflict, code, "target=%s", target)
+			assert.Equal(t, "transition not allowed", body["error"], "target=%s", target)
+		}
 	})
 
 	main.Run("TelegramFiredOnShipped", func(t *testing.T) {

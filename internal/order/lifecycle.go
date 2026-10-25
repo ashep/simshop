@@ -49,12 +49,13 @@ func ShouldApplyInvoiceTransition(current, candidate string) bool {
 // here (returns false) so the writer's same check is trivially correct; the
 // handler converts the equal case to an idempotent 200 before reaching the
 // service. Targets outside this map are operator-forbidden, with one
-// override: target == "cancelled" is allowed from any non-cancelled state
-// (see ShouldApplyOperatorTransition) — operators must always be able to
+// override: target == "cancelled" is allowed from any state except cancelled
+// and refunded (see ShouldApplyOperatorTransition) — operators must be able to
 // abort an order. Other notes:
 //   - The pre-paid cluster (new, awaiting_payment, payment_processing,
 //     payment_hold) is webhook-owned for forward transitions.
-//   - "refunded" is terminal for forward transitions.
+//   - "refunded" is fully terminal: the money is back with the customer, so
+//     not even cancelled may follow it.
 var allowedOperatorTransitions = map[string]map[string]bool{
 	"paid":             {"processing": true, "refund_requested": true, "refunded": true},
 	"processing":       {"shipped": true, "refund_requested": true, "refunded": true},
@@ -74,7 +75,7 @@ func ShouldApplyOperatorTransition(current, target string) bool {
 		return false
 	}
 	if target == "cancelled" {
-		return true
+		return current != "refunded"
 	}
 	targets, ok := allowedOperatorTransitions[current]
 	if !ok {

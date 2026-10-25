@@ -42,8 +42,9 @@ insertion order. Shop precedence: `--shop` flag → `default: true` → first in
 
 Commands: `order list [--status csv]`, `order get <id>`, `order set-status <status> <id> [<id>...]`, `shops`.
 
-- `order list` with no `--status` defaults to **active** statuses (full enum minus terminal set `delivered,
-  cancelled, returned, refunded`). `--status all` clears the filter.
+- `order list` (and the TUI's ACTIVE scope) with no `--status` defaults to **active** statuses (full enum minus
+  `delivered, cancelled, refunded`). `returned` is deliberately active — it still awaits a refund. `--status all`
+  clears the filter.
 - `order get` has **no single-record endpoint** — fetches GET /orders and filters client-side.
 - `order set-status`: status first, then ≥1 ids, applied independently — a per-id failure is reported and the rest
   still run; exits non-zero with `"N of M orders failed"`. Client validates status against an allow-list for a fast
@@ -51,6 +52,10 @@ Commands: `order list [--status csv]`, `order get <id>`, `order set-status <stat
 - **Short ids** (unique UUID prefix) accepted by `get`/`set-status` alongside full UUIDs (`resolve.go`
   `matchOrder`: exact-then-unique-prefix, case-insensitive; no match → "not found", >1 → "ambiguous").
 - `shops` masks the api key as `<hidden>`.
+- Bare `simshop` (or `simshop tui`) opens the Bubble Tea TUI (`tui.go`/`tui_view.go`). Status changes go only
+  through the `s` picker (no per-status shortcuts, by request), which calls `order.ShouldApplyOperatorTransition`
+  directly (that package is stdlib-only) — don't copy the transition map into `cli`. Tests drive the model by feeding `Update` and running returned cmds; never run `Init()`'s batch — it
+  contains the 30s refresh tick and blocks.
 
 ## Conventions
 

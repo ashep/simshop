@@ -130,9 +130,10 @@ func TestShouldApplyOperatorTransition(main *testing.T) {
 		// Refunded is terminal for forward-only transitions.
 		{"RefundedToAnything", "refunded", "processing", false},
 		{"RefundedToShipped", "refunded", "shipped", false},
+		{"RefundedToCancelled", "refunded", "cancelled", false},
 
-		// Operator may cancel from any other state (override of the forward-only
-		// matrix). Same-status repeat is idempotent (false).
+		// Operator may cancel from any other non-refunded state (override of the
+		// forward-only matrix). Same-status repeat is idempotent (false).
 		{"NewToCancelled", "new", "cancelled", true},
 		{"AwaitingPaymentToCancelled", "awaiting_payment", "cancelled", true},
 		{"PaymentProcessingToCancelled", "payment_processing", "cancelled", true},
@@ -143,7 +144,6 @@ func TestShouldApplyOperatorTransition(main *testing.T) {
 		{"DeliveredToCancelled", "delivered", "cancelled", true},
 		{"RefundRequestedToCancelled", "refund_requested", "cancelled", true},
 		{"ReturnedToCancelled", "returned", "cancelled", true},
-		{"RefundedToCancelled", "refunded", "cancelled", true},
 		{"EqualCancelled", "cancelled", "cancelled", false},
 	}
 	for _, c := range cases {

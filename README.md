@@ -600,9 +600,10 @@ user-facing message in their own language.
 | `refund_requested` | `processing`, `shipped`, `delivered`, `returned`, `refunded` |
 | `returned`         | `refunded`                                                   |
 
-In addition to the matrix above, an operator may set `status: "cancelled"` from **any** non-`cancelled` state — this
-override exists so an order can always be aborted regardless of where it is in the lifecycle (including the webhook-
-owned pre-paid cluster and terminal `refunded`).
+In addition to the matrix above, an operator may set `status: "cancelled"` from any state except `cancelled` and
+`refunded` — this override exists so an order can be aborted anywhere in the lifecycle (including the webhook-owned
+pre-paid cluster). `refunded` is fully terminal: the money is already back with the customer, so no operator
+transition, not even `cancelled`, may follow it.
 
 Any transition outside this matrix returns HTTP 409 with `{"error": "transition not allowed"}`. Submitting the order's
 current status is treated as a no-op idempotent success (HTTP 200, no extra `order_history` row, no notification).
@@ -824,15 +825,22 @@ Override the config location with `--config <path>`.
 **Commands:**
 
 ```
+simshop [--shop NAME] [--config PATH]          [tui]
 simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
                                                  order get    <id>
                                                  order set-status <status> <id> [<id>...] [--tracking N] [--note TEXT]
                                                  shops
 ```
 
-- `order list` — list orders, newest first. By default only active orders are shown, hiding the terminal statuses
-  `delivered`, `cancelled`, `returned`, and `refunded`. `--status paid,shipped` filters to the given statuses;
-  `--status all` shows every order including terminal ones.
+- `tui` (or bare `simshop`) — full-screen interactive order browser in the spirit of k9s. Shows the same active
+  orders as `order list` (newest first, color-coded by status, auto-refreshed every 30 s) with per-status counters.
+  Keys: `↑↓`/`jk` move, `enter` opens the order card (customer, delivery, items, notes, invoices, history; `J`/`K`
+  step to the next/previous order), `/` searches by name, phone, city, id, tracking or promo code, `a` toggles
+  active/all, `s` changes the status — only transitions the backend allows are offered; `shipped` asks for the
+  tracking number, every change asks for an optional note — `y` copies the order id, `r` refreshes, `q` quits.
+- `order list` — list orders, newest first. By default only active orders are shown, hiding the closed statuses
+  `delivered`, `cancelled`, and `refunded`; `returned` is always listed since the refund is still pending.
+  `--status paid,shipped` filters to the given statuses; `--status all` shows every order including closed ones.
 - `order get <id>` — show one order's full record (attributes, history, invoices).
 - `order set-status <status> <id> [<id>...]` — change the status of one or more orders. The status comes first,
   followed by any number of order ids, e.g. `order set-status cancelled 019e9de8-c3c0 019e9dd7-0740`. `status` must be

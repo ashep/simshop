@@ -8,9 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// activeStatuses are the non-terminal order statuses shown by `order list` when
-// no --status filter is given. Terminal statuses (delivered, cancelled, returned,
-// refunded) are excluded; pass `--status all` to include them.
+// activeStatuses are the statuses shown by `order list` and the TUI when no
+// --status filter is given. Closed statuses (delivered, cancelled, refunded) are
+// excluded; returned stays listed because the money still has to go back. Pass
+// `--status all` to include everything.
 var activeStatuses = []string{
 	"new",
 	"awaiting_payment",
@@ -20,6 +21,7 @@ var activeStatuses = []string{
 	"processing",
 	"shipped",
 	"refund_requested",
+	"returned",
 }
 
 // resolveStatusFilter maps the --status flag to the statuses sent to GET /orders:
