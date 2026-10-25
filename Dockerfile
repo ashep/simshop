@@ -5,8 +5,7 @@ RUN apk add --no-cache bash
 COPY ./Caddyfile /etc/caddy/Caddyfile
 RUN caddy fmt --overwrite /etc/caddy/Caddyfile
 
-# Frontend
-COPY ./frontend/www/ /usr/share/caddy/
+# Frontend theme is not bundled: downstream images COPY it to /frontend (see README).
 
 # Backend
 COPY app.out /app/app

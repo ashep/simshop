@@ -1,8 +1,9 @@
 # SimShop
 
 SimShop is an HTTP API service that serves catalog data (products, pages, shop metadata) loaded from YAML files at
-startup and persists customer orders to PostgreSQL. It ships with a static storefront frontend and a deployment image
-that fronts the API with Caddy (see [Frontend](#frontend) and [Deployment](#deployment)).
+startup and persists customer orders to PostgreSQL. It ships a deployment image that fronts the API with Caddy and
+serves a storefront theme supplied by the downstream image — no frontend is bundled (see [Frontend
+theme](#frontend-theme) and [Deployment](#deployment)).
 
 ## Purpose
 
@@ -88,8 +89,8 @@ The optional `links` list holds external/social links, shared by all languages; 
 `icon` identifier, and a target `url`. The optional `google-analytics` block carries the
 measurement `id` (e.g. `"G-XXXXXXXXXX"`); it is surfaced in the response under the `google_analytics` key.
 
-The optional storefront content drives the home page and header of the bundled frontend; every block is optional and
-the frontend hides (or falls back for) whatever is missing:
+The optional storefront content drives the home page and header of the theme; every block is optional and
+the theme hides (or falls back for) whatever is missing:
 
 - `announcement` — per-language text of the thin bar above the header.
 - `announcement_page` — optional content page id (from `pages.yaml`); the whole announcement bar then links to it.
@@ -851,43 +852,37 @@ list of candidates.
 - `--config PATH` — config file path (default: `~/.simshop.yaml`).
 - `--json` — emit raw JSON instead of a table, for scripting and piping.
 
-## Frontend
+## Frontend theme
 
-A static single-page storefront lives under `frontend/www/`. It is plain HTML/CSS/JS — no framework and no build step —
-served as static files (by Caddy in the deployment image; see below). It consumes this service's JSON API to render the
-catalog, product pages, the checkout form, and the post-payment order-status page.
+The storefront is **not part of this repository**. The image serves static files from `/frontend`, which a downstream
+image fills in (`FROM ashep/simshop` + `COPY <theme> /frontend`); the reference theme is
+a separate theme repository. Without a theme the image serves only the API.
 
-- **Pages.** `index.html` serves three routes: the home page at `/` (hero, benefits strip, one product
-  row per category, "about" band and photo gallery — all driven by `GET /shop` storefront content), the catalog at `/catalog`
-  (category filter and full product grid; `catalog` is therefore a reserved id a content page cannot use), and
-  Markdown content pages at `/<page id>`. `product.html` holds the product detail (breadcrumbs, carousel with
-  thumbnails and a fullscreen gallery, attribute selection, specs, description, related products) and the order form; `order-status.html`
-  polls `GET /orders/{id}` and shows a localized payment/fulfillment status. The header (announcement bar, wordmark,
-  navigation: one `/catalog?category=<id>` link per category, falling back to a single "Products" link when there are
-  none, then pages from `menu`; language switch) and the footer (logo, categories, pages, social links) are rendered by
-  `main.js` on every page.
-- **Scripts.** `js/api.js` wraps every API call; `js/i18n.js` holds the English and Ukrainian UI strings; `js/main.js`
-  drives routing (page state lives in query params: `?id=`, `?lang=`, `?category=`, `?img=`; an old home-page
-  `/?category=` link redirects to `/catalog?category=`), rendering, the order
-  form, and the carousel. Markdown is rendered with `marked` (loaded from a CDN).
-- **API base.** `api.js` calls `<origin>/api`.
-- **Languages.** English and Ukrainian. The active language is resolved from `?lang=`, then `localStorage`, then the
-  browser locale (a `ru` browser locale maps to `uk`), and persisted to `localStorage`.
-- **Branding assets.** `applyAssets()` injects the favicons and footer logo from the backend `/assets/<file>` path
-  (conventional filenames); none are bundled in the frontend.
-- **Analytics.** When `GET /shop` returns a `google_analytics.id`, `main.js` loads Google Analytics (gtag.js) at
-  runtime; with no id, no analytics code runs. The header and footer render the per-language `links` from
-  `GET /shop`.
+Contract a theme must follow:
+
+- **Required pages.** `index.html` (fallback for every unmatched path — home, catalog, content pages, client-side
+  routing), `product.html` (served at `/product` to humans; bots get the backend's `GET /product` preview), and
+  `order-status.html` (served at `/order/status`, the target of `SIMSHOP_MONOBANK_REDIRECTURL` and
+  `SIMSHOP_MAIL_ORDERURL`).
+- **API base.** The API is reachable at `<origin>/api` (prefix stripped before the Go server); brand files at
+  `<origin>/api/assets/<file>`.
+- **Caching.** Images and video (`jpg jpeg png gif webp svg ico mp4`) get `max-age=86400`; `.js`/`.css` `no-cache`;
+  `.html` `no-store`. Everything else is served as-is.
+
+Routing is owned by `Caddyfile`; a theme cannot add routes.
+
+For local development `task dev` serves the `frontend` symlink at the repo root (gitignored), e.g.
+`ln -s ../shop-content/frontend frontend`.
 
 ## Deployment
 
 The published artifact is a single Docker image (`Dockerfile`) built on the Caddy base image:
 
-- The compiled Go server binary (`app.out`) is copied to `/app/app`; the frontend (`frontend/www/`) is copied to
-  Caddy's web root.
+- The compiled Go server binary (`app.out`) is copied to `/app/app`; no frontend is copied — Caddy's web root is
+  `/frontend`, filled by the downstream image (see [Frontend theme](#frontend-theme)).
 - `entrypoint.sh` starts both the Go server (listening on `:9000`) and Caddy, exiting when either child exits.
 - `Caddyfile` routes requests: `/api*` is reverse-proxied to the Go server with the `/api` prefix stripped; `/product`
   is served by the backend's social-crawler preview (`GET /product`, `ServeProductPreview`) for bots and rewritten to
   `product.html` for humans (distinguished by a User-Agent regex); `/order/status` is rewritten to `order-status.html`;
-  images, JS, CSS, and HTML are served from the web root with per-type cache headers; every other path falls back to
+  images, JS, CSS, and HTML are served from `/frontend` with per-type cache headers; every other path falls back to
   `index.html` for client-side routing.

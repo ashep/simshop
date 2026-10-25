@@ -21,7 +21,7 @@ tasks:
       - git clone --branch v1 https://github.com/ashep/ci.git .ci
 
   dev:
-    desc: Run backend and frontend locally; site at http://localhost:8080 (WEB_PORT=... to change)
+    desc: Run backend and frontend locally; site at http://localhost:8104 (WEB_PORT=... to change)
     deps: [dev:api, dev:web]
 
   dev:api:
@@ -40,7 +40,7 @@ tasks:
       - air -c .air.toml -build.include_dir "$(realpath data)" -- {{.CLI_ARGS}}
 
   dev:web:
-    desc: Serve frontend/www via Caddy, proxying /api to the local backend
+    desc: Serve the frontend theme (frontend symlink) via Caddy, proxying /api to the local backend
     vars:
       WEB_PORT: '{{.WEB_PORT | default "8104"}}'
       API_ADDR:
@@ -50,11 +50,13 @@ tasks:
         msg: "caddy is not installed: brew install caddy"
       - sh: test -n "{{.API_ADDR}}"
         msg: "server.addr not found in config.yaml"
+      - sh: test -f frontend/index.html
+        msg: "no theme: symlink frontend to a theme dir, e.g. ln -s ../shop-content/frontend frontend"
     cmds:
       - mkdir -p tmp
       - >-
         sed -e 's#^:80 {#:{{.WEB_PORT}} {#'
         -e 's#127.0.0.1:9000#{{.API_ADDR}}#g'
-        -e 's#/usr/share/caddy#{{.ROOT_DIR}}/frontend/www#g'
+        -e 's#root \* /frontend#root * {{.ROOT_DIR}}/frontend#g'
         Caddyfile > tmp/Caddyfile.dev
       - caddy run --config tmp/Caddyfile.dev --adapter caddyfile

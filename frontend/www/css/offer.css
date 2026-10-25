@@ -1,5 +1,0 @@
-/* Content pages (/<page id>) are styled by .prose in style.css; only the loading
-   placeholder rendered by renderMarkdownPage() lives here. */
-.offer-loading {
-  color: var(--muted);
-}

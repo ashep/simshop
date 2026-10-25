@@ -29,7 +29,7 @@ request/response validation. Config from `config.yaml` + env; data from `data_di
 context for new features.
 
 Dirs: `internal/` (app, cli, handler, geo, loader, monobank, novaposhta, openapi, order, orderdb, page, product, resend,
-shop, sql, telegram), `api/`, `frontend/` (static storefront, served by Caddy), `tests/` (build tag `functest`),
+shop, sql, telegram), `api/`, `tests/` (build tag `functest`),
 `vendor/`. Server entrypoint is repo-root `main.go`; the CLI is a separate binary (`cmd/simshop/main.go`).
 
 ### CLI (`cmd/simshop` + `internal/cli`)
@@ -273,42 +273,29 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
 
 ## Frontend & deployment
 
-`frontend/www/` is a static storefront — vanilla HTML/CSS/JS, **no framework, no build step**, served by **Caddy,
-not the Go app**. `js/i18n.js`: **every key must have both `en` and `uk`** (`main.js` `t()` falls back to the key
-otherwise). API base is `<origin>/api`, hardcoded in `api.js`.
+**No frontend lives here.** The image's Caddy serves a theme from `/frontend` that downstream images `COPY` in
+(reference theme + its UI rules: `../shop-content/frontend`, its `CLAUDE.md`). Theme contract (README "Frontend
+theme"): `index.html`, `product.html`, `order-status.html`; API at `<origin>/api`. Changing routes in `Caddyfile`
+changes that contract — update the README and the theme together. Locally `frontend` is a gitignored symlink.
 
-Header/footer are **rendered by `main.js`** (`renderHeader`/`renderFooter` into `#site-header`/`#site-footer`) on every
-page, so a language switch re-renders them — lang links are `.lang-link[data-lang]`, not fixed ids. `/catalog` is a
-**reserved route** in `index.html` (a page with id `catalog` would be shadowed). Storefront content in `shop.yaml`
-(`announcement`, `announcement_page`, `menu`, `hero`, `features`, `story`, `gallery`) is optional and passed through
-as-is; image fields are bare `assets/` filenames, not validated. `hero.images` is a slideshow (`initHeroSlider` in
-`main.js`); there is no single `hero.image` field. Each slide is a `HeroImage` (custom `UnmarshalYAML`: bare filename or
-`{file, category}`; JSON always `{file, category?}`); a click on a slide's `img[data-href]` opens its category's
-catalog, unknown/dropped ids fall back to `/catalog`. `Category` has a custom `UnmarshalYAML`: YAML keeps language keys
-flat (`{id, en, uk}`), so `id` is reserved — a new non-language key must be added to `categoryReservedKeys` or it
-becomes a bogus language. Social `links` is a flat list shared by all languages (not a per-language map) and renders
-**only in the footer**, as text; `links[].icon` is used just to find the Instagram link for the home gallery. `GET
-/products` resolves `price` per request and **skips geo detection unless some product has a non-`default` price**
-(avoids an ipinfo.io call per listing).
+Storefront content in `shop.yaml` (`announcement`, `announcement_page`, `menu`, `hero`, `features`, `story`, `gallery`)
+is optional and passed through as-is; image fields are bare `assets/` filenames, not validated. `hero.images` is a
+slideshow (rotated by the theme); there is no single `hero.image` field. Each slide is a `HeroImage` (custom
+`UnmarshalYAML`: bare filename or `{file, category}`; JSON always `{file, category?}`); a click on a slide's
+`img[data-href]` opens its category's catalog, unknown/dropped ids fall back to `/catalog`. `Category` has a custom
+`UnmarshalYAML`: YAML keeps language keys flat (`{id, en, uk}`), so `id` is reserved — a new non-language key must be
+added to `categoryReservedKeys` or it becomes a bogus language. Social `links` is a flat list shared by all languages
+(not a per-language map) and renders **only in the footer**, as text; `links[].icon` is used just to find the Instagram
+link for the home gallery. `GET /products` resolves `price` per request and **skips geo detection unless some product
+has a non-`default` price** (avoids an ipinfo.io call per listing).
 
-Order-form feedback must sit **next to the field that triggers it**: on phones the order summary (price, applied promo)
-is far above the fold, so the promo result is also echoed in `#order-promo-msg` (`.promo-msg-ok` for success).
-
-**Touch swipes** (hero, product carousel, lightbox) all go through `addSwipe` in `main.js`, paired with CSS
-`touch-action: pan-y pinch-zoom` on the swiped element. Without `touch-action` the browser may claim a horizontal drag
-and send `touchcancel` instead of `touchend` — handlers that only listen for `touchend` get stuck. Listen on the
-**static container** (`.hero-media`, `.carousel-viewport`), never the translated track: once the track moves by
-`-100%` its own box is off-screen and iOS Safari stops delivering touches on the visible slide to it (swipe dies after
-one slide). Hover-pause must check `pointerType === 'mouse'`: a phone tap fires a synthetic `mouseenter` with no
-`mouseleave`. Verify swipes with real touches in the iOS Simulator (Safari); synthetic `TouchEvent`s in the browser
-pane only test the JS, and a `document`-level debug touch listener masks the bug.
-
-Local run: `task dev` (backend + Caddy on :8080, generated `tmp/Caddyfile.dev`). `dev:api` deliberately builds
-**without the `netgo` tag**: on macOS the pure-Go resolver ignores system DNS and the startup Monobank pubkey fetch
-times out, while `go:run` (with `netgo`) fails. `dev:api` runs under **`air`** (`.air.toml`): ldflags read `$APP_NAME`/`$APP_VERSION`
-from the task's `env` (air's `build.cmd` runs via `sh -c`); `.sql`/`.yaml` are watched because they're `go:embed`-ed.
-Air never descends into the `data` symlink (`follow_symlink` only affects `exclude_unchanged` checksums), so the task
-passes `-build.include_dir "$(realpath data)"` — air ≥1.67 watches out-of-root include dirs as extra roots.
+Local run: `task dev` (backend + Caddy on :8104 serving the `frontend` symlink, generated `tmp/Caddyfile.dev`).
+`dev:api` deliberately builds **without the `netgo` tag**: on macOS the pure-Go resolver ignores system DNS and the
+startup Monobank pubkey fetch times out, while `go:run` (with `netgo`) fails. `dev:api` runs under **`air`**
+(`.air.toml`): ldflags read `$APP_NAME`/`$APP_VERSION` from the task's `env` (air's `build.cmd` runs via `sh -c`);
+`.sql`/`.yaml` are watched because they're `go:embed`-ed. Air never descends into the `data` symlink (`follow_symlink`
+only affects `exclude_unchanged` checksums), so the task passes `-build.include_dir "$(realpath data)"` — air ≥1.67
+watches out-of-root include dirs as extra roots.
 
 `Caddyfile`: `/api*` reverse-proxied to `:9000` with `/api` stripped; `/product` routes to backend
 `ServeProductPreview` for bots (User-Agent regex) vs `product.html` for humans; SPA fallback to `index.html`.

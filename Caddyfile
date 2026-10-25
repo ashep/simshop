@@ -20,34 +20,34 @@
 
     @images path *.jpg *.jpeg *.png *.gif *.webp *.svg *.ico *.mp4
     handle @images {
-        root * /usr/share/caddy
+        root * /frontend
         header Cache-Control "public, max-age=86400"
         file_server
     }
 
     @js path *.js
     handle @js {
-        root * /usr/share/caddy
+        root * /frontend
         header Cache-Control "no-cache"
         file_server
     }
 
     @css path *.css
     handle @css {
-        root * /usr/share/caddy
+        root * /frontend
         header Cache-Control "no-cache"
         file_server
     }
 
     @html path *.html
     handle @html {
-        root * /usr/share/caddy
+        root * /frontend
         header Cache-Control "no-store"
         file_server
     }
 
     handle {
-        root * /usr/share/caddy
+        root * /frontend
         try_files {path} /index.html
         file_server
     }

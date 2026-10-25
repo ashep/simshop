@@ -5,6 +5,7 @@
 
 config.yaml
 /data
+/frontend
 /docs
 /public
 /tmp
