@@ -82,6 +82,7 @@ type Handler struct {
 	monobank    monobankClient
 	mbVerifier  monobankVerifier
 	orders      orderService
+	stats       statsService
 	geo         geoDetector
 	resp        *openapi.Responder
 	dataDir     string

@@ -167,12 +167,14 @@ func (h *Handler) shopOrigin() string {
 }
 
 // ServeProductPreview returns a minimal HTML document with Open Graph / Twitter meta tags for
-// social-media crawlers. Caddy routes crawler User-Agents on /product here; humans get the static SPA.
+// social-media crawlers. It serves GET /product/{id} and GET /product/{lang}/{id}; Caddy routes
+// crawler User-Agents on the storefront's /product/... paths here, humans get the static SPA.
+// An empty or unknown lang falls back to the default language (see chooseLang).
 // It never returns a non-200 to a crawler: invalid/unknown products fall back to shop-level tags.
 func (h *Handler) ServeProductPreview(w http.ResponseWriter, r *http.Request) {
 	origin := h.shopOrigin()
 
-	id := r.URL.Query().Get("id")
+	id := r.PathValue("id")
 	if id == "" || id != filepath.Base(id) || id == "." || strings.ContainsAny(id, "\r\n\x00") {
 		h.writePreview(w, h.shopPreview(r, origin))
 		return
@@ -196,21 +198,21 @@ func (h *Handler) ServeProductPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s, _ := h.shop.Get(r.Context())
-	lang := chooseLang(r.URL.Query().Get("lang"), p.Name, shopDefaultLang(s))
+	lang := chooseLang(r.PathValue("lang"), p.Name, shopDefaultLang(s))
 	if lang == "" {
 		h.writePreview(w, h.shopPreview(r, origin))
 		return
 	}
 
-	pageURL := origin + "/product?id=" + id + "&lang=" + lang
+	path := "/" + lang + "/product/" + id
 	h.writePreview(w, ogData{
 		Title:       p.Name[lang],
 		Description: plainText(p.Description[lang], 200),
 		SiteName:    shopName(s, lang),
 		Image:       coverImageURL(&p, h.publicURL, id),
-		URL:         pageURL,
+		URL:         origin + path,
 		Locale:      lang,
-		Refresh:     "/product?id=" + id + "&lang=" + lang,
+		Refresh:     path,
 	})
 }
 

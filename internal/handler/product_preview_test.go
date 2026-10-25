@@ -98,6 +98,19 @@ func writeProductYAML(t *testing.T, dir, id, body string) {
 	require.NoError(t, os.WriteFile(filepath.Join(pdir, "product.yaml"), []byte(body), 0o644))
 }
 
+// previewRequest builds a crawler request for the path form the router serves, with the
+// id/lang path values set the way the mux would set them.
+func previewRequest(id, lang string) *http.Request {
+	path := "/product/" + id
+	if lang != "" {
+		path = "/product/" + lang + "/" + id
+	}
+	r := httptest.NewRequest(http.MethodGet, path, nil)
+	r.SetPathValue("id", id)
+	r.SetPathValue("lang", lang)
+	return r
+}
+
 func newPreviewHandler(t *testing.T, dataDir string, s *shop.Shop) *Handler {
 	t.Helper()
 	return &Handler{
@@ -128,7 +141,7 @@ images:
 `)
 		h := newPreviewHandler(t, dir, s)
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=p1&lang=en", nil)
+		r := previewRequest("p1", "en")
 
 		h.ServeProductPreview(w, r)
 
@@ -138,9 +151,9 @@ images:
 		require.Contains(t, body, `<meta property="og:title" content="Cool &#34;Clock&#34;">`)
 		require.Contains(t, body, `<meta property="og:description" content="A great clock">`)
 		require.Contains(t, body, `<meta property="og:image" content="https://host/api/images/p1/01.png">`)
-		require.Contains(t, body, `<meta property="og:url" content="https://host/product?id=p1&amp;lang=en">`)
+		require.Contains(t, body, `<meta property="og:url" content="https://host/en/product/p1">`)
 		require.Contains(t, body, `<meta name="twitter:card" content="summary_large_image">`)
-		require.Contains(t, body, `<meta http-equiv="refresh" content="0; url=/product?id=p1&amp;lang=en">`)
+		require.Contains(t, body, `<meta http-equiv="refresh" content="0; url=/en/product/p1">`)
 	})
 
 	main.Run("omits og:image when product has no still image", func(t *testing.T) {
@@ -157,7 +170,7 @@ images:
 `)
 		h := newPreviewHandler(t, dir, s)
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=p2&lang=en", nil)
+		r := previewRequest("p2", "en")
 
 		h.ServeProductPreview(w, r)
 
@@ -168,7 +181,7 @@ images:
 	main.Run("falls back to shop OG on unknown id, still 200", func(t *testing.T) {
 		h := newPreviewHandler(t, t.TempDir(), s)
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=missing", nil)
+		r := previewRequest("missing", "")
 
 		h.ServeProductPreview(w, r)
 
@@ -178,7 +191,7 @@ images:
 		require.Contains(t, body, `<meta http-equiv="refresh" content="0; url=/">`)
 	})
 
-	main.Run("falls back to shop default lang when query lang absent", func(t *testing.T) {
+	main.Run("falls back to shop default lang when path lang absent", func(t *testing.T) {
 		dir := t.TempDir()
 		writeProductYAML(t, dir, "p3", `
 name:
@@ -191,19 +204,50 @@ images: []
 `)
 		h := newPreviewHandler(t, dir, s)
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=p3", nil) // no lang
+		r := previewRequest("p3", "") // no lang
 
 		h.ServeProductPreview(w, r)
 
 		body := w.Body.String()
 		require.Contains(t, body, `content="EnglishName"`) // shop default "en" wins
-		require.Contains(t, body, `<meta property="og:url" content="https://host/product?id=p3&amp;lang=en">`)
+		require.Contains(t, body, `<meta property="og:url" content="https://host/en/product/p3">`)
+	})
+
+	main.Run("unknown lang behaves like no lang", func(t *testing.T) {
+		dir := t.TempDir()
+		writeProductYAML(t, dir, "p5", `
+name:
+  en: EnglishName
+  uk: УкрName
+description:
+  en: en desc
+images: []
+`)
+		h := newPreviewHandler(t, dir, s)
+		w := httptest.NewRecorder()
+
+		h.ServeProductPreview(w, previewRequest("p5", "xx"))
+
+		body := w.Body.String()
+		require.Contains(t, body, `content="EnglishName"`)
+		require.Contains(t, body, `<meta property="og:url" content="https://host/en/product/p5">`)
+		require.Contains(t, body, `<meta http-equiv="refresh" content="0; url=/en/product/p5">`)
+	})
+
+	main.Run("missing id falls back to shop OG, still 200", func(t *testing.T) {
+		h := newPreviewHandler(t, t.TempDir(), s)
+		w := httptest.NewRecorder()
+
+		h.ServeProductPreview(w, previewRequest("", ""))
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `<meta http-equiv="refresh" content="0; url=/">`)
 	})
 
 	main.Run("rejects path-traversal id via shop fallback", func(t *testing.T) {
 		h := newPreviewHandler(t, t.TempDir(), s)
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=../../etc", nil)
+		r := previewRequest("../../etc", "")
 
 		h.ServeProductPreview(w, r)
 
@@ -228,12 +272,12 @@ images: []
 			l:           zerolog.Nop(),
 		}
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/product?id=p4&lang=en", nil)
+		r := previewRequest("p4", "en")
 
 		h.ServeProductPreview(w, r)
 
 		body := w.Body.String()
 		// og:url is on the SHOP host derived from redirect_url...
-		require.Contains(t, body, `<meta property="og:url" content="https://shop.example.com/product?id=p4&amp;lang=en">`)
+		require.Contains(t, body, `<meta property="og:url" content="https://shop.example.com/en/product/p4">`)
 	})
 }

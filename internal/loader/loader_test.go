@@ -465,6 +465,8 @@ shop:
       url: https://example.com/ig
   google-analytics:
     id: G-ABC123
+  cloudflare_analytics:
+    token: cf-tok
   announcement:
     en: Handmade
     uk: Ручна робота
@@ -533,6 +535,8 @@ shop:
 		assert.Equal(t, "https://example.com/ig", cat.Shop.Links[0].URL)
 		require.NotNil(t, cat.Shop.GoogleAnalytics)
 		assert.Equal(t, "G-ABC123", cat.Shop.GoogleAnalytics.ID)
+		require.NotNil(t, cat.Shop.CloudflareAnalytics)
+		assert.Equal(t, "cf-tok", cat.Shop.CloudflareAnalytics.Token)
 		assert.Equal(t, map[string]string{"en": "Handmade", "uk": "Ручна робота"}, cat.Shop.Announcement)
 		assert.Equal(t, "sale", cat.Shop.AnnouncementPage)
 		require.NotNil(t, cat.Shop.Hero)

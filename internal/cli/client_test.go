@@ -115,3 +115,44 @@ func TestClientGetOrder(main *testing.T) {
 		assert.Contains(t, err.Error(), "not found")
 	})
 }
+
+func TestClientGetStats(main *testing.T) {
+	main.Run("sends days and bearer, parses body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/stats", r.URL.Path)
+			assert.Equal(t, "14", r.URL.Query().Get("days"))
+			assert.Equal(t, "Bearer k", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"days":[{"date":"2026-10-19","visits":183}],` +
+				`"top_products":[{"id":"x","title":"","views":214}]}`))
+		}))
+		defer srv.Close()
+
+		st, err := NewClient(srv.URL, "k").GetStats(context.Background(), 14)
+		require.NoError(t, err)
+		assert.Equal(t, []StatsDay{{Date: "2026-10-19", Visits: 183}}, st.Days)
+		assert.Equal(t, []StatsProduct{{ID: "x", Views: 214}}, st.TopProducts)
+	})
+
+	main.Run("404 means not configured", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		_, err := NewClient(srv.URL, "k").GetStats(context.Background(), 7)
+		assert.ErrorIs(t, err, ErrStatsNotConfigured)
+	})
+
+	main.Run("other errors surface", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error":"bad gateway"}`))
+		}))
+		defer srv.Close()
+
+		_, err := NewClient(srv.URL, "k").GetStats(context.Background(), 7)
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrStatsNotConfigured)
+		assert.Contains(t, err.Error(), "bad gateway")
+	})
+}

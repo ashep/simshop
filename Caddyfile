@@ -1,54 +1,96 @@
 :80 {
-    handle /api* {
-        uri strip_prefix /api
-        reverse_proxy 127.0.0.1:9000
-    }
+    route {
+        handle /api* {
+            uri strip_prefix /api
+            reverse_proxy 127.0.0.1:9000
+        }
 
-    @productBot {
-        path /product
-        header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
-    }
-    @productHuman {
-        path /product
-        not header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
-    }
-    rewrite @productHuman /product.html
-    handle @productBot {
-        reverse_proxy 127.0.0.1:9000
-    }
-    rewrite /order/status /order-status.html
+        # Legacy query-string URLs -> path URLs (permanent). lang/id/category are validated so that
+        # a crafted value cannot turn the redirect target into a protocol-relative or odd URL.
+        @legacyProductLang {
+            path /product /product.html
+            expression `{query.id}.matches('^[A-Za-z0-9_-]+$') && {query.lang}.matches('^[a-z]{2}$')`
+        }
+        redir @legacyProductLang /{query.lang}/product/{query.id} 301
+        @legacyProduct {
+            path /product /product.html
+            expression `{query.id}.matches('^[A-Za-z0-9_-]+$')`
+        }
+        redir @legacyProduct /product/{query.id} 301
 
-    @images path *.jpg *.jpeg *.png *.gif *.webp *.svg *.ico *.mp4
-    handle @images {
-        root * /frontend
-        header Cache-Control "public, max-age=86400"
-        file_server
-    }
+        @legacyCatalogLang {
+            path /catalog
+            expression `{query.category}.matches('^[A-Za-z0-9_-]+$') && {query.lang}.matches('^[a-z]{2}$')`
+        }
+        redir @legacyCatalogLang /{query.lang}/catalog/{query.category} 301
+        @legacyCatalog {
+            path /catalog
+            expression `{query.category}.matches('^[A-Za-z0-9_-]+$')`
+        }
+        redir @legacyCatalog /catalog/{query.category} 301
+        @legacyLang {
+            path / /catalog
+            expression `{query.lang}.matches('^[a-z]{2}$')`
+        }
+        redir @legacyLang /{query.lang}{path} 301
 
-    @js path *.js
-    handle @js {
-        root * /frontend
-        header Cache-Control "no-cache"
-        file_server
-    }
+        # Product pages: crawlers get the backend OG preview (/product/{id} or /product/{lang}/{id}),
+        # humans get the SPA page.
+        @productBot {
+            path_regexp bot ^/product/([^/]+)$
+            header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
+        }
+        @productBotLang {
+            path_regexp botlang ^/([a-z]{2})/product/([^/]+)$
+            header_regexp User-Agent "(?i)(telegrambot|twitterbot|facebookexternalhit|slackbot|discordbot|whatsapp|linkedinbot|pinterest|vkshare|redditbot|skypeuripreview|googlebot|bingbot|embedly|quora link preview|outbrain|nuzzel|bitlybot|flipboard|tumblr|mastodon|bsky)"
+        }
+        handle @productBot {
+            reverse_proxy 127.0.0.1:9000
+        }
+        handle @productBotLang {
+            rewrite * /product/{re.botlang.1}/{re.botlang.2}
+            reverse_proxy 127.0.0.1:9000
+        }
+        @productHuman {
+            path_regexp ^(/[a-z]{2})?/product/[^/]+$
+        }
+        rewrite @productHuman /product.html
 
-    @css path *.css
-    handle @css {
-        root * /frontend
-        header Cache-Control "no-cache"
-        file_server
-    }
+        @orderStatus path_regexp ^(/[a-z]{2})?/order/status$
+        rewrite @orderStatus /order-status.html
 
-    @html path *.html
-    handle @html {
-        root * /frontend
-        header Cache-Control "no-store"
-        file_server
-    }
+        @images path *.jpg *.jpeg *.png *.gif *.webp *.svg *.ico *.mp4
+        handle @images {
+            root * /frontend
+            header Cache-Control "public, max-age=86400"
+            file_server
+        }
 
-    handle {
-        root * /frontend
-        try_files {path} /index.html
-        file_server
+        @js path *.js
+        handle @js {
+            root * /frontend
+            header Cache-Control "no-cache"
+            file_server
+        }
+
+        @css path *.css
+        handle @css {
+            root * /frontend
+            header Cache-Control "no-cache"
+            file_server
+        }
+
+        @html path *.html
+        handle @html {
+            root * /frontend
+            header Cache-Control "no-store"
+            file_server
+        }
+
+        handle {
+            root * /frontend
+            try_files {path} /index.html
+            file_server
+        }
     }
 }

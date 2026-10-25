@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/ashep/go-app/dbmigrator"
 	"github.com/ashep/go-app/httpserver"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ashep/simshop/api"
+	"github.com/ashep/simshop/internal/cloudflare"
 	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
@@ -23,6 +25,7 @@ import (
 	"github.com/ashep/simshop/internal/resend"
 	"github.com/ashep/simshop/internal/shop"
 	appsql "github.com/ashep/simshop/internal/sql"
+	"github.com/ashep/simshop/internal/stats"
 	"github.com/ashep/simshop/internal/telegram"
 )
 
@@ -95,6 +98,11 @@ func Run(rt *runner.Runtime[Config]) error {
 		l.Info().Msg("telegram notifier disabled")
 	}
 
+	cfEnabled := cfg.Cloudflare.APIToken != "" && cfg.Cloudflare.AccountID != "" && cfg.Cloudflare.SiteTag != ""
+	if !cfEnabled && (cfg.Cloudflare.APIToken != "" || cfg.Cloudflare.AccountID != "" || cfg.Cloudflare.SiteTag != "") {
+		return fmt.Errorf("cloudflare api_token, account_id and site_tag must be set together")
+	}
+
 	var resendNotifier order.Notifier
 	if cfg.Resend.APIKey != "" {
 		if cfg.Mail.From == "" {
@@ -149,6 +157,14 @@ func Run(rt *runner.Runtime[Config]) error {
 		geo.NewDetector(), openAPI.Responder(),
 		cfg.DataDir, cfg.Monobank.RedirectURL, cfg.Server.PublicURL, cfg.Monobank.TaxIDs, l,
 	)
+	if cfEnabled {
+		cfClient := cloudflare.NewClient(
+			cfg.Cloudflare.APIToken, cfg.Cloudflare.AccountID, cfg.Cloudflare.SiteTag, cfg.Cloudflare.ServiceURL)
+		hdl.SetStats(stats.NewService(cfClient, prodSvc, time.Now))
+		l.Info().Msg("visit stats enabled")
+	} else {
+		l.Info().Msg("visit stats disabled")
+	}
 	openapiMw := openAPI.Middleware()
 	corsMw := handler.CORSMiddleware()
 
@@ -174,7 +190,8 @@ func Run(rt *runner.Runtime[Config]) error {
 		checkPromoHandler = handler.RateLimitMiddleware(cfg.RateLimit)(checkPromoHandler)
 	}
 	srv.HandleFunc("GET /products/{id}/promo-codes/{code}", corsMw(openapiMw(checkPromoHandler)))
-	srv.HandleFunc("GET /product", hdl.ServeProductPreview)
+	srv.HandleFunc("GET /product/{id}", hdl.ServeProductPreview)
+	srv.HandleFunc("GET /product/{lang}/{id}", hdl.ServeProductPreview)
 	srv.HandleFunc("OPTIONS /images/{product_id}/{file_name}", corsMw(nop))
 	srv.HandleFunc("GET /images/{product_id}/{file_name}", corsMw(hdl.ServeImage))
 	srv.HandleFunc("OPTIONS /assets/{path...}", corsMw(nop))
@@ -205,6 +222,10 @@ func Run(rt *runner.Runtime[Config]) error {
 		srv.HandleFunc("GET /orders", corsMw(apiKeyMw(openapiMw(hdl.ListOrders))))
 		srv.HandleFunc("OPTIONS /orders/{id}/status", corsMw(nop))
 		srv.HandleFunc("PATCH /orders/{id}/status", corsMw(apiKeyMw(openapiMw(hdl.UpdateOrderStatus))))
+		if cfEnabled {
+			srv.HandleFunc("OPTIONS /stats", corsMw(nop))
+			srv.HandleFunc("GET /stats", corsMw(apiKeyMw(openapiMw(hdl.ServeStats))))
+		}
 	}
 
 	l.Info().Str("addr", srv.Listener().Addr().String()).Msg("starting server")

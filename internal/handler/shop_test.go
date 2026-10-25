@@ -52,7 +52,8 @@ func TestServeShop(main *testing.T) {
 			Links: []*shop.Link{
 				{Title: "Instagram", Icon: "instagram", URL: "https://example.com/ig"},
 			},
-			GoogleAnalytics: &shop.GoogleAnalytics{ID: "G-ABC123"},
+			GoogleAnalytics:     &shop.GoogleAnalytics{ID: "G-ABC123"},
+			CloudflareAnalytics: &shop.CloudflareAnalytics{Token: "cf-tok"},
 		}, nil)
 
 		w := doRequest(t, shopSvc)
@@ -93,6 +94,23 @@ func TestServeShop(main *testing.T) {
 		ga, ok := body["google_analytics"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "G-ABC123", ga["id"])
+
+		cf, ok := body["cloudflare_analytics"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "cf-tok", cf["token"])
+	})
+
+	main.Run("CloudflareAnalyticsOmittedWhenNil", func(t *testing.T) {
+		shopSvc := &shopServiceMock{}
+		defer shopSvc.AssertExpectations(t)
+		shopSvc.On("Get", mock.Anything).Return(&shop.Shop{}, nil)
+
+		w := doRequest(t, shopSvc)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		assert.NotContains(t, body, "cloudflare_analytics")
 	})
 
 	main.Run("EmptyShopYieldsEmptyObject", func(t *testing.T) {

@@ -24,6 +24,13 @@ type TelegramConfig struct {
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.telegram.org
 }
 
+type CloudflareConfig struct {
+	APIToken   string `yaml:"api_token"`   // API token with Account Analytics read access; empty + others empty disables GET /stats
+	AccountID  string `yaml:"account_id"`  // Cloudflare account tag
+	SiteTag    string `yaml:"site_tag"`    // Web Analytics site tag
+	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.cloudflare.com/client/v4
+}
+
 type ResendConfig struct {
 	APIKey     string `yaml:"api_key"`     // empty disables the customer email notifier
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.resend.com
@@ -45,6 +52,7 @@ type Config struct {
 	NovaPoshta NovaPoshtaConfig `yaml:"nova_poshta"`
 	Monobank   MonobankConfig   `yaml:"monobank"`
 	Telegram   TelegramConfig   `yaml:"telegram"`
+	Cloudflare CloudflareConfig `yaml:"cloudflare"`
 	Resend     ResendConfig     `yaml:"resend"`
 	Mail       MailConfig       `yaml:"mail"`
 	Database   DBConfig         `yaml:"database"`

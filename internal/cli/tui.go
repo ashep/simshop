@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,6 +59,13 @@ const (
 	modeSearch
 )
 
+type tuiScreen int
+
+const (
+	screenOrders tuiScreen = iota
+	screenDashboard
+)
+
 type ordersMsg struct {
 	orders []Order
 	err    error
@@ -108,6 +116,13 @@ type tuiModel struct {
 	pickerItems []string
 	pickerIdx   int
 	change      *pendingChange
+
+	screen       tuiScreen
+	statsDays    int
+	stats        *Stats
+	statsErr     error
+	statsLoading bool
+	statsAt      time.Time
 }
 
 func newTUIModel(ctx context.Context, shop *Shop, client *Client) *tuiModel {
@@ -119,6 +134,8 @@ func newTUIModel(ctx context.Context, shop *Shop, client *Client) *tuiModel {
 		client: client,
 		input:  ti,
 		detail: viewport.New(0, 0),
+
+		statsDays: statsPeriods[0],
 	}
 }
 
@@ -340,6 +357,22 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshDetail()
 		return m, nil
 
+	case statsMsg:
+		if msg.days != m.statsDays {
+			return m, nil // answer for a period the user has already left
+		}
+		m.statsLoading = false
+		m.statsErr = msg.err
+		if msg.err != nil {
+			if !errors.Is(msg.err, ErrStatsNotConfigured) {
+				m.setFlash("stats failed: "+msg.err.Error(), true)
+			}
+			return m, nil
+		}
+		m.stats = msg.stats
+		m.statsAt = msg.at
+		return m, nil
+
 	case statusMsg:
 		if msg.err != nil {
 			m.setFlash(fmt.Sprintf("%s: %v", shortID(msg.id), msg.err), true)
@@ -366,6 +399,12 @@ func (m *tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputKey(k)
 	case modePicker:
 		return m.handlePickerKey(k)
+	}
+	if m.screen == screenDashboard {
+		return m.handleDashboardKey(k)
+	}
+	if k.String() == "tab" {
+		return m, m.openDashboard()
 	}
 
 	// Keys shared by the list and the detail view.

@@ -59,6 +59,12 @@ type GoogleAnalytics struct {
 	ID string `json:"id" yaml:"id"`
 }
 
+// CloudflareAnalytics holds the Cloudflare Web Analytics configuration from shop.yaml;
+// Token is the beacon token the frontend uses to load the Cloudflare analytics script.
+type CloudflareAnalytics struct {
+	Token string `json:"token" yaml:"token"`
+}
+
 // HeroImage is one hero slide: File is a bare filename under the data dir's
 // assets/ folder (served at GET /assets/{name}); Category optionally names a shop
 // category id the slide links to (its filtered catalog), unset = whole catalog.
@@ -120,20 +126,21 @@ type Story struct {
 // bare assets/ filenames, Menu lists content page ids (pages.yaml) for the header
 // nav and AnnouncementPage is the content page id the announcement bar links to.
 type Shop struct {
-	Countries        map[string]*Country `json:"countries,omitempty"        yaml:"countries"`
-	Name             map[string]string   `json:"name,omitempty"             yaml:"name"`
-	Title            map[string]string   `json:"title,omitempty"            yaml:"title"`
-	Description      map[string]string   `json:"description,omitempty"      yaml:"description"`
-	Categories       []*Category         `json:"categories,omitempty"       yaml:"categories"`
-	Links            []*Link             `json:"links,omitempty"            yaml:"links"`
-	GoogleAnalytics  *GoogleAnalytics    `json:"google_analytics,omitempty" yaml:"google-analytics"`
-	Announcement     map[string]string   `json:"announcement,omitempty"     yaml:"announcement"`
-	AnnouncementPage string              `json:"announcement_page,omitempty" yaml:"announcement_page"`
-	Hero             *Hero               `json:"hero,omitempty"             yaml:"hero"`
-	Features         []*Feature          `json:"features,omitempty"         yaml:"features"`
-	Story            *Story              `json:"story,omitempty"            yaml:"story"`
-	Gallery          []string            `json:"gallery,omitempty"          yaml:"gallery"`
-	Menu             []string            `json:"menu,omitempty"             yaml:"menu"`
+	Countries           map[string]*Country  `json:"countries,omitempty"        yaml:"countries"`
+	Name                map[string]string    `json:"name,omitempty"             yaml:"name"`
+	Title               map[string]string    `json:"title,omitempty"            yaml:"title"`
+	Description         map[string]string    `json:"description,omitempty"      yaml:"description"`
+	Categories          []*Category          `json:"categories,omitempty"       yaml:"categories"`
+	Links               []*Link              `json:"links,omitempty"            yaml:"links"`
+	GoogleAnalytics     *GoogleAnalytics     `json:"google_analytics,omitempty" yaml:"google-analytics"`
+	CloudflareAnalytics *CloudflareAnalytics `json:"cloudflare_analytics,omitempty" yaml:"cloudflare_analytics"`
+	Announcement        map[string]string    `json:"announcement,omitempty"     yaml:"announcement"`
+	AnnouncementPage    string               `json:"announcement_page,omitempty" yaml:"announcement_page"`
+	Hero                *Hero                `json:"hero,omitempty"             yaml:"hero"`
+	Features            []*Feature           `json:"features,omitempty"         yaml:"features"`
+	Story               *Story               `json:"story,omitempty"            yaml:"story"`
+	Gallery             []string             `json:"gallery,omitempty"          yaml:"gallery"`
+	Menu                []string             `json:"menu,omitempty"             yaml:"menu"`
 	// Products lists product ids (product directory names) in catalog order; only
 	// listed products appear in GET /products. Consumed by the loader, not served.
 	Products []string `json:"-" yaml:"products"`

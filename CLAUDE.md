@@ -56,6 +56,9 @@ Commands: `order list [--status csv]`, `order get <id>`, `order set-status <stat
   through the `s` picker (no per-status shortcuts, by request), which calls `order.ShouldApplyOperatorTransition`
   directly (that package is stdlib-only) — don't copy the transition map into `cli`. Tests drive the model by feeding `Update` and running returned cmds; never run `Init()`'s batch — it
   contains the 30s refresh tick and blocks.
+  The dashboard screen (`tui_dashboard.go`, `tab` toggles orders⇄dashboard) is a second screen in the same model; it
+  reloads `GET /stats` on every `tab` into it (`openDashboard` → `loadStats`) and drops a `statsMsg` whose period no
+  longer matches (stale reply after `p`).
 
 ## Conventions
 
@@ -249,8 +252,23 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
 
 - **`GET /products/{id}/{lang}`**: price-field naming gotcha: YAML `prices:` / Go `Product.Prices`, but the resolved
   single-country price serialises as `"price"`.
-- **`GET /product`** (singular, crawler preview): registered **without** `openapiMw`/`corsMw`, **not** in
-  `api/root.yaml`. **Never returns non-200 to a crawler** — invalid/unknown ID falls back to shop-level OG tags.
+- **`GET /product/{id}` and `GET /product/{lang}/{id}`** (singular, crawler preview; id/lang from path values): registered
+  **without** `openapiMw`/`corsMw`, **not** in `api/root.yaml`. **Never returns non-200 to a crawler** — invalid/unknown
+  ID falls back to shop-level OG tags. The lang-first form `/{lang}/product/{id}` must not be registered: it overlaps
+  `/products/{id}/{lang}`/`/pages/{id}/{lang}` and the stdlib mux panics at startup.
+- **`GET /stats?days=7|14|30`**: registered (with `OPTIONS`) only when `Server.APIKey` **and** the `cloudflare`
+  block are set; otherwise it is unregistered (404 = "not configured", the TUI maps it to `ErrStatsNotConfigured`).
+  Daily chart is **visits** (`sum.visits`; per Cloudflare's definition only pageloads arriving from another site, not
+  verified live), top products are **views**
+  (`count` per `requestPath`, language variants summed per id) — internal navigation is a view but not a visit, so
+  don't compare the two. Report is cached 10 min per `days` in `internal/stats`; any Cloudflare failure →
+  `ErrUpstream` → generic 502 (detail logged). The Web Analytics beacon itself is the theme's job
+  (`cloudflare_analytics.token` in `shop.yaml`).
+  **Cloudflare is unverified against the live API** (no credentials were available): the GraphQL filter/field names in
+  the `internal/cloudflare` query consts are unverified against the live schema; `rumPageloadEventsAdaptiveGroups`
+  limits are unknown and **range splitting is not implemented**. Before relying on it, run
+  `settings { rumPageloadEventsAdaptiveGroups { enabled maxDuration notOlderThan maxPageSize maxNumberOfFields } }`
+  and check that 30 days fits `maxDuration` (daily visits use a fixed `limit` of 100, paths 1000).
 - **`POST /orders`**: two-phase commit — tx1 `Submit` (`status='new'`, DB is truth before Monobank knows) →
   Monobank `CreateInvoice` (failure leaves order at `new`, 502, reconciled out of band) → tx2 `AttachInvoice`
   (`status='awaiting_payment'`). `country` is **request-supplied, not geo-detected** (drives price + stored
@@ -301,9 +319,17 @@ startup Monobank pubkey fetch times out, while `go:run` (with `netgo`) fails. `d
 `.sql`/`.yaml` are watched because they're `go:embed`-ed. Air never descends into the `data` symlink (`follow_symlink`
 only affects `exclude_unchanged` checksums), so the task passes `-build.include_dir "$(realpath data)"` — air ≥1.67
 watches out-of-root include dirs as extra roots.
+Env vars (`SIMSHOP_*`/`APP_*`) are loaded **before** `config.yaml`, so they can't override it locally; point a run at
+another DB with an overlay file via `APP_CONFIG_PATH` (loaded after `config.yaml`). Checking the theme in the desktop
+browser pane requires the pane to be **visible**: init waits two `requestAnimationFrame`s, which never fire while hidden.
 
-`Caddyfile`: `/api*` reverse-proxied to `:9000` with `/api` stripped; `/product` routes to backend
-`ServeProductPreview` for bots (User-Agent regex) vs `product.html` for humans; SPA fallback to `index.html`.
+`Caddyfile`: `/api*` reverse-proxied to `:9000` with `/api` stripped; `/product/{id}` and `/{lang}/product/{id}` route
+to backend `ServeProductPreview` for bots (User-Agent regex; the lang form is rewritten to `/product/{lang}/{id}`, since
+the backend can't register lang-first) vs `product.html` for humans; SPA fallback to `index.html`. Storefront URLs are
+path-based and language-prefixed (`/<lang>/`, `/<lang>/catalog/<category>`, `/<lang>/product/<id>`,
+`/<lang>/order/status`); legacy query-string URLs (`/product?id=&lang=`, `/catalog?category=`, `?lang=`) 301 to them,
+with id/lang/category regex-validated in the matcher so a crafted value can't make an open redirect. Path URLs mean
+**theme HTML must use absolute asset paths** (`/main.js`), or `/uk/product/x` resolves them under `/uk/product/`.
 `entrypoint.sh` runs both the Go server and Caddy, exiting when either child exits.
 
 ## Configuration
@@ -314,6 +340,8 @@ Keys in `internal/app/config.go`:
 - **`Server.PublicURL`** derives the webhook URL (`<PublicURL>/monobank/webhook`) and basket icon URL — **no
   separate `monobank.webhook_url` config.**
 - **`Telegram.Token`** + **`Telegram.ChatID`** — both optional; exactly one set → startup error.
+- **`Cloudflare.APIToken`** + **`AccountID`** + **`SiteTag`** — all-or-none (partial → startup error); all set
+  enables `GET /stats` (needs `Server.APIKey` too). `ServiceURL` is the test override.
 - **`Server.APIKey`** — optional; empty disables `GET /orders` via conditional registration.
 - **`RateLimit`** — positive → RPM/IP; `0`/negative → disabled.
 - **`Resend.APIKey`** — optional; empty disables the email notifier. **`Mail.From`**, **`Mail.OrderURL`** (literal

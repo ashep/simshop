@@ -95,6 +95,9 @@ func (m *tuiModel) View() string {
 	if m.width == 0 {
 		return "loading…"
 	}
+	if m.screen == screenDashboard {
+		return m.viewDashboard()
+	}
 	var b strings.Builder
 	b.WriteString(m.viewTitle())
 	b.WriteString("\n")
@@ -344,10 +347,12 @@ func (m *tuiModel) viewKeys() string {
 	case modeDetail:
 		hints = []hint{
 			{"esc", "back"}, {"↑↓", "scroll"}, {"J/K", "next/prev"}, {"s", "status…"}, {"y", "copy id"}, {"r", "refresh"},
+			{"tab", "dashboard"},
 		}
 	default:
 		hints = []hint{
-			{"enter", "open"}, {"/", "search"}, {"s", "status…"}, {"a", "active/all"}, {"y", "copy id"}, {"r", "refresh"}, {"q", "quit"},
+			{"enter", "open"}, {"/", "search"}, {"s", "status…"}, {"a", "active/all"}, {"y", "copy id"}, {"r", "refresh"},
+			{"tab", "dashboard"}, {"q", "quit"},
 		}
 	}
 	parts := make([]string, len(hints))

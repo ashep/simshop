@@ -88,6 +88,9 @@ are loaded and reachable via `GET /products/{id}/{lang}` but hidden from `GET /p
 The optional `links` list holds external/social links, shared by all languages; each entry has a display `title`, an
 `icon` identifier, and a target `url`. The optional `google-analytics` block carries the
 measurement `id` (e.g. `"G-XXXXXXXXXX"`); it is surfaced in the response under the `google_analytics` key.
+The optional `cloudflare_analytics` block carries the Cloudflare Web Analytics `token`; it is surfaced under the
+`cloudflare_analytics` key the same way. The theme loads the Cloudflare Web Analytics beacon with this token; the
+numbers behind `GET /stats` come from that same site (see `cloudflare` in [Configuration](#configuration)).
 
 The optional storefront content drives the home page and header of the theme; every block is optional and
 the theme hides (or falls back for) whatever is missing:
@@ -379,7 +382,16 @@ The service exposes a JSON REST API validated against an OpenAPI specification.
 | `GET`    | `/orders`                          | List persisted orders (requires API key)              |
 | `GET`    | `/orders/{id}`                     | Get an order's status (public)                        |
 | `PATCH`  | `/orders/{id}/status`              | Operator-driven status transition (requires API key)  |
+| `GET`    | `/stats?days=7\|14\|30`            | Daily visits and most viewed products (requires API key and `cloudflare` config) |
 | `POST`   | `/monobank/webhook`                | Receive Monobank invoice-status callbacks (ECDSA auth)|
+
+`GET /stats` returns `{days: [{date, visits}], top_products: [{id, title, views}]}` for the last 7 (default), 14 or 30
+UTC days including today, oldest first and zero-filled; up to 10 products, most viewed first, titled in English,
+else the alphabetically first available language (empty for ids no longer in the catalog). *Visits* count only
+pageloads arriving from another site; *views* count every load of a product page, so internal navigation raises
+views but not visits. Data comes from Cloudflare Web Analytics and is cached for 10 minutes. The route exists only when
+`server.api_key` and all three `cloudflare.*` settings are set; otherwise it responds 404. A Cloudflare failure
+yields 502.
 
 Image paths returned in product responses (e.g. `/images/oak-shelf/thumb.jpg`) map directly to the image download
 endpoint — prepend the server's base URL to get a complete download URL.
@@ -682,6 +694,14 @@ rate_limit: 1
   production; used in tests.
 - `rate_limit` — requests per minute allowed for `POST /orders` per client IP (positive integer). `0` or a negative
   value disables rate limiting entirely.
+- `cloudflare.api_token`, `cloudflare.account_id`, `cloudflare.site_tag` — Cloudflare API token with Account Analytics
+  read access, the account tag, and the Web Analytics site tag. Optional, but all three must be set together (a partial
+  set is a startup error); setting them enables `GET /stats`. `cloudflare.service_url` overrides the API base URL
+  (tests only). Env form: `SIMSHOP_CLOUDFLARE_APITOKEN`, `SIMSHOP_CLOUDFLARE_ACCOUNTID`, `SIMSHOP_CLOUDFLARE_SITETAG`.
+  Operator setup: enable Web Analytics for the domain in Cloudflare; **turn off its automatic beacon injection** (the
+  theme injects the beacon itself, so auto-injection double-counts); put the beacon token in `shop.yaml`
+  `cloudflare_analytics.token`; create an API token with Account Analytics: Read for `api_token`. Whether the beacon
+  token equals `site_tag` is unverified — if stats come back empty, check both values in the Cloudflare dashboard.
 - `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
 - `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
 - `resend.api_key` — Resend API key. Optional; empty disables customer email notifications.
@@ -838,6 +858,9 @@ simshop [--shop NAME] [--config PATH] [--json] order list   [--status a,b|all]
   step to the next/previous order), `/` searches by name, phone, city, id, tracking or promo code, `a` toggles
   active/all, `s` changes the status — only transitions the backend allows are offered; `shipped` asks for the
   tracking number, every change asks for an optional note — `y` copies the order id, `r` refreshes, `q` quits.
+  `tab` switches to the visit dashboard (needs the Cloudflare setup behind `GET /stats`): a bar chart of daily
+  visits with total and daily average, and a table of the most viewed products. On it `p` cycles the period
+  7 → 14 → 30 days, `r` refreshes, `tab` returns to the orders, `q` quits.
 - `order list` — list orders, newest first. By default only active orders are shown, hiding the closed statuses
   `delivered`, `cancelled`, and `refunded`; `returned` is always listed since the refund is still pending.
   `--status paid,shipped` filters to the given statuses; `--status all` shows every order including closed ones.
@@ -869,9 +892,16 @@ a separate theme repository. Without a theme the image serves only the API.
 Contract a theme must follow:
 
 - **Required pages.** `index.html` (fallback for every unmatched path — home, catalog, content pages, client-side
-  routing), `product.html` (served at `/product` to humans; bots get the backend's `GET /product` preview), and
-  `order-status.html` (served at `/order/status`, the target of `SIMSHOP_MONOBANK_REDIRECTURL` and
-  `SIMSHOP_MAIL_ORDERURL`).
+  routing), `product.html` (served at `/product/<id>` and `/<lang>/product/<id>` to humans; bots get the backend's
+  `GET /product/{id}` / `GET /product/{lang}/{id}` preview), and `order-status.html` (served at `/order/status` and
+  `/<lang>/order/status`, the target of `SIMSHOP_MONOBANK_REDIRECTURL` and `SIMSHOP_MAIL_ORDERURL`).
+- **URL scheme.** Pages live at path-based, language-prefixed URLs: `/<lang>/`, `/<lang>/catalog/<category>`,
+  `/<lang>/product/<id>`, `/<lang>/order/status` (`<lang>` is two lowercase letters; the unprefixed forms also work).
+  Legacy query-string URLs (`/product?id=&lang=`, `/product.html?id=`, `/catalog?category=`, `/?lang=`) are redirected
+  with a permanent 301 to the path form. Because the same page is served at varying depths, the theme's HTML must
+  reference assets with **absolute paths** (`/main.js`, not `main.js`).
+- **Analytics.** Loading the Cloudflare Web Analytics beacon (using `cloudflare_analytics.token` from `GET /shop`) is
+  the theme's job; the backend only reads the collected data for `GET /stats`.
 - **API base.** The API is reachable at `<origin>/api` (prefix stripped before the Go server); brand files at
   `<origin>/api/assets/<file>`.
 - **Caching.** Images and video (`jpg jpeg png gif webp svg ico mp4`) get `max-age=86400`; `.js`/`.css` `no-cache`;
@@ -889,8 +919,10 @@ The published artifact is a single Docker image (`Dockerfile`) built on the Cadd
 - The compiled Go server binary (`app.out`) is copied to `/app/app`; no frontend is copied — Caddy's web root is
   `/frontend`, filled by the downstream image (see [Frontend theme](#frontend-theme)).
 - `entrypoint.sh` starts both the Go server (listening on `:9000`) and Caddy, exiting when either child exits.
-- `Caddyfile` routes requests: `/api*` is reverse-proxied to the Go server with the `/api` prefix stripped; `/product`
-  is served by the backend's social-crawler preview (`GET /product`, `ServeProductPreview`) for bots and rewritten to
-  `product.html` for humans (distinguished by a User-Agent regex); `/order/status` is rewritten to `order-status.html`;
+- `Caddyfile` routes requests: `/api*` is reverse-proxied to the Go server with the `/api` prefix stripped; legacy
+  query-string URLs are 301-redirected to path URLs; `/product/<id>` and `/<lang>/product/<id>` are served by the
+  backend's social-crawler preview (`GET /product/{id}`, `GET /product/{lang}/{id}`, `ServeProductPreview`) for bots
+  and rewritten to `product.html` for humans (distinguished by a User-Agent regex); `/order/status` (optionally
+  language-prefixed) is rewritten to `order-status.html`;
   images, JS, CSS, and HTML are served from `/frontend` with per-type cache headers; every other path falls back to
   `index.html` for client-side routing.

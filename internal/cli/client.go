@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -153,6 +155,54 @@ func (c *Client) SetStatus(ctx context.Context, id, status, tracking, note strin
 		return "", fmt.Errorf("decode response: %w", err)
 	}
 	return out.Status, nil
+}
+
+// StatsDay is the visit count for one calendar day.
+type StatsDay struct {
+	Date   string `json:"date"`
+	Visits int    `json:"visits"`
+}
+
+// StatsProduct is one entry of the most-viewed products list; Title may be empty.
+type StatsProduct struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Views int    `json:"views"`
+}
+
+// Stats mirrors the GET /stats response.
+type Stats struct {
+	Days        []StatsDay     `json:"days"`
+	TopProducts []StatsProduct `json:"top_products"`
+}
+
+// ErrStatsNotConfigured is returned by GetStats when the server answers 404.
+var ErrStatsNotConfigured = errors.New("stats are not configured on the server")
+
+// GetStats returns visit statistics for the last days days.
+func (c *Client) GetStats(ctx context.Context, days int) (*Stats, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/stats?days="+strconv.Itoa(days), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request stats: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrStatsNotConfigured
+	}
+	if resp.StatusCode/100 != 2 {
+		return nil, apiError(resp)
+	}
+	var st Stats
+	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil {
+		return nil, fmt.Errorf("decode stats: %w", err)
+	}
+	return &st, nil
 }
 
 // apiError turns a non-2xx response into an error using the {"error": ...} body when present.

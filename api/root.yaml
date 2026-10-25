@@ -351,6 +351,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /stats:
+    get:
+      operationId: getStats
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Number of UTC days to report, including today.
+          schema:
+            type: integer
+            enum: [7, 14, 30]
+            default: 7
+      responses:
+        "200":
+          description: Daily visits and most viewed products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "502":
+          description: Analytics provider failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /orders/{id}/status:
     patch:
       operationId: updateOrderStatus
@@ -722,6 +756,46 @@ components:
           type: string
       additionalProperties: false
 
+    Stats:
+      type: object
+      required:
+        - days
+        - top_products
+      properties:
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatsDay'
+        top_products:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatsProduct'
+
+    StatsDay:
+      type: object
+      required:
+        - date
+        - visits
+      properties:
+        date:
+          type: string
+        visits:
+          type: integer
+
+    StatsProduct:
+      type: object
+      required:
+        - id
+        - title
+        - views
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        views:
+          type: integer
+
     ErrorResponse:
       type: object
       required:
@@ -759,6 +833,8 @@ components:
             $ref: '#/components/schemas/ShopLink'
         google_analytics:
           $ref: '#/components/schemas/ShopGoogleAnalytics'
+        cloudflare_analytics:
+          $ref: '#/components/schemas/ShopCloudflareAnalytics'
         announcement:
           $ref: '#/components/schemas/LangMap'
         announcement_page:
@@ -862,6 +938,14 @@ components:
         - id
       properties:
         id:
+          type: string
+
+    ShopCloudflareAnalytics:
+      type: object
+      required:
+        - token
+      properties:
+        token:
           type: string
 
     ShopCategory:
