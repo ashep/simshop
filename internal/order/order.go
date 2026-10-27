@@ -94,6 +94,8 @@ type Order struct {
 	Attrs        []Attr // sorted by attribute key for deterministic ordering
 	CustomerNote string
 	Promo        *Promo // nil when no promo code was applied
+	GAClientID   string // Google Analytics client_id of the buyer's browser; "" when unknown
+	GASessionID  string // Google Analytics session_id at checkout; "" when unknown
 }
 
 // Promo is the promo code applied to an order. Discount is in minor units;
@@ -155,6 +157,8 @@ type Record struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Promo          *Promo         // nil when no promo code was applied
+	GAClientID     string         // "" when the storefront sent none
+	GASessionID    string         // "" when the storefront sent none
 	Attrs          []Attr         // never nil; possibly empty
 	History        []HistoryEntry // chronological, oldest first; never nil
 	Invoices       []Invoice      // never nil; possibly empty

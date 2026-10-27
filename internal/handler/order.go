@@ -39,19 +39,21 @@ type createOrderResponse struct {
 }
 
 type createOrderRequest struct {
-	ProductID  string            `json:"product_id"`
-	Lang       string            `json:"lang"`
-	Attributes map[string]string `json:"attributes"`
-	FirstName  string            `json:"first_name"`
-	MiddleName string            `json:"middle_name"`
-	LastName   string            `json:"last_name"`
-	Phone      string            `json:"phone"`
-	Email      string            `json:"email"`
-	Country    string            `json:"country"`
-	City       string            `json:"city"`
-	Address    string            `json:"address"`
-	Notes      string            `json:"notes"`
-	PromoCode  string            `json:"promo_code"`
+	ProductID   string            `json:"product_id"`
+	Lang        string            `json:"lang"`
+	Attributes  map[string]string `json:"attributes"`
+	FirstName   string            `json:"first_name"`
+	MiddleName  string            `json:"middle_name"`
+	LastName    string            `json:"last_name"`
+	Phone       string            `json:"phone"`
+	Email       string            `json:"email"`
+	Country     string            `json:"country"`
+	City        string            `json:"city"`
+	Address     string            `json:"address"`
+	Notes       string            `json:"notes"`
+	PromoCode   string            `json:"promo_code"`
+	GAClientID  string            `json:"ga_client_id"`
+	GASessionID string            `json:"ga_session_id"`
 }
 
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +219,8 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Attrs:        attrs,
 		CustomerNote: req.Notes,
 		Promo:        promo,
+		GAClientID:   req.GAClientID,
+		GASessionID:  req.GASessionID,
 	}
 
 	orderID, err := h.orders.Submit(r.Context(), o)

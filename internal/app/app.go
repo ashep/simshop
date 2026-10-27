@@ -12,6 +12,7 @@ import (
 
 	"github.com/ashep/simshop/api"
 	"github.com/ashep/simshop/internal/cloudflare"
+	"github.com/ashep/simshop/internal/ganalytics"
 	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
@@ -127,13 +128,34 @@ func Run(rt *runner.Runtime[Config]) error {
 		l.Info().Msg("resend notifier disabled")
 	}
 
+	var gaNotifier order.Notifier
+	if cfg.GoogleAnalytics.APISecret != "" {
+		// The measurement id is public and lives in shop.yaml next to the gtag
+		// setup, so browser and server events land in the same GA property.
+		if catalog.Shop.GoogleAnalytics == nil || catalog.Shop.GoogleAnalytics.ID == "" {
+			return fmt.Errorf("google_analytics.api_secret requires google-analytics.id in shop.yaml")
+		}
+		gaClient := ganalytics.NewClient(
+			catalog.Shop.GoogleAnalytics.ID, cfg.GoogleAnalytics.APISecret, cfg.GoogleAnalytics.ServiceURL)
+		gn := ganalytics.NewNotifier(gaClient, ordersReader, prodSvc, l)
+		gn.Start()
+		defer gn.Stop()
+		gaNotifier = gn
+		l.Info().Msg("google analytics notifier enabled")
+	} else {
+		l.Info().Msg("google analytics notifier disabled")
+	}
+
 	var orderNotifier order.Notifier
-	notifiers := make([]order.Notifier, 0, 2)
+	notifiers := make([]order.Notifier, 0, 3)
 	if telegramNotifier != nil {
 		notifiers = append(notifiers, telegramNotifier)
 	}
 	if resendNotifier != nil {
 		notifiers = append(notifiers, resendNotifier)
+	}
+	if gaNotifier != nil {
+		notifiers = append(notifiers, gaNotifier)
 	}
 	switch len(notifiers) {
 	case 0:

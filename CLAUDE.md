@@ -187,6 +187,13 @@ together**.
 `resend.TemplateStore`: Markdown → HTML via `goldmark` **after** `text/template` substitution (so customer names
 with markdown chars aren't mangled). Lang fallback `(status, lang)` → `(status, "en")`.
 
+### internal/ganalytics
+
+Server-side GA4 `purchase`/`refund` via Measurement Protocol, as an `order.Notifier` (filters statuses in `Notify`, so
+other events never queue). Measurement id comes from `shop.yaml` `google-analytics.id`, only the secret from config.
+`ga_client_id`/`ga_session_id` on `POST /orders` are pattern-validated by OpenAPI — a bad value 400s the whole order,
+so the storefront filters them first; keep both patterns in sync with `gaIds()` in the theme.
+
 ### internal/order
 
 `MultiNotifier` fans out over `[]Notifier`; `app.Run` wraps enabled notifiers in it only with 2+ (one → pass child

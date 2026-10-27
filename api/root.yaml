@@ -687,6 +687,20 @@ components:
         notes:
           type: string
           nullable: true
+        ga_client_id:
+          type: string
+          nullable: true
+          maxLength: 64
+          pattern: '^[0-9]+\.[0-9]+$'
+          description: >-
+            Google Analytics client_id of the buyer's browser (from gtag). Used to attribute the server-side
+            `purchase` event to the visitor's traffic source. Omit when analytics is not loaded.
+        ga_session_id:
+          type: string
+          nullable: true
+          maxLength: 32
+          pattern: '^[0-9]+$'
+          description: Google Analytics session_id at checkout; sent with the server-side `purchase` event.
 
     CreateOrderResponse:
       type: object

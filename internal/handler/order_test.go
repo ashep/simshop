@@ -730,6 +730,23 @@ prices:
 			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
+
+	main.Run("AnalyticsIDsStoredOnOrder", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.GAClientID == "1234567890.1761400000" && o.GASessionID == "1761400000"
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en",
+			"ga_client_id":"1234567890.1761400000","ga_session_id":"1761400000",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
 }
 
 const testPromoCodesYAML = `promo_codes:

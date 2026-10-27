@@ -134,24 +134,26 @@ func truncateOrders(t *testing.T, dsn string) {
 }
 
 type orderRow struct {
-	ID           string
-	ProductID    string
-	Status       string
-	Email        string
-	Price        int
-	Currency     string
-	Lang         string
-	FirstName    string
-	MiddleName   *string
-	LastName     string
-	Country      string
-	City         string
-	Phone        string
+	ID              string
+	ProductID       string
+	Status          string
+	Email           string
+	Price           int
+	Currency        string
+	Lang            string
+	FirstName       string
+	MiddleName      *string
+	LastName        string
+	Country         string
+	City            string
+	Phone           string
 	Address         string
 	CustomerNote    *string
 	PromoCode       *string
 	DiscountPercent *int
 	Discount        *int
+	GAClientID      *string
+	GASessionID     *string
 }
 
 type orderAttrRow struct {
@@ -178,7 +180,8 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 		       first_name, middle_name, last_name,
 		       country, city, phone, address,
 		       customer_note,
-		       promo_code, discount_percent, discount
+		       promo_code, discount_percent, discount,
+		       ga_client_id, ga_session_id
 		FROM orders
 		ORDER BY created_at`)
 	require.NoError(t, err)
@@ -193,6 +196,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 			&r.Country, &r.City, &r.Phone, &r.Address,
 			&r.CustomerNote,
 			&r.PromoCode, &r.DiscountPercent, &r.Discount,
+			&r.GAClientID, &r.GASessionID,
 		))
 		out = append(out, r)
 	}
@@ -447,6 +451,45 @@ func TestCreateOrder(main *testing.T) {
 
 		resp = do(t, validBody(map[string]any{"promo_code": "SAVE15"}))
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	})
+
+	main.Run("PersistsAnalyticsIDs", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{
+			"ga_client_id":  "1234567890.1761400000",
+			"ga_session_id": "1761400000",
+		}))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		require.NotNil(t, rows[0].GAClientID)
+		assert.Equal(t, "1234567890.1761400000", *rows[0].GAClientID)
+		require.NotNil(t, rows[0].GASessionID)
+		assert.Equal(t, "1761400000", *rows[0].GASessionID)
+	})
+
+	main.Run("WithoutAnalyticsIDsStoresNull", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(nil))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		assert.Nil(t, rows[0].GAClientID)
+		assert.Nil(t, rows[0].GASessionID)
+	})
+
+	main.Run("MalformedAnalyticsIDReturns400", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"ga_client_id": "<script>"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		resp = do(t, validBody(map[string]any{"ga_session_id": "abc"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Empty(t, fetchOrders(t, a.DSN()))
 	})
 
 	main.Run("MissingProductIDReturns400AndDoesNotInsert", func(t *testing.T) {

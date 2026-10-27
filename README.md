@@ -505,8 +505,8 @@ units, charged total = base + sum of attr add-ons − discount), `promo_code`, `
 nullable — set together when a promo code was applied; `discount` in minor units), `currency`, `lang` (checkout language
 code captured from the request, drives downstream localized notifications), `first_name`, `middle_name` (nullable),
 `last_name`, `country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
-`tracking_number` (nullable; populated by the operator on the `shipped` transition, write-once), `created_at`,
-`updated_at`.
+`tracking_number` (nullable; populated by the operator on the `shipped` transition, write-once), `ga_client_id`,
+`ga_session_id` (nullable; the buyer's Google Analytics ids sent by the storefront), `created_at`, `updated_at`.
 
 `order_attrs` columns: `order_id` (FK to `orders.id`), `attr_name`, `attr_value`, `attr_price` (int, minor units;
 the per-attribute add-on amount). One row per selected attribute on the order.
@@ -705,6 +705,7 @@ rate_limit: 1
   empty after the beacon is live, recheck both values in the Cloudflare dashboard.
 - `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
 - `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
+- `google_analytics.api_secret` — GA4 Measurement Protocol API secret. Optional; see below.
 - `resend.api_key` — Resend API key. Optional; empty disables customer email notifications.
 - `mail.from` — sender address, e.g. `"Shop <orders@shop.example>"`. Required when `resend.api_key` is set.
 - `mail.order_url` — customer-facing URL with `{id}` placeholder. Required when `resend.api_key` is set.
@@ -811,6 +812,28 @@ otherwise.
 by a single background worker. Transient failures (5xx, 429) retry up to three times with 1s/2s backoff (or honor
 `Retry-After` clamped to `[1s, 30s]`). Permanent errors (4xx other than 429) and buffer-full conditions log and
 drop the event. In-flight events are discarded after a 5s graceful drain at process exit.
+
+### Google Analytics purchase events
+
+Optional. When `google_analytics.api_secret` is set, the service reports sales to GA4 through the Measurement Protocol:
+`purchase` when an order becomes `paid`, `refund` when it becomes `refunded`. Events go to the property named by
+`google-analytics.id` in `shop.yaml` (the same one the storefront's gtag uses); the service refuses to start when the
+secret is set but that id is missing.
+
+```yaml
+google_analytics:
+  api_secret: "xxxxxxxxxxxxxxxxxxxxxx"   # GA Admin → Data streams → web stream → Measurement Protocol API secrets
+```
+
+Each event carries `transaction_id` (the order id), `value`, `currency`, `coupon` (promo code, when used) and one item
+(product id and title, chosen attribute values as `item_variant`). The storefront sends the visitor's GA `client_id` and
+`session_id` as `ga_client_id`/`ga_session_id` in `POST /orders`; with them GA credits the sale to the visit's traffic
+source. Without them the order id stands in for `client_id`: revenue is still counted, unattributed. Sending from the
+server means a sale is recorded even when the buyer never comes back from the payment page.
+
+**Failure handling.** Same as the other notifiers: a 256-event buffer, one background worker, up to three attempts with
+1s/2s backoff; 4xx other than 429 is permanent. The Measurement Protocol answers 2xx even to malformed events, so check
+new event shapes with GA's DebugView.
 
 ## CLI
 

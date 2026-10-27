@@ -31,6 +31,11 @@ type CloudflareConfig struct {
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.cloudflare.com/client/v4
 }
 
+type GoogleAnalyticsConfig struct {
+	APISecret  string `yaml:"api_secret"`  // Measurement Protocol API secret; empty disables server-side purchase events
+	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://www.google-analytics.com
+}
+
 type ResendConfig struct {
 	APIKey     string `yaml:"api_key"`     // empty disables the customer email notifier
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.resend.com
@@ -46,15 +51,16 @@ type DBConfig struct {
 }
 
 type Config struct {
-	Debug      bool             `yaml:"debug"`
-	Server     Server           `yaml:"server"`
-	DataDir    string           `yaml:"data_dir"`
-	NovaPoshta NovaPoshtaConfig `yaml:"nova_poshta"`
-	Monobank   MonobankConfig   `yaml:"monobank"`
-	Telegram   TelegramConfig   `yaml:"telegram"`
-	Cloudflare CloudflareConfig `yaml:"cloudflare"`
-	Resend     ResendConfig     `yaml:"resend"`
-	Mail       MailConfig       `yaml:"mail"`
-	Database   DBConfig         `yaml:"database"`
-	RateLimit  int              `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
+	Debug           bool                  `yaml:"debug"`
+	Server          Server                `yaml:"server"`
+	DataDir         string                `yaml:"data_dir"`
+	NovaPoshta      NovaPoshtaConfig      `yaml:"nova_poshta"`
+	Monobank        MonobankConfig        `yaml:"monobank"`
+	Telegram        TelegramConfig        `yaml:"telegram"`
+	Cloudflare      CloudflareConfig      `yaml:"cloudflare"`
+	GoogleAnalytics GoogleAnalyticsConfig `yaml:"google_analytics"`
+	Resend          ResendConfig          `yaml:"resend"`
+	Mail            MailConfig            `yaml:"mail"`
+	Database        DBConfig              `yaml:"database"`
+	RateLimit       int                   `yaml:"rate_limit"` // requests per minute for POST /orders; 0 = default (1); negative = disabled
 }

@@ -155,3 +155,109 @@ func TestCreateOrder_ResendEmail(main *testing.T) {
 		assert.Contains(t, e.Text, "thank you for paying 49.99 USD")
 	})
 }
+
+func TestCreateOrder_GoogleAnalyticsPurchase(main *testing.T) {
+	dataDir := makeDataDir(main)
+	require.NoError(main, os.WriteFile(filepath.Join(dataDir, "shop.yaml"),
+		[]byte(testShopYAML+"  google-analytics:\n    id: G-TEST123\n"), 0644))
+
+	pubPayload := pubKeyPayload(main)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubPayload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-ga","pageUrl":"https://pay.example/inv-ga"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
+	type hit struct {
+		query string
+		body  map[string]any
+	}
+	var (
+		recvMu sync.Mutex
+		recv   []hit
+	)
+	gaStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got map[string]any
+		require.NoError(main, json.NewDecoder(r.Body).Decode(&got))
+		recvMu.Lock()
+		recv = append(recv, hit{query: r.URL.RawQuery, body: got})
+		recvMu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	main.Cleanup(gaStub.Close)
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.GoogleAnalytics.APISecret = "mp-secret"
+		cfg.GoogleAnalytics.ServiceURL = gaStub.URL
+		cfg.RateLimit = -1
+	})
+	a.Start()
+
+	main.Run("PaidWebhookSendsPurchase", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		body, _ := json.Marshal(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Jane", "last_name": "Doe", "phone": "+12025550123", "email": "buyer@example.com",
+			"country": "us", "city": "NYC", "address": "1 St",
+			"ga_client_id": "1234567890.1761400000", "ga_session_id": "1761400000",
+		})
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		orderID := rows[0].ID
+
+		webhook := []byte(`{"invoiceId":"inv-ga","status":"success","reference":"` + orderID + `","modifiedDate":"2026-05-01T10:00:00Z"}`)
+		wreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/monobank/webhook"), bytes.NewReader(webhook))
+		require.NoError(t, err)
+		wreq.Header.Set("Content-Type", "application/json")
+		wreq.Header.Set("X-Sign", signWebhookBody(t, webhook))
+		wresp, err := http.DefaultClient.Do(wreq)
+		require.NoError(t, err)
+		defer func() { _ = wresp.Body.Close() }()
+		require.Equal(t, http.StatusOK, wresp.StatusCode)
+
+		require.Eventually(t, func() bool {
+			recvMu.Lock()
+			defer recvMu.Unlock()
+			return len(recv) == 1
+		}, 3*time.Second, 50*time.Millisecond, "expected 1 measurement protocol hit")
+
+		recvMu.Lock()
+		h := recv[0]
+		recvMu.Unlock()
+		assert.Contains(t, h.query, "measurement_id=G-TEST123")
+		assert.Contains(t, h.query, "api_secret=mp-secret")
+		assert.Equal(t, "1234567890.1761400000", h.body["client_id"])
+		e := h.body["events"].([]any)[0].(map[string]any)
+		assert.Equal(t, "purchase", e["name"])
+		params := e["params"].(map[string]any)
+		assert.Equal(t, orderID, params["transaction_id"])
+		assert.Equal(t, 49.99, params["value"])
+		assert.Equal(t, "USD", params["currency"])
+		assert.Equal(t, "1761400000", params["session_id"])
+	})
+}
+
+func TestGoogleAnalyticsConfig(main *testing.T) {
+	main.Run("APISecretWithoutShopMeasurementIDFailsStartup", func(t *testing.T) {
+		a := testapp.New(t, makeDataDir(t), func(cfg *app.Config) {
+			cfg.GoogleAnalytics.APISecret = "mp-secret"
+		})
+		err := a.Run()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "google_analytics.api_secret requires google-analytics.id in shop.yaml")
+	})
+}
