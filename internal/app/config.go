@@ -36,6 +36,12 @@ type GoogleAnalyticsConfig struct {
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://www.google-analytics.com
 }
 
+type MetaConfig struct {
+	AccessToken   string `yaml:"access_token"`    // Conversions API access token; empty disables server-side Purchase events
+	TestEventCode string `yaml:"test_event_code"` // routes events to Events Manager's Test events tab; leave empty in production
+	ServiceURL    string `yaml:"service_url"`     // overridden in tests; empty means use https://graph.facebook.com
+}
+
 type ResendConfig struct {
 	APIKey     string `yaml:"api_key"`     // empty disables the customer email notifier
 	ServiceURL string `yaml:"service_url"` // overridden in tests; empty means use https://api.resend.com
@@ -59,6 +65,7 @@ type Config struct {
 	Telegram        TelegramConfig        `yaml:"telegram"`
 	Cloudflare      CloudflareConfig      `yaml:"cloudflare"`
 	GoogleAnalytics GoogleAnalyticsConfig `yaml:"google_analytics"`
+	Meta            MetaConfig            `yaml:"meta"`
 	Resend          ResendConfig          `yaml:"resend"`
 	Mail            MailConfig            `yaml:"mail"`
 	Database        DBConfig              `yaml:"database"`

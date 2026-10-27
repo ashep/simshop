@@ -83,7 +83,8 @@ func TestCreateOrder(main *testing.T) {
 		},
 	}}
 
-	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, mb *monobankClientMock, body string) *httptest.ResponseRecorder {
+	// hdr is optional header name/value pairs.
+	doRequest := func(t *testing.T, dataDir string, svc *orderServiceMock, mb *monobankClientMock, body string, hdr ...string) *httptest.ResponseRecorder {
 		t.Helper()
 		h := &Handler{
 			orders:      svc,
@@ -99,6 +100,9 @@ func TestCreateOrder(main *testing.T) {
 		}
 		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Set(hdr[i], hdr[i+1])
+		}
 		w := httptest.NewRecorder()
 		h.CreateOrder(w, r)
 		return w
@@ -731,6 +735,26 @@ prices:
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
+	main.Run("MetaMatchingDataStoredOnOrder", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.MetaFBP == "fb.1.1761400000000.123456789" &&
+				o.MetaFBC == "fb.1.1761400000000.IwAR0abc" &&
+				o.ClientIP == "203.0.113.7" &&
+				o.UserAgent == "Mozilla/5.0 (iPhone)"
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en",
+			"meta_fbp":"fb.1.1761400000000.123456789","meta_fbc":"fb.1.1761400000000.IwAR0abc",
+			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`,
+			"CF-Connecting-IP", "203.0.113.7", "User-Agent", "Mozilla/5.0 (iPhone)")
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
 	main.Run("AnalyticsIDsStoredOnOrder", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
@@ -753,3 +777,33 @@ const testPromoCodesYAML = `promo_codes:
   SPRING15: 15
   TEN: 10
 `
+
+func TestRequestClientIP(main *testing.T) {
+	newReq := func(remote string, hdr ...string) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/orders", nil)
+		r.RemoteAddr = remote
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Set(hdr[i], hdr[i+1])
+		}
+		return r
+	}
+
+	main.Run("PrefersCFConnectingIP", func(t *testing.T) {
+		r := newReq("10.0.0.1:1234", "CF-Connecting-IP", "203.0.113.7", "X-Forwarded-For", "198.51.100.1")
+		assert.Equal(t, "203.0.113.7", requestClientIP(r))
+	})
+
+	main.Run("FallsBackToFirstForwardedFor", func(t *testing.T) {
+		r := newReq("10.0.0.1:1234", "X-Forwarded-For", "198.51.100.1, 10.0.0.2")
+		assert.Equal(t, "198.51.100.1", requestClientIP(r))
+	})
+
+	main.Run("FallsBackToRemoteAddr", func(t *testing.T) {
+		assert.Equal(t, "192.0.2.10", requestClientIP(newReq("192.0.2.10:5555")))
+	})
+
+	main.Run("IgnoresInvalidHeaderValues", func(t *testing.T) {
+		r := newReq("192.0.2.10:5555", "CF-Connecting-IP", "nope", "X-Forwarded-For", "also-nope")
+		assert.Equal(t, "192.0.2.10", requestClientIP(r))
+	})
+}

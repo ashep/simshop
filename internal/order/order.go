@@ -96,6 +96,10 @@ type Order struct {
 	Promo        *Promo // nil when no promo code was applied
 	GAClientID   string // Google Analytics client_id of the buyer's browser; "" when unknown
 	GASessionID  string // Google Analytics session_id at checkout; "" when unknown
+	MetaFBP      string // Meta Pixel _fbp browser id; "" when unknown
+	MetaFBC      string // Meta Pixel _fbc click id; "" when the visit didn't come from a Meta ad
+	ClientIP     string // buyer's IP at checkout, for Meta Conversions API matching
+	UserAgent    string // buyer's User-Agent at checkout, for Meta Conversions API matching
 }
 
 // Promo is the promo code applied to an order. Discount is in minor units;
@@ -159,6 +163,10 @@ type Record struct {
 	Promo          *Promo         // nil when no promo code was applied
 	GAClientID     string         // "" when the storefront sent none
 	GASessionID    string         // "" when the storefront sent none
+	MetaFBP        string         // "" when the storefront sent none
+	MetaFBC        string         // "" when the storefront sent none
+	ClientIP       string         // "" when unknown
+	UserAgent      string         // "" when unknown
 	Attrs          []Attr         // never nil; possibly empty
 	History        []HistoryEntry // chronological, oldest first; never nil
 	Invoices       []Invoice      // never nil; possibly empty

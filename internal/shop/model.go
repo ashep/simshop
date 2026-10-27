@@ -59,6 +59,13 @@ type GoogleAnalytics struct {
 	ID string `json:"id" yaml:"id"`
 }
 
+// MetaPixel holds the Meta (Facebook) Pixel configuration from shop.yaml; ID is the
+// pixel id the frontend uses to initialise fbq and the backend sends Conversions API
+// events to.
+type MetaPixel struct {
+	ID string `json:"id" yaml:"id"`
+}
+
 // CloudflareAnalytics holds the Cloudflare Web Analytics configuration from shop.yaml;
 // Token is the beacon token the frontend uses to load the Cloudflare analytics script.
 type CloudflareAnalytics struct {
@@ -134,6 +141,7 @@ type Shop struct {
 	Links               []*Link              `json:"links,omitempty"            yaml:"links"`
 	GoogleAnalytics     *GoogleAnalytics     `json:"google_analytics,omitempty" yaml:"google-analytics"`
 	CloudflareAnalytics *CloudflareAnalytics `json:"cloudflare_analytics,omitempty" yaml:"cloudflare_analytics"`
+	MetaPixel           *MetaPixel           `json:"meta_pixel,omitempty"       yaml:"meta_pixel"`
 	Announcement        map[string]string    `json:"announcement,omitempty"     yaml:"announcement"`
 	AnnouncementPage    string               `json:"announcement_page,omitempty" yaml:"announcement_page"`
 	Hero                *Hero                `json:"hero,omitempty"             yaml:"hero"`

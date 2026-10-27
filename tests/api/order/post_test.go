@@ -154,6 +154,10 @@ type orderRow struct {
 	Discount        *int
 	GAClientID      *string
 	GASessionID     *string
+	MetaFBP         *string
+	MetaFBC         *string
+	ClientIP        *string
+	UserAgent       *string
 }
 
 type orderAttrRow struct {
@@ -181,7 +185,8 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 		       country, city, phone, address,
 		       customer_note,
 		       promo_code, discount_percent, discount,
-		       ga_client_id, ga_session_id
+		       ga_client_id, ga_session_id,
+		       meta_fbp, meta_fbc, client_ip, user_agent
 		FROM orders
 		ORDER BY created_at`)
 	require.NoError(t, err)
@@ -197,6 +202,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 			&r.CustomerNote,
 			&r.PromoCode, &r.DiscountPercent, &r.Discount,
 			&r.GAClientID, &r.GASessionID,
+			&r.MetaFBP, &r.MetaFBC, &r.ClientIP, &r.UserAgent,
 		))
 		out = append(out, r)
 	}
@@ -488,6 +494,46 @@ func TestCreateOrder(main *testing.T) {
 		resp := do(t, validBody(map[string]any{"ga_client_id": "<script>"}))
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		resp = do(t, validBody(map[string]any{"ga_session_id": "abc"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Empty(t, fetchOrders(t, a.DSN()))
+	})
+
+	main.Run("PersistsMetaMatchingData", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		body := validBody(map[string]any{
+			"meta_fbp": "fb.1.1761400000000.123456789",
+			"meta_fbc": "fb.1.1761400000000.IwAR0abc-_1",
+		})
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone)")
+		req.Header.Set("CF-Connecting-IP", "203.0.113.7")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		r := rows[0]
+		require.NotNil(t, r.MetaFBP)
+		assert.Equal(t, "fb.1.1761400000000.123456789", *r.MetaFBP)
+		require.NotNil(t, r.MetaFBC)
+		assert.Equal(t, "fb.1.1761400000000.IwAR0abc-_1", *r.MetaFBC)
+		require.NotNil(t, r.ClientIP)
+		assert.Equal(t, "203.0.113.7", *r.ClientIP)
+		require.NotNil(t, r.UserAgent)
+		assert.Equal(t, "Mozilla/5.0 (iPhone)", *r.UserAgent)
+	})
+
+	main.Run("MalformedMetaCookieReturns400", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{"meta_fbp": "<script>"}))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		resp = do(t, validBody(map[string]any{"meta_fbc": "fb.1.2.has spaces"}))
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Empty(t, fetchOrders(t, a.DSN()))
 	})

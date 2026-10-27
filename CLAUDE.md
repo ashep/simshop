@@ -194,6 +194,14 @@ other events never queue). Measurement id comes from `shop.yaml` `google-analyti
 `ga_client_id`/`ga_session_id` on `POST /orders` are pattern-validated by OpenAPI — a bad value 400s the whole order,
 so the storefront filters them first; keep both patterns in sync with `gaIds()` in the theme.
 
+### internal/metacapi
+
+Meta Conversions API `Purchase` on `paid` only (Meta has no refund event), as an `order.Notifier` mirroring
+`ganalytics`. Pixel id from `shop.yaml` `meta_pixel.id`, token from config. **Access token goes in the JSON body, never
+the URL** (URLs end up in logs). `graphVersion` is pinned (`v25.0`) — Meta retires versions ~2 years after release.
+User-data hashing follows Meta's normalization (lowercase/trim; phone digits only; city letters only); `client_ip`
+comes from `handler.requestClientIP`, which trusts `CF-Connecting-IP` — fine for ad matching, never use it for auth.
+
 ### internal/order
 
 `MultiNotifier` fans out over `[]Notifier`; `app.Run` wraps enabled notifiers in it only with 2+ (one → pass child

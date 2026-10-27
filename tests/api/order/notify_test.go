@@ -261,3 +261,112 @@ func TestGoogleAnalyticsConfig(main *testing.T) {
 		assert.Contains(t, err.Error(), "google_analytics.api_secret requires google-analytics.id in shop.yaml")
 	})
 }
+
+func TestCreateOrder_MetaPurchase(main *testing.T) {
+	dataDir := makeDataDir(main)
+	require.NoError(main, os.WriteFile(filepath.Join(dataDir, "shop.yaml"),
+		[]byte(testShopYAML+"  meta_pixel:\n    id: \"1234567890123456\"\n"), 0644))
+
+	pubPayload := pubKeyPayload(main)
+	mbServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/merchant/pubkey" {
+			_, _ = w.Write(pubPayload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"invoiceId":"inv-meta","pageUrl":"https://pay.example/inv-meta"}`))
+	}))
+	main.Cleanup(mbServer.Close)
+
+	type hit struct {
+		path string
+		body map[string]any
+	}
+	var (
+		recvMu sync.Mutex
+		recv   []hit
+	)
+	metaStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got map[string]any
+		require.NoError(main, json.NewDecoder(r.Body).Decode(&got))
+		recvMu.Lock()
+		recv = append(recv, hit{path: r.URL.Path, body: got})
+		recvMu.Unlock()
+		_, _ = w.Write([]byte(`{"events_received":1}`))
+	}))
+	main.Cleanup(metaStub.Close)
+
+	a := testapp.New(main, dataDir, func(cfg *app.Config) {
+		cfg.Monobank.ServiceURL = mbServer.URL
+		cfg.Meta.AccessToken = "meta-token"
+		cfg.Meta.ServiceURL = metaStub.URL
+		cfg.RateLimit = -1
+	})
+	a.Start()
+
+	main.Run("PaidWebhookSendsPurchase", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		body, _ := json.Marshal(map[string]any{
+			"product_id": "widget", "lang": "en",
+			"first_name": "Jane", "last_name": "Doe", "phone": "+12025550123", "email": "buyer@example.com",
+			"country": "us", "city": "NYC", "address": "1 St",
+			"meta_fbp": "fb.1.1761400000000.123456789",
+		})
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone)")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		orderID := rows[0].ID
+
+		webhook := []byte(`{"invoiceId":"inv-meta","status":"success","reference":"` + orderID + `","modifiedDate":"2026-05-01T10:00:00Z"}`)
+		wreq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/monobank/webhook"), bytes.NewReader(webhook))
+		require.NoError(t, err)
+		wreq.Header.Set("Content-Type", "application/json")
+		wreq.Header.Set("X-Sign", signWebhookBody(t, webhook))
+		wresp, err := http.DefaultClient.Do(wreq)
+		require.NoError(t, err)
+		defer func() { _ = wresp.Body.Close() }()
+		require.Equal(t, http.StatusOK, wresp.StatusCode)
+
+		require.Eventually(t, func() bool {
+			recvMu.Lock()
+			defer recvMu.Unlock()
+			return len(recv) == 1
+		}, 3*time.Second, 50*time.Millisecond, "expected 1 conversions api request")
+
+		recvMu.Lock()
+		h := recv[0]
+		recvMu.Unlock()
+		assert.Equal(t, "/v25.0/1234567890123456/events", h.path)
+		assert.Equal(t, "meta-token", h.body["access_token"])
+		e := h.body["data"].([]any)[0].(map[string]any)
+		assert.Equal(t, "Purchase", e["event_name"])
+		assert.Equal(t, orderID, e["event_id"])
+		ud := e["user_data"].(map[string]any)
+		assert.Equal(t, "fb.1.1761400000000.123456789", ud["fbp"])
+		assert.Equal(t, "Mozilla/5.0 (iPhone)", ud["client_user_agent"])
+		assert.NotEmpty(t, ud["em"])
+		cd := e["custom_data"].(map[string]any)
+		assert.Equal(t, 49.99, cd["value"])
+		assert.Equal(t, "USD", cd["currency"])
+	})
+}
+
+func TestMetaConfig(main *testing.T) {
+	main.Run("AccessTokenWithoutShopPixelIDFailsStartup", func(t *testing.T) {
+		a := testapp.New(t, makeDataDir(t), func(cfg *app.Config) {
+			cfg.Meta.AccessToken = "meta-token"
+		})
+		err := a.Run()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "meta.access_token requires meta_pixel.id in shop.yaml")
+	})
+}

@@ -54,6 +54,7 @@ func TestServeShop(main *testing.T) {
 			},
 			GoogleAnalytics:     &shop.GoogleAnalytics{ID: "G-ABC123"},
 			CloudflareAnalytics: &shop.CloudflareAnalytics{Token: "cf-tok"},
+			MetaPixel:           &shop.MetaPixel{ID: "1234567890123456"},
 		}, nil)
 
 		w := doRequest(t, shopSvc)
@@ -98,6 +99,10 @@ func TestServeShop(main *testing.T) {
 		cf, ok := body["cloudflare_analytics"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "cf-tok", cf["token"])
+
+		mp, ok := body["meta_pixel"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "1234567890123456", mp["id"])
 	})
 
 	main.Run("CloudflareAnalyticsOmittedWhenNil", func(t *testing.T) {

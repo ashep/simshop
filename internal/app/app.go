@@ -16,6 +16,7 @@ import (
 	"github.com/ashep/simshop/internal/geo"
 	"github.com/ashep/simshop/internal/handler"
 	"github.com/ashep/simshop/internal/loader"
+	"github.com/ashep/simshop/internal/metacapi"
 	"github.com/ashep/simshop/internal/monobank"
 	"github.com/ashep/simshop/internal/novaposhta"
 	"github.com/ashep/simshop/internal/openapi"
@@ -146,8 +147,26 @@ func Run(rt *runner.Runtime[Config]) error {
 		l.Info().Msg("google analytics notifier disabled")
 	}
 
+	var metaNotifier order.Notifier
+	if cfg.Meta.AccessToken != "" {
+		// The pixel id is public and lives in shop.yaml next to the storefront's fbq
+		// setup, so browser and server events land on the same pixel.
+		if catalog.Shop.MetaPixel == nil || catalog.Shop.MetaPixel.ID == "" {
+			return fmt.Errorf("meta.access_token requires meta_pixel.id in shop.yaml")
+		}
+		metaClient := metacapi.NewClient(
+			catalog.Shop.MetaPixel.ID, cfg.Meta.AccessToken, cfg.Meta.TestEventCode, cfg.Meta.ServiceURL)
+		mn := metacapi.NewNotifier(metaClient, ordersReader, l)
+		mn.Start()
+		defer mn.Stop()
+		metaNotifier = mn
+		l.Info().Msg("meta conversions api notifier enabled")
+	} else {
+		l.Info().Msg("meta conversions api notifier disabled")
+	}
+
 	var orderNotifier order.Notifier
-	notifiers := make([]order.Notifier, 0, 3)
+	notifiers := make([]order.Notifier, 0, 4)
 	if telegramNotifier != nil {
 		notifiers = append(notifiers, telegramNotifier)
 	}
@@ -156,6 +175,9 @@ func Run(rt *runner.Runtime[Config]) error {
 	}
 	if gaNotifier != nil {
 		notifiers = append(notifiers, gaNotifier)
+	}
+	if metaNotifier != nil {
+		notifiers = append(notifiers, metaNotifier)
 	}
 	switch len(notifiers) {
 	case 0:

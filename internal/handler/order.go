@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -54,6 +55,8 @@ type createOrderRequest struct {
 	PromoCode   string            `json:"promo_code"`
 	GAClientID  string            `json:"ga_client_id"`
 	GASessionID string            `json:"ga_session_id"`
+	MetaFBP     string            `json:"meta_fbp"`
+	MetaFBC     string            `json:"meta_fbc"`
 }
 
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
@@ -221,6 +224,10 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		Promo:        promo,
 		GAClientID:   req.GAClientID,
 		GASessionID:  req.GASessionID,
+		MetaFBP:      req.MetaFBP,
+		MetaFBC:      req.MetaFBC,
+		ClientIP:     requestClientIP(r),
+		UserAgent:    truncate(r.UserAgent(), maxUserAgentLen),
 	}
 
 	orderID, err := h.orders.Submit(r.Context(), o)
@@ -348,4 +355,32 @@ func buildRedirect(base, orderID string) (string, error) {
 	q.Set("order_id", orderID)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// maxUserAgentLen caps the stored User-Agent; real ones are well under it.
+const maxUserAgentLen = 512
+
+// requestClientIP returns the buyer's IP: Cloudflare's CF-Connecting-IP, then the
+// first X-Forwarded-For hop (set by Caddy), then the TCP peer. Used only for ad
+// conversion matching, so a spoofed header costs nothing but match quality.
+func requestClientIP(r *http.Request) string {
+	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(ip) != nil {
+		return ip
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && net.ParseIP(host) != nil {
+		return host
+	}
+	return ""
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

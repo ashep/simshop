@@ -506,7 +506,9 @@ nullable — set together when a promo code was applied; `discount` in minor uni
 code captured from the request, drives downstream localized notifications), `first_name`, `middle_name` (nullable),
 `last_name`, `country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
 `tracking_number` (nullable; populated by the operator on the `shipped` transition, write-once), `ga_client_id`,
-`ga_session_id` (nullable; the buyer's Google Analytics ids sent by the storefront), `created_at`, `updated_at`.
+`ga_session_id` (nullable; the buyer's Google Analytics ids sent by the storefront), `meta_fbp`, `meta_fbc` (nullable;
+Meta Pixel cookies sent by the storefront), `client_ip`, `user_agent` (nullable; taken from the `POST /orders` request
+for Meta matching), `created_at`, `updated_at`.
 
 `order_attrs` columns: `order_id` (FK to `orders.id`), `attr_name`, `attr_value`, `attr_price` (int, minor units;
 the per-attribute add-on amount). One row per selected attribute on the order.
@@ -706,6 +708,8 @@ rate_limit: 1
 - `telegram.token` — Telegram bot token obtained from `@BotFather`. Optional; see below.
 - `telegram.chat_id` — Telegram chat or channel id (numeric like `-1001234567890`, or `@handle`). Optional; see below.
 - `google_analytics.api_secret` — GA4 Measurement Protocol API secret. Optional; see below.
+- `meta.access_token` — Meta Conversions API access token. Optional; see below. `meta.test_event_code` sends events
+  to Events Manager's *Test events* tab instead of live data — set it only while checking the setup.
 - `resend.api_key` — Resend API key. Optional; empty disables customer email notifications.
 - `mail.from` — sender address, e.g. `"Shop <orders@shop.example>"`. Required when `resend.api_key` is set.
 - `mail.order_url` — customer-facing URL with `{id}` placeholder. Required when `resend.api_key` is set.
@@ -834,6 +838,29 @@ server means a sale is recorded even when the buyer never comes back from the pa
 **Failure handling.** Same as the other notifiers: a 256-event buffer, one background worker, up to three attempts with
 1s/2s backoff; 4xx other than 429 is permanent. The Measurement Protocol answers 2xx even to malformed events, so check
 new event shapes with GA's DebugView.
+
+### Meta Conversions API purchase events
+
+Optional. When `meta.access_token` is set, the service sends `Purchase` to the Meta Conversions API (Graph API v25.0)
+when an order becomes `paid`, for the pixel named by `meta_pixel.id` in `shop.yaml` (the same one the storefront's fbq
+uses); the service refuses to start when the token is set but that id is missing. Meta has no refund event, so
+`refunded` sends nothing.
+
+```yaml
+meta:
+  access_token: "EAAB..."   # Events Manager → the pixel → Settings → Conversions API → Generate access token
+  test_event_code: ""       # e.g. "TEST12345" while checking in Events Manager → Test events
+```
+
+`event_id` is the order id; `custom_data` has `value`, `currency`, `content_ids` (the product id) and `order_id`.
+`user_data` carries what Meta matches the buyer on: SHA-256 of the normalized email, phone (digits only, also used as
+`external_id`), first and last name, city (letters only) and country, plus, unhashed, the Pixel cookies `fbp`/`fbc`
+(`meta_fbp`/`meta_fbc` in `POST /orders`) and the client IP (`CF-Connecting-IP`, then the first `X-Forwarded-For` hop,
+then the TCP peer) and User-Agent captured at checkout. This is personal data shared with Meta; the privacy policy
+must say so.
+
+**Failure handling.** Same as the other notifiers: a 256-event buffer, one background worker, up to three attempts with
+1s/2s backoff; 4xx other than 429 is permanent and logged with Graph's error message.
 
 ## CLI
 

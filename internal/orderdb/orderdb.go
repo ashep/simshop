@@ -31,14 +31,16 @@ const insertOrderSQL = `INSERT INTO orders (
 	country, city, phone, address,
 	customer_note,
 	promo_code, discount_percent, discount,
-	ga_client_id, ga_session_id
+	ga_client_id, ga_session_id,
+	meta_fbp, meta_fbc, client_ip, user_agent
 ) VALUES (
 	$1, $2, $3, $4, $5,
 	$6, $7, $8,
 	$9, $10, $11, $12,
 	$13,
 	$14, $15, $16,
-	$17, $18
+	$17, $18,
+	$19, $20, $21, $22
 ) RETURNING id`
 
 // lockPromoPhoneSQL serializes concurrent orders carrying the same promo code
@@ -115,6 +117,7 @@ func (w *Writer) Write(ctx context.Context, o order.Order) (string, error) {
 		nullIfEmpty(o.CustomerNote),
 		promoCode, discountPercent, discount,
 		nullIfEmpty(o.GAClientID), nullIfEmpty(o.GASessionID),
+		nullIfEmpty(o.MetaFBP), nullIfEmpty(o.MetaFBC), nullIfEmpty(o.ClientIP), nullIfEmpty(o.UserAgent),
 	).Scan(&orderID); err != nil {
 		return "", fmt.Errorf("insert order: %w", err)
 	}
@@ -199,7 +202,8 @@ const listOrdersSQL = `SELECT id::text, product_id, status::text, email, price, 
 	admin_note, customer_note, tracking_number,
 	created_at, updated_at,
 	promo_code, discount_percent, discount,
-	ga_client_id, ga_session_id
+	ga_client_id, ga_session_id,
+	meta_fbp, meta_fbc, client_ip, user_agent
 FROM orders
 ORDER BY created_at DESC`
 
@@ -209,7 +213,8 @@ const listOrdersByStatusSQL = `SELECT id::text, product_id, status::text, email,
 	admin_note, customer_note, tracking_number,
 	created_at, updated_at,
 	promo_code, discount_percent, discount,
-	ga_client_id, ga_session_id
+	ga_client_id, ga_session_id,
+	meta_fbp, meta_fbc, client_ip, user_agent
 FROM orders
 WHERE status = ANY($1::order_status[])
 ORDER BY created_at DESC`
@@ -275,7 +280,8 @@ func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, e
 	var ids []string
 	for rows.Next() {
 		var rec order.Record
-		var middleName, adminNote, customerNote, trackingNumber, promoCode, gaClientID, gaSessionID pgtype.Text
+		var middleName, adminNote, customerNote, trackingNumber, promoCode, gaClientID, gaSessionID,
+			metaFBP, metaFBC, clientIP, userAgent pgtype.Text
 		var discountPercent, discount pgtype.Int4
 		if err := rows.Scan(
 			&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
@@ -285,6 +291,7 @@ func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, e
 			&rec.CreatedAt, &rec.UpdatedAt,
 			&promoCode, &discountPercent, &discount,
 			&gaClientID, &gaSessionID,
+			&metaFBP, &metaFBC, &clientIP, &userAgent,
 		); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan order: %w", err)
@@ -307,6 +314,8 @@ func (r *Reader) List(ctx context.Context, statuses []string) ([]order.Record, e
 		}
 		rec.Promo = scanPromo(promoCode, discountPercent, discount)
 		rec.GAClientID, rec.GASessionID = gaClientID.String, gaSessionID.String
+		rec.MetaFBP, rec.MetaFBC = metaFBP.String, metaFBC.String
+		rec.ClientIP, rec.UserAgent = clientIP.String, userAgent.String
 		rec.Attrs = []order.Attr{}
 		rec.History = []order.HistoryEntry{}
 		rec.Invoices = []order.Invoice{}
@@ -416,7 +425,8 @@ const getOrderByIDSQL = `SELECT id::text, product_id, status::text, email, price
 	admin_note, customer_note, tracking_number,
 	created_at, updated_at,
 	promo_code, discount_percent, discount,
-	ga_client_id, ga_session_id
+	ga_client_id, ga_session_id,
+	meta_fbp, meta_fbc, client_ip, user_agent
 FROM orders
 WHERE id = $1::uuid`
 
@@ -424,7 +434,8 @@ WHERE id = $1::uuid`
 // Returns order.ErrNotFound when no row matches.
 func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) {
 	var rec order.Record
-	var middleName, adminNote, customerNote, trackingNumber, promoCode, gaClientID, gaSessionID pgtype.Text
+	var middleName, adminNote, customerNote, trackingNumber, promoCode, gaClientID, gaSessionID,
+		metaFBP, metaFBC, clientIP, userAgent pgtype.Text
 	var discountPercent, discount pgtype.Int4
 	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
 		&rec.ID, &rec.ProductID, &rec.Status, &rec.Email, &rec.Price, &rec.Currency, &rec.Lang,
@@ -434,6 +445,7 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 		&rec.CreatedAt, &rec.UpdatedAt,
 		&promoCode, &discountPercent, &discount,
 		&gaClientID, &gaSessionID,
+		&metaFBP, &metaFBC, &clientIP, &userAgent,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, order.ErrNotFound
@@ -459,6 +471,8 @@ func (r *Reader) GetByID(ctx context.Context, id string) (*order.Record, error) 
 	}
 	rec.Promo = scanPromo(promoCode, discountPercent, discount)
 	rec.GAClientID, rec.GASessionID = gaClientID.String, gaSessionID.String
+	rec.MetaFBP, rec.MetaFBC = metaFBP.String, metaFBC.String
+	rec.ClientIP, rec.UserAgent = clientIP.String, userAgent.String
 	rec.Attrs = []order.Attr{}
 	rec.History = []order.HistoryEntry{}
 	rec.Invoices = []order.Invoice{}
