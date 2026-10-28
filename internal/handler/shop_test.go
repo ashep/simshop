@@ -47,7 +47,7 @@ func TestServeShop(main *testing.T) {
 			Title:       map[string]string{"en": "Best Shop", "uk": "Найкращий магазин"},
 			Description: map[string]string{"en": "We sell things", "uk": "Ми продаємо речі"},
 			Categories: []*shop.Category{
-				{ID: "clocks", Title: map[string]string{"en": "Clocks", "uk": "Годинники"}},
+				{ID: "shelves", Title: map[string]string{"en": "Shelves", "uk": "Полиці"}},
 			},
 			Links: []*shop.Link{
 				{Title: "Instagram", Icon: "instagram", URL: "https://example.com/ig"},
@@ -77,11 +77,11 @@ func TestServeShop(main *testing.T) {
 		require.Len(t, categories, 1)
 		cat, ok := categories[0].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "clocks", cat["id"])
+		assert.Equal(t, "shelves", cat["id"])
 		catTitle, ok := cat["title"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "Clocks", catTitle["en"])
-		assert.Equal(t, "Годинники", catTitle["uk"])
+		assert.Equal(t, "Shelves", catTitle["en"])
+		assert.Equal(t, "Полиці", catTitle["uk"])
 
 		links, ok := body["links"].([]any)
 		require.True(t, ok)

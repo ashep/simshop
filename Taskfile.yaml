@@ -51,7 +51,7 @@ tasks:
       - sh: test -n "{{.API_ADDR}}"
         msg: "server.addr not found in config.yaml"
       - sh: test -f frontend/index.html
-        msg: "no theme: symlink frontend to a theme dir, e.g. ln -s ../shop-content/frontend frontend"
+        msg: "no theme: symlink frontend to a theme dir, e.g. ln -s ../my-theme frontend"
     cmds:
       - mkdir -p tmp
       - >-

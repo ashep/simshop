@@ -22,8 +22,8 @@ summary:
   en: A short widget blurb
   uk: Короткий опис віджета
 categories:
-  - clocks
-  - organizers
+  - shelves
+  - mugs
 description:
   en: A test product
   uk: Тестовий продукт
@@ -160,7 +160,7 @@ func TestListProducts(main *testing.T) {
 		assert.Equal(t, "A short widget blurb", description["en"])
 		categories, ok := body[0]["categories"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+		assert.Equal(t, []any{"shelves", "mugs"}, categories)
 	})
 
 	main.Run("EmptyListWhenShopListsNoProducts", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestListProducts(main *testing.T) {
 		assert.Equal(t, 49.99, price["value"])
 		categories, ok := body["categories"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+		assert.Equal(t, []any{"shelves", "mugs"}, categories)
 	})
 
 	main.Run("GetReturnsCorrectLanguage", func(t *testing.T) {

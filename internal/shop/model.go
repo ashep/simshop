@@ -14,7 +14,7 @@ type Country struct {
 
 // Category describes one product category from shop.yaml: a stable id, the
 // human-readable title per language. In YAML the language keys sit flat
-// alongside id (`{id: clocks, en: Clocks, uk: Годинники}`); every key other
+// alongside id (`{id: shelves, en: Shelves, uk: Полиці}`); every key other
 // than id is a language code collected into Title.
 type Category struct {
 	ID    string            `json:"id"`

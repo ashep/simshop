@@ -347,8 +347,8 @@ description:
   en: A long description.
   uk: Довгий опис.
 categories:
-  - clocks
-  - organizers
+  - shelves
+  - mugs
 prices:
   default:
     currency: EUR
@@ -363,8 +363,8 @@ prices:
 		assert.Equal(t, map[string]string{"en": "Widget", "uk": "Віджет"}, cat.ProductItems[0].Title)
 		assert.Equal(t, map[string]string{"en": "A test product", "uk": "Тестовий продукт"},
 			cat.ProductItems[0].Description)
-		assert.Equal(t, []string{"clocks", "organizers"}, cat.ProductItems[0].Categories)
-		assert.Equal(t, []string{"clocks", "organizers"}, cat.Products[0].Categories)
+		assert.Equal(t, []string{"shelves", "mugs"}, cat.ProductItems[0].Categories)
+		assert.Equal(t, []string{"shelves", "mugs"}, cat.Products[0].Categories)
 	})
 
 	main.Run("ProductItemsFollowShopOrderAndSkipUnlisted", func(t *testing.T) {
@@ -429,8 +429,8 @@ prices:
 
 	main.Run("LoadsShop", func(t *testing.T) {
 		dataDir := t.TempDir()
-		makeProductDir(t, dataDir, "clock", categorizedProductYAML("clocks"), nil)
-		makeProductDir(t, dataDir, "pot", categorizedProductYAML("organizers"), nil)
+		makeProductDir(t, dataDir, "shelf", categorizedProductYAML("shelves"), nil)
+		makeProductDir(t, dataDir, "mug", categorizedProductYAML("mugs"), nil)
 		makeShopFile(t, dataDir, `
 shop:
   countries:
@@ -453,12 +453,12 @@ shop:
     en: Designed and made by hand
     uk: Спроєктовано та виготовлено вручну
   categories:
-    - id: clocks
-      en: Clocks
-      uk: Годинники
-    - id: organizers
-      en: Organizers
-      uk: Органайзери
+    - id: shelves
+      en: Shelves
+      uk: Полиці
+    - id: mugs
+      en: Mugs
+      uk: Чашки
   links:
     - title: Instagram
       icon: instagram
@@ -479,11 +479,11 @@ shop:
     title:
       en: Objects made by hand
     text:
-      en: Clocks and lamps
+      en: Shelves and vases
     images:
       - h1.jpg
       - file: h2.jpg
-        category: clocks
+        category: shelves
   features:
     - icon: clock
       title:
@@ -504,8 +504,8 @@ shop:
     - about
     - contacts
   products:
-    - clock
-    - pot
+    - shelf
+    - mug
 `)
 
 		cat, err := loader.Load(dataDir)
@@ -524,13 +524,13 @@ shop:
 		assert.Equal(t, "Handmade Goods", cat.Shop.Title["en"])
 		assert.Equal(t, "Designed and made by hand", cat.Shop.Description["en"])
 		require.Len(t, cat.Shop.Categories, 2)
-		assert.Equal(t, "clocks", cat.Shop.Categories[0].ID)
-		assert.Equal(t, "Clocks", cat.Shop.Categories[0].Title["en"])
-		assert.Equal(t, "Годинники", cat.Shop.Categories[0].Title["uk"])
-		assert.Equal(t, map[string]string{"en": "Clocks", "uk": "Годинники"}, cat.Shop.Categories[0].Title)
-		assert.Equal(t, "organizers", cat.Shop.Categories[1].ID)
-		assert.Equal(t, "Organizers", cat.Shop.Categories[1].Title["en"])
-		assert.Equal(t, "Органайзери", cat.Shop.Categories[1].Title["uk"])
+		assert.Equal(t, "shelves", cat.Shop.Categories[0].ID)
+		assert.Equal(t, "Shelves", cat.Shop.Categories[0].Title["en"])
+		assert.Equal(t, "Полиці", cat.Shop.Categories[0].Title["uk"])
+		assert.Equal(t, map[string]string{"en": "Shelves", "uk": "Полиці"}, cat.Shop.Categories[0].Title)
+		assert.Equal(t, "mugs", cat.Shop.Categories[1].ID)
+		assert.Equal(t, "Mugs", cat.Shop.Categories[1].Title["en"])
+		assert.Equal(t, "Чашки", cat.Shop.Categories[1].Title["uk"])
 		require.Len(t, cat.Shop.Links, 1)
 		assert.Equal(t, "Instagram", cat.Shop.Links[0].Title)
 		assert.Equal(t, "instagram", cat.Shop.Links[0].Icon)
@@ -546,8 +546,8 @@ shop:
 		require.NotNil(t, cat.Shop.Hero)
 		assert.Equal(t, "Studio", cat.Shop.Hero.Eyebrow["en"])
 		assert.Equal(t, "Objects made by hand", cat.Shop.Hero.Title["en"])
-		assert.Equal(t, "Clocks and lamps", cat.Shop.Hero.Text["en"])
-		assert.Equal(t, []*shop.HeroImage{{File: "h1.jpg"}, {File: "h2.jpg", Category: "clocks"}}, cat.Shop.Hero.Images)
+		assert.Equal(t, "Shelves and vases", cat.Shop.Hero.Text["en"])
+		assert.Equal(t, []*shop.HeroImage{{File: "h1.jpg"}, {File: "h2.jpg", Category: "shelves"}}, cat.Shop.Hero.Images)
 		require.Len(t, cat.Shop.Features, 1)
 		assert.Equal(t, "clock", cat.Shop.Features[0].Icon)
 		assert.Equal(t, "2 to 7 days", cat.Shop.Features[0].Title["en"])
@@ -562,21 +562,21 @@ shop:
 
 	main.Run("DropsShopCategoriesWithoutListedProducts", func(t *testing.T) {
 		dataDir := t.TempDir()
-		makeProductDir(t, dataDir, "clock", categorizedProductYAML("clocks"), nil)
-		makeProductDir(t, dataDir, "pot", categorizedProductYAML("organizers"), nil)
-		makeProductDir(t, dataDir, "hidden-lamp", categorizedProductYAML("lamps"), nil)
+		makeProductDir(t, dataDir, "shelf", categorizedProductYAML("shelves"), nil)
+		makeProductDir(t, dataDir, "mug", categorizedProductYAML("mugs"), nil)
+		makeProductDir(t, dataDir, "hidden-vase", categorizedProductYAML("vases"), nil)
 		makeShopFile(t, dataDir, minimalShopYAML+`  categories:
-    - id: organizers
-      en: Organizers
-    - id: lamps
-      en: Lamps
+    - id: mugs
+      en: Mugs
+    - id: vases
+      en: Vases
     - id: empty
       en: Empty
-    - id: clocks
-      en: Clocks
+    - id: shelves
+      en: Shelves
   products:
-    - clock
-    - pot
+    - shelf
+    - mug
 `)
 
 		cat, err := loader.Load(dataDir)
@@ -585,8 +585,8 @@ shop:
 		for _, c := range cat.Shop.Categories {
 			ids = append(ids, c.ID)
 		}
-		// "lamps" only has an unlisted product and "empty" has none; order is preserved.
-		assert.Equal(t, []string{"organizers", "clocks"}, ids)
+		// "vases" only has an unlisted product and "empty" has none; order is preserved.
+		assert.Equal(t, []string{"mugs", "shelves"}, ids)
 	})
 
 	main.Run("MalformedShopYAML", func(t *testing.T) {

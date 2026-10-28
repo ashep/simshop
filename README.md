@@ -152,12 +152,12 @@ shop:
     en: Designed and made by hand.
     uk: Спроєктовано та виготовлено вручну.
   categories:
-    - id: clocks
-      en: Clocks
-      uk: Годинники
-    - id: organizers
-      en: Organizers
-      uk: Органайзери
+    - id: shelves
+      en: Shelves
+      uk: Полиці
+    - id: mugs
+      en: Mugs
+      uk: Чашки
   links:
     - title: Instagram
       icon: instagram
@@ -175,11 +175,11 @@ shop:
       en: Objects made by hand
       uk: Речі, зроблені руками
     text:
-      en: Shelves and organizers for your desk.
-      uk: Полиці й органайзери для вашого столу.
+      en: Shelves and mugs for your home.
+      uk: Полиці й чашки для вашого дому.
     images:
       - file: hero-1.jpg
-        category: organizers
+        category: shelves
       - hero-2.jpg
   features:
     - icon: clock
@@ -937,8 +937,7 @@ list of candidates.
 ## Frontend theme
 
 The storefront is **not part of this repository**. The image serves static files from `/frontend`, which a downstream
-image fills in (`FROM ashep/simshop` + `COPY <theme> /frontend`); the reference theme is
-a separate theme repository. Without a theme the image serves only the API.
+image fills in (`FROM ashep/simshop` + `COPY <theme> /frontend`). Without a theme the image serves only the API.
 
 Contract a theme must follow:
 
@@ -961,7 +960,7 @@ Contract a theme must follow:
 Routing is owned by `Caddyfile`; a theme cannot add routes.
 
 For local development `task dev` serves the `frontend` symlink at the repo root (gitignored), e.g.
-`ln -s ../shop-content/frontend frontend`.
+`ln -s ../my-theme frontend`.
 
 ## Deployment
 

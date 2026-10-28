@@ -55,18 +55,18 @@ shop:
     en: Designed and made by hand
     uk: Спроєктовано та виготовлено вручну
   categories:
-    - id: clocks
-      en: Clocks
-      uk: Годинники
-    - id: organizers
-      en: Organizers
-      uk: Органайзери
-    - id: lamps
-      en: Lamps
-      uk: Світильники
+    - id: shelves
+      en: Shelves
+      uk: Полиці
+    - id: mugs
+      en: Mugs
+      uk: Чашки
+    - id: vases
+      en: Vases
+      uk: Вази
   products:
-    - clock
-    - pot
+    - shelf
+    - mug
   links:
     - title: Instagram
       icon: instagram
@@ -81,11 +81,11 @@ shop:
     title:
       en: Objects made by hand
     text:
-      en: Clocks and lamps
+      en: Shelves and vases
     images:
       - h1.jpg
       - file: h2.jpg
-        category: clocks
+        category: shelves
   features:
     - icon: clock
       title:
@@ -105,8 +105,8 @@ shop:
 
 func TestGetShop(main *testing.T) {
 	dataDir := makeDataDir(main, testShopYAML)
-	makeProduct(main, dataDir, "clock", "clocks")
-	makeProduct(main, dataDir, "pot", "organizers")
+	makeProduct(main, dataDir, "shelf", "shelves")
+	makeProduct(main, dataDir, "mug", "mugs")
 	app := testapp.New(main, dataDir)
 	app.Start()
 
@@ -156,19 +156,19 @@ func TestGetShop(main *testing.T) {
 		categories, ok := body["categories"].([]any)
 		require.True(t, ok)
 		require.Len(t, categories, 2)
-		clocks, ok := categories[0].(map[string]any)
+		shelves, ok := categories[0].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "clocks", clocks["id"])
-		clocksTitle, ok := clocks["title"].(map[string]any)
+		assert.Equal(t, "shelves", shelves["id"])
+		shelvesTitle, ok := shelves["title"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "Clocks", clocksTitle["en"])
-		assert.Equal(t, "Годинники", clocksTitle["uk"])
-		assert.Len(t, clocksTitle, 2)
-		assert.NotContains(t, clocks, "image")
-		organizers, ok := categories[1].(map[string]any)
+		assert.Equal(t, "Shelves", shelvesTitle["en"])
+		assert.Equal(t, "Полиці", shelvesTitle["uk"])
+		assert.Len(t, shelvesTitle, 2)
+		assert.NotContains(t, shelves, "image")
+		mugs, ok := categories[1].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "organizers", organizers["id"])
-		// "lamps" has no listed products, so it is not served.
+		assert.Equal(t, "mugs", mugs["id"])
+		// "vases" has no listed products, so it is not served.
 
 		links, ok := body["links"].([]any)
 		require.True(t, ok)
@@ -187,10 +187,10 @@ func TestGetShop(main *testing.T) {
 		assert.Equal(t, "sale", body["announcement_page"])
 		assert.Equal(t, map[string]any{
 			"title": map[string]any{"en": "Objects made by hand"},
-			"text":  map[string]any{"en": "Clocks and lamps"},
+			"text":  map[string]any{"en": "Shelves and vases"},
 			"images": []any{
 				map[string]any{"file": "h1.jpg"},
-				map[string]any{"file": "h2.jpg", "category": "clocks"},
+				map[string]any{"file": "h2.jpg", "category": "shelves"},
 			},
 		}, body["hero"])
 		assert.Equal(t, []any{map[string]any{

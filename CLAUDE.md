@@ -14,9 +14,11 @@
 - Schema changes go in a **new numbered migration** `internal/sql/NNN_<name>.{up,down}.sql` (picked up by `go:embed`
   + `dbmigrator`); never edit an already-applied file — existing DBs (local dev, prod) would never receive it. Use
   `IF NOT EXISTS`/`IF EXISTS` so a DB patched by hand still migrates cleanly.
-- `data/` is a **symlink** to `../shop-content/data` (separate git repo). **Never commit data from this repo** —
-  "commit everything" here excludes it. Commit it only when asked, in its own repo:
-  `git -C "$(dirname "$(readlink data)")" add ...`. `git add data/...` here fails ("beyond a symbolic link").
+- `data/` is a gitignored **symlink** into a separate shop content repo. **Never commit data from this repo** —
+  "commit everything" here excludes it. Commit it only when asked, in its own repo (`git -C "$(dirname "$(readlink
+  data)")" add ...`). `git add data/...` here fails ("beyond a symbolic link").
+- **Keep this repo shop-agnostic**: no shop domain, brand, product id, analytics id or local path of a real shop in
+  code, tests, docs or commit messages — fixtures use generic names (`Test Shop`, `oak-shelf`).
 - `vendor/` is gitignored (regen via `go mod vendor`); only `go.mod`/`go.sum` are staged. `go mod tidy` strips modules
   no real import reaches — to land a dep before its consumer, `go get` it (records `// indirect`) and **skip `go mod
   tidy`** until the importer lands. `go mod vendor` populates `vendor/` only once a `.go` file imports the module.
@@ -312,7 +314,7 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
 ## Frontend & deployment
 
 **No frontend lives here.** The image's Caddy serves a theme from `/frontend` that downstream images `COPY` in
-(reference theme + its UI rules: `../shop-content/frontend`, its `CLAUDE.md`). Theme contract (README "Frontend
+(locally: whatever the `frontend` symlink points to, and its `CLAUDE.md`). Theme contract (README "Frontend
 theme"): `index.html`, `product.html`, `order-status.html`; API at `<origin>/api`. Changing routes in `Caddyfile`
 changes that contract — update the README and the theme together. Locally `frontend` is a gitignored symlink.
 

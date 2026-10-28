@@ -153,7 +153,7 @@ func TestListProducts(main *testing.T) {
 				ID:          "widget",
 				Title:       map[string]string{"en": "Widget"},
 				Description: map[string]string{"en": "A test product"},
-				Categories:  []string{"clocks", "organizers"},
+				Categories:  []string{"shelves", "mugs"},
 			},
 		}, nil)
 
@@ -165,7 +165,7 @@ func TestListProducts(main *testing.T) {
 		require.Len(t, body, 1)
 		categories, ok := body[0]["categories"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+		assert.Equal(t, []any{"shelves", "mugs"}, categories)
 	})
 
 	main.Run("WithProductsWithImage", func(t *testing.T) {
@@ -430,7 +430,7 @@ func TestServeProductContent(main *testing.T) {
 		pDir := filepath.Join(dir, "products", "widget")
 		require.NoError(t, os.MkdirAll(pDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(pDir, "product.yaml"),
-			[]byte(testProductYAML+"categories:\n  - clocks\n  - organizers\n"), 0644))
+			[]byte(testProductYAML+"categories:\n  - shelves\n  - mugs\n"), 0644))
 		h := &Handler{dataDir: dir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
 		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
 		r.SetPathValue("id", "widget")
@@ -443,7 +443,7 @@ func TestServeProductContent(main *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		categories, ok := body["categories"].([]any)
 		require.True(t, ok)
-		assert.Equal(t, []any{"clocks", "organizers"}, categories)
+		assert.Equal(t, []any{"shelves", "mugs"}, categories)
 	})
 
 	main.Run("OmitsCategoriesWhenProductHasNone", func(t *testing.T) {
