@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	htmltemplate "html/template"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,8 +31,7 @@ type TemplateData struct {
 	OrderID      string
 	OrderShortID string
 	CustomerName string
-	ProductTitle string
-	Attrs        []order.Attr
+	Items        []TemplateItem
 	Total        string
 	// Promo fields are zero values when the order has no promo code.
 	// Subtotal is the pre-discount amount; Discount is formatted like Total.
@@ -43,14 +43,38 @@ type TemplateData struct {
 	TrackingNumber  string
 	ShopName        string
 	OrderURL        string
+	// SiteURL is the scheme and host of OrderURL (no trailing slash), so a
+	// layout can reference shop assets such as `{{ .SiteURL }}/assets/logo.png`.
+	SiteURL string
+}
+
+// LayoutData is what the optional layout.html sees: every TemplateData field,
+// plus the rendered subject, the template language and the Markdown body
+// already converted to HTML.
+type LayoutData struct {
+	TemplateData
+	Subject string
+	Lang    string
+	Content htmltemplate.HTML
+}
+
+// TemplateItem is one order line as templates see it: Total is the formatted
+// line amount before discount (unit price × Qty).
+type TemplateItem struct {
+	Title string
+	Qty   int
+	Attrs []order.Attr
+	Total string
 }
 
 // TemplateStore holds parsed subject and body templates per (status, lang).
 // Lookup is map-of-map; Render falls back to "en" when (status, lang) is
-// missing but (status, "en") exists.
+// missing but (status, "en") exists. layout, when set, wraps every rendered
+// HTML body.
 type TemplateStore struct {
 	// parsed[status][lang] = parsedTemplate
 	parsed map[string]map[string]*parsedTemplate
+	layout *htmltemplate.Template
 }
 
 type parsedTemplate struct {
@@ -64,7 +88,8 @@ func (s *TemplateStore) All() map[string]map[string]*parsedTemplate {
 	return s.parsed
 }
 
-// LoadTemplates walks {dir}/{status}/{lang}.md and parses each file.
+// LoadTemplates walks {dir}/{status}/{lang}.md and parses each file, plus the
+// optional {dir}/layout.html (an html/template executed with LayoutData).
 // A missing dir returns an empty store and no error (matches the loader's
 // "missing optional content is not an error" policy). A malformed template
 // is fatal — the caller is expected to surface it at startup.
@@ -77,6 +102,17 @@ func LoadTemplates(dir string) (*TemplateStore, error) {
 			return s, nil
 		}
 		return nil, fmt.Errorf("read emails dir: %w", err)
+	}
+
+	layout, err := os.ReadFile(filepath.Join(dir, "layout.html"))
+	switch {
+	case err == nil:
+		s.layout, err = htmltemplate.New("layout").Parse(string(layout))
+		if err != nil {
+			return nil, fmt.Errorf("parse emails/layout.html: %w", err)
+		}
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("read emails/layout.html: %w", err)
 	}
 
 	for _, st := range statusEntries {
@@ -138,6 +174,17 @@ func (s *TemplateStore) Render(status, lang string, data TemplateData) (string, 
 	var htmlBuf bytes.Buffer
 	if err := markdown.Convert(bodyBuf.Bytes(), &htmlBuf); err != nil {
 		return "", "", "", fmt.Errorf("render markdown: %w", err)
+	}
+
+	if s.layout != nil {
+		content := htmltemplate.HTML(htmlBuf.String()) //nolint:gosec // goldmark output; raw HTML in templates is omitted
+		htmlBuf.Reset()
+		err := s.layout.Execute(&htmlBuf, LayoutData{
+			TemplateData: data, Subject: subjectBuf.String(), Lang: lang, Content: content,
+		})
+		if err != nil {
+			return "", "", "", fmt.Errorf("execute layout: %w", err)
+		}
 	}
 
 	return subjectBuf.String(), htmlBuf.String(), bodyBuf.String(), nil

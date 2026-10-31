@@ -171,12 +171,25 @@ func buildPurchase(rec *order.Record, now time.Time) Event {
 		CustomData: CustomData{
 			Currency:    strings.ToUpper(rec.Currency),
 			Value:       float64(rec.Price) / 100,
-			ContentIDs:  []string{rec.ProductID},
+			ContentIDs:  contentIDs(rec),
 			ContentType: "product",
 			OrderID:     rec.ID,
-			NumItems:    1,
+			NumItems:    rec.Units(),
 		},
 	}
+}
+
+// contentIDs lists the distinct product ids of rec's items, in cart order.
+func contentIDs(rec *order.Record) []string {
+	ids := make([]string, 0, len(rec.Items))
+	seen := map[string]bool{}
+	for _, it := range rec.Items {
+		if !seen[it.ProductID] {
+			seen[it.ProductID] = true
+			ids = append(ids, it.ProductID)
+		}
+	}
+	return ids
 }
 
 // hashed returns the SHA-256 hex of an already-normalized value as a one-element

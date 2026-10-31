@@ -14,7 +14,8 @@ func TestRenderOrders(main *testing.T) {
 		var buf bytes.Buffer
 		err := RenderOrders(&buf, []Order{{
 			ID: "019e9de8-c3c0-7000-8000-000000000001", Status: "paid", CreatedAt: "2026-06-06T17:08:33Z",
-			Country: "us", Email: "a@b.com", Price: 1050, Currency: "usd", ProductID: "p1",
+			Country: "us", Email: "a@b.com", Price: 1050, Currency: "usd",
+			Items: []OrderItem{{ProductID: "p1", Qty: 1}, {ProductID: "p2", Qty: 3}},
 		}})
 		require.NoError(t, err)
 		out := buf.String()
@@ -26,7 +27,7 @@ func TestRenderOrders(main *testing.T) {
 		assert.Contains(t, out, "019e9de8-c3c0")
 		assert.NotContains(t, out, "019e9de8-c3c0-7000")
 		assert.Contains(t, out, "2026-06-06 17:08:33")
-		assert.Contains(t, out, "p1")
+		assert.Contains(t, out, "p1, p2 ×3")
 		assert.Contains(t, out, "a@b.com")
 		assert.Contains(t, out, "10.50 USD")
 	})
@@ -67,13 +68,14 @@ func TestRenderOrderDetail(main *testing.T) {
 		err := RenderOrderDetail(&buf, &Order{
 			ID: "o1", Status: "shipped", FirstName: "Ann", LastName: "Lee",
 			Price: 2000, Currency: "eur", Country: "de",
-			Attrs: []OrderAttr{{Name: "Size", Value: "L"}},
+			Items: []OrderItem{{ProductID: "tee", Qty: 2, Price: 1000, Attrs: []OrderAttr{{Name: "Size", Value: "L"}}}},
 		})
 		require.NoError(t, err)
 		out := buf.String()
 		assert.Contains(t, out, "o1")
 		assert.Contains(t, out, "shipped")
 		assert.Contains(t, out, "Ann Lee")
+		assert.Contains(t, out, "tee ×2  20.00 EUR")
 		assert.Contains(t, out, "Size")
 		assert.Contains(t, out, "L")
 		assert.Contains(t, out, "DE")

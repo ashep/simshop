@@ -67,7 +67,7 @@ func TestGetOrderStatus(main *testing.T) {
 		truncateOrders(t, a.DSN())
 
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 			"lang":       "en",
 			"first_name": "Alice",
 			"last_name":  "Smith",

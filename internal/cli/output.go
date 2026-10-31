@@ -42,7 +42,7 @@ func RenderOrders(w io.Writer, orders []Order) error {
 	_, _ = fmt.Fprintln(tw, "ID\tSTATUS\tCREATED\tPRODUCT\tEMAIL\tTOTAL")
 	for _, o := range orders {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			shortID(o.ID), o.Status, formatTime(o.CreatedAt), o.ProductID, o.Email,
+			shortID(o.ID), o.Status, formatTime(o.CreatedAt), o.Products(), o.Email,
 			formatPrice(o.Price, o.Currency))
 	}
 	return tw.Flush()
@@ -54,7 +54,7 @@ func RenderOrderDetail(w io.Writer, o *Order) error {
 	p := func(k, v string) { _, _ = fmt.Fprintf(tw, "%s:\t%s\n", k, v) }
 	p("ID", o.ID)
 	p("Status", o.Status)
-	p("Product", o.ProductID)
+	p("Products", o.Products())
 	p("Customer", strings.TrimSpace(o.FirstName+" "+o.LastName))
 	p("Email", o.Email)
 	p("Phone", o.Phone)
@@ -74,10 +74,11 @@ func RenderOrderDetail(w io.Writer, o *Order) error {
 		return err
 	}
 
-	if len(o.Attrs) > 0 {
-		_, _ = fmt.Fprintln(w, "Attributes:")
-		for _, a := range o.Attrs {
-			_, _ = fmt.Fprintf(w, "  - %s: %s\n", a.Name, a.Value)
+	_, _ = fmt.Fprintln(w, "Items:")
+	for _, it := range o.Items {
+		_, _ = fmt.Fprintf(w, "  - %s  %s\n", it.Label(), formatPrice(it.Price*it.Qty, o.Currency))
+		for _, a := range it.Attrs {
+			_, _ = fmt.Fprintf(w, "      %s: %s\n", a.Name, a.Value)
 		}
 	}
 	if len(o.History) > 0 {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -49,7 +50,7 @@ type emailSender interface {
 }
 
 // productLookup resolves a product id to a display title. The notifier uses
-// it for the rendered TemplateData.ProductTitle. When the lookup returns "",
+// it for the rendered TemplateItem.Title. When the lookup returns "",
 // the notifier falls back to the raw product id.
 type productLookup interface {
 	Title(id string) string
@@ -225,11 +226,6 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 	}
 	name += " " + rec.LastName
 
-	productTitle := rec.ProductID
-	if t := n.products.Title(rec.ProductID); t != "" {
-		productTitle = t
-	}
-
 	// shopLookup.Name is expected to apply its own lang-fallback (the
 	// production *shop.Service falls back to the alphabetically-first
 	// language when the requested one is missing).
@@ -240,6 +236,15 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 	}
 	total := formatMoney(rec.Price)
 
+	items := make([]TemplateItem, len(rec.Items))
+	for i, it := range rec.Items {
+		title := it.ProductID
+		if t := n.products.Title(it.ProductID); t != "" {
+			title = t
+		}
+		items[i] = TemplateItem{Title: title, Qty: it.Qty, Attrs: it.Attrs, Total: formatMoney(it.Price * it.Qty)}
+	}
+
 	var promoCode, discount, subtotal string
 	var discountPercent int
 	if rec.Promo != nil {
@@ -249,13 +254,16 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 	}
 
 	orderURL := strings.ReplaceAll(n.orderURL, "{id}", rec.ID)
+	var siteURL string
+	if u, err := url.Parse(orderURL); err == nil && u.Scheme != "" && u.Host != "" {
+		siteURL = u.Scheme + "://" + u.Host
+	}
 
 	return TemplateData{
 		OrderID:         rec.ID,
 		OrderShortID:    short,
 		CustomerName:    name,
-		ProductTitle:    productTitle,
-		Attrs:           rec.Attrs,
+		Items:           items,
 		Total:           total,
 		PromoCode:       promoCode,
 		DiscountPercent: discountPercent,
@@ -265,6 +273,7 @@ func (n *Notifier) buildData(rec *order.Record, evt order.NotificationEvent) Tem
 		TrackingNumber:  evt.TrackingNumber,
 		ShopName:        shopName,
 		OrderURL:        orderURL,
+		SiteURL:         siteURL,
 	}
 }
 

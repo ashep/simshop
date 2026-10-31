@@ -100,7 +100,7 @@ func TestCreateOrder_ResendEmail(main *testing.T) {
 
 		// 1. Place an order.
 		body, _ := json.Marshal(map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 			"lang":       "en",
 			"first_name": "Jane",
 			"last_name":  "Doe",
@@ -202,7 +202,7 @@ func TestCreateOrder_GoogleAnalyticsPurchase(main *testing.T) {
 		truncateOrders(t, a.DSN())
 
 		body, _ := json.Marshal(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Jane", "last_name": "Doe", "phone": "+12025550123", "email": "buyer@example.com",
 			"country": "us", "city": "NYC", "address": "1 St",
 			"ga_client_id": "1234567890.1761400000", "ga_session_id": "1761400000",
@@ -308,7 +308,7 @@ func TestCreateOrder_MetaPurchase(main *testing.T) {
 		truncateOrders(t, a.DSN())
 
 		body, _ := json.Marshal(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Jane", "last_name": "Doe", "phone": "+12025550123", "email": "buyer@example.com",
 			"country": "us", "city": "NYC", "address": "1 St",
 			"meta_fbp": "fb.1.1761400000000.123456789",

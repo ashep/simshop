@@ -97,7 +97,7 @@ func (s *fakeSender) snapshot() []sentMessage {
 func sampleRecord() *order.Record {
 	return &order.Record{
 		ID:        "018f4e3a-0000-7000-8000-000000000001",
-		ProductID: "pro-plan-annual",
+		Items:     []order.Item{{ProductID: "pro-plan-annual", Qty: 1, Price: 4900, Attrs: []order.Attr{}}},
 		Status:    "new",
 		Email:     "jane@example.com",
 		Price:     4900,
@@ -108,7 +108,6 @@ func sampleRecord() *order.Record {
 		Country:   "ua",
 		City:      "Kyiv",
 		Address:   "Some Street, 5",
-		Attrs:     []order.Attr{},
 		History:   []order.HistoryEntry{},
 		Invoices:  []order.Invoice{},
 	}
@@ -166,7 +165,7 @@ func TestNotifier(main *testing.T) {
 		assert.Equal(t, "@chan", got[0].chatID)
 		assert.Equal(t, "MarkdownV2", got[0].parseMode)
 		assert.Contains(t, got[0].text, "*New order* `018f4e3a-0000-7000-8000-000000000001`")
-		assert.Contains(t, got[0].text, `*Product:* pro\-plan\-annual`)
+		assert.Contains(t, got[0].text, `*Product:* pro\-plan\-annual × 1`)
 		assert.Contains(t, got[0].text, `*Total:* 49\.00 USD`)
 		assert.Contains(t, got[0].text, `*Customer:* Jane Doe`)
 		assert.Contains(t, got[0].text, `*Phone:* \+1234567890`)
@@ -191,6 +190,28 @@ func TestNotifier(main *testing.T) {
 		got := waitForCalls(t, s, 1, time.Second)
 		assert.Contains(t, got[0].text, `*Product:* Pro Plan \(Annual\)`)
 		assert.NotContains(t, got[0].text, "*Product:* pro")
+	})
+
+	main.Run("NewOrderListsEveryCartItem", func(t *testing.T) {
+		r := newFakeReader()
+		rec := sampleRecord()
+		rec.Items = append(rec.Items, order.Item{
+			ProductID: "lamp", Qty: 3, Price: 1000,
+			Attrs: []order.Attr{{Name: "Shade", Value: "Blue"}},
+		})
+		r.put(rec)
+		s := &fakeSender{}
+		n := newTestNotifier(t, s, r)
+
+		n.Notify(context.Background(), order.NotificationEvent{OrderID: rec.ID, Status: "new"})
+
+		got := waitForCalls(t, s, 1, time.Second)
+		first := strings.Index(got[0].text, `*Product:* pro\-plan\-annual × 1`)
+		second := strings.Index(got[0].text, "*Product:* lamp × 3")
+		attr := strings.Index(got[0].text, "*Shade:* Blue")
+		require.GreaterOrEqual(t, first, 0)
+		assert.Less(t, first, second)
+		assert.Less(t, second, attr)
 	})
 
 	main.Run("NewOrderIncludesMiddleName", func(t *testing.T) {
@@ -241,7 +262,7 @@ func TestNotifier(main *testing.T) {
 	main.Run("NewOrderAttrsRendered", func(t *testing.T) {
 		r := newFakeReader()
 		rec := sampleRecord()
-		rec.Attrs = []order.Attr{
+		rec.Items[0].Attrs = []order.Attr{
 			{Name: "Display color", Value: "Red", Price: 0},
 			{Name: "Material", Value: "Aluminum", Price: 500},
 		}

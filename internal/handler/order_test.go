@@ -114,8 +114,8 @@ func TestCreateOrder(main *testing.T) {
 		defer svc.AssertExpectations(t)
 		defer mb.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
-			return o.ProductID == "widget" &&
-				len(o.Attrs) == 0 &&
+			return len(o.Items) == 1 && o.Items[0].ProductID == "widget" && o.Items[0].Qty == 1 &&
+				len(o.Items[0].Attrs) == 0 &&
 				o.Price == 4999 &&
 				o.Currency == "USD" &&
 				o.Lang == "en" &&
@@ -133,17 +133,7 @@ func TestCreateOrder(main *testing.T) {
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget",
-			"lang": "en",
-			"first_name": "Іван",
-			"last_name": "Іваненко",
-			"phone": "+380501234567",
-			"email": "ivan@example.com",
-			"country": "ua",
-			"city": "Київ",
-			"address": "Відділення №5"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "Іван", "last_name": "Іваненко", "phone": "+380501234567", "email": "ivan@example.com", "country": "ua", "city": "Київ", "address": "Відділення №5"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 		assert.JSONEq(t, `{"payment_url": "https://pay.example/inv-1"}`, w.Body.String())
 	})
@@ -155,28 +145,17 @@ func TestCreateOrder(main *testing.T) {
 		defer mb.AssertExpectations(t)
 		// display_color red: base 49.99 + attr_price default 10 = 59.99 → 5999 cents.
 		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
-			return len(o.Attrs) == 1 &&
-				o.Attrs[0].Name == "Display color" &&
-				o.Attrs[0].Value == "Red" &&
-				o.Attrs[0].Price == 1000 &&
+			return len(o.Items) == 1 && len(o.Items[0].Attrs) == 1 &&
+				o.Items[0].Attrs[0].Name == "Display color" &&
+				o.Items[0].Attrs[0].Value == "Red" &&
+				o.Items[0].Attrs[0].Price == 1000 &&
 				o.Price == 5999 &&
 				o.Currency == "USD"
 		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, attrDataDir, svc, mb, `{
-			"product_id": "widget",
-			"lang": "en",
-			"attributes": {"display_color": "red"},
-			"first_name": "A",
-			"last_name": "B",
-			"phone": "1",
-			"email": "a@example.com",
-			"country": "us",
-			"city": "C",
-			"address": "D"
-		}`)
+		w := doRequest(t, attrDataDir, svc, mb, `{"items": [{"product_id": "widget", "attributes": {"display_color": "red"}, "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@example.com", "country": "us", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -192,18 +171,7 @@ func TestCreateOrder(main *testing.T) {
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, attrDataDir, svc, mb, `{
-			"product_id": "widget",
-			"lang": "en",
-			"attributes": {"display_color": "red"},
-			"first_name": "A",
-			"last_name": "B",
-			"phone": "1",
-			"email": "a@example.com",
-			"country": "us",
-			"city": "C",
-			"address": "D"
-		}`)
+		w := doRequest(t, attrDataDir, svc, mb, `{"items": [{"product_id": "widget", "attributes": {"display_color": "red"}, "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@example.com", "country": "us", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -249,11 +217,7 @@ images:
 			resp:        resp,
 			l:           zerolog.Nop(),
 		}
-		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com",
-			"country": "ua", "city": "C", "address": "D"
-		}`))
+		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.CreateOrder(w, r)
@@ -284,11 +248,7 @@ images:
 			resp:        resp,
 			l:           zerolog.Nop(),
 		}
-		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com",
-			"country": "ua", "city": "C", "address": "D"
-		}`))
+		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.CreateOrder(w, r)
@@ -307,17 +267,7 @@ images:
 		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget",
-			"lang": "en",
-			"first_name": "A",
-			"last_name": "B",
-			"phone": "1",
-			"email": "a@example.com",
-			"country": "ua",
-			"city": "C",
-			"address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@example.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -344,10 +294,7 @@ images:
 			resp:        resp,
 			l:           zerolog.Nop(),
 		}
-		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`))
+		r := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`))
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.CreateOrder(w, r)
@@ -367,80 +314,56 @@ images:
 	main.Run("MissingLangReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingFirstNameReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingLastNameReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "phone": "1", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "phone": "1", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingPhoneReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingEmailReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingCountryReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingCityReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("MissingAddressReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -448,10 +371,7 @@ images:
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
 		// "fr" is not in shopStub.Countries (ua, us)
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "fr", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "fr", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "invalid country")
 	})
@@ -474,10 +394,7 @@ prices:
 
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, unavailDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, unavailDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "product not available")
 		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
@@ -487,52 +404,35 @@ prices:
 	main.Run("UnknownProductReturns404", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "no-such-product", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "no-such-product", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	main.Run("UnknownLangReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "fr",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "fr", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("UnknownAttrIDReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, attrDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"attributes": {"no_such_attr": "red"},
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, attrDataDir, svc, mb, `{"items": [{"product_id": "widget", "attributes": {"no_such_attr": "red"}, "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("UnknownAttrValueReturns400", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, attrDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"attributes": {"display_color": "no_such_value"},
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, attrDataDir, svc, mb, `{"items": [{"product_id": "widget", "attributes": {"display_color": "no_such_value"}, "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	main.Run("PathTraversalInProductIDReturns404", func(t *testing.T) {
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "../widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "../widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
@@ -542,10 +442,7 @@ prices:
 		defer svc.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.Anything).Return("", assert.AnError)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{
-			"product_id": "widget", "lang": "en",
-			"first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"
-		}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b.com", "country": "ua", "city": "C", "address": "D"}`)
 		assert.Equal(t, http.StatusBadGateway, w.Code)
 	})
 
@@ -567,7 +464,7 @@ prices:
 
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
-		w := doRequest(t, zeroDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, zeroDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "order amount must be positive")
@@ -591,7 +488,7 @@ prices:
 			return inv.Provider == "monobank" && inv.ID == "inv-1" && inv.PageURL == "https://pay.example/inv-1" && inv.Amount == 4999 && inv.Currency == "USD"
 		})).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 
 		require.Equal(t, http.StatusCreated, w.Code, "body=%s", w.Body.String())
 		assert.JSONEq(t, `{"payment_url":"https://pay.example/inv-1"}`, w.Body.String())
@@ -605,7 +502,7 @@ prices:
 		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000098", nil)
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return((*monobank.CreateInvoiceResponse)(nil), &monobank.APIError{Status: 500, ErrCode: "limit_exceeded", ErrText: "x"})
 
-		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 
 		require.Equal(t, http.StatusBadGateway, w.Code)
 		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
@@ -633,7 +530,7 @@ prices:
 		mb := &monobankClientMock{}
 		svc.On("Submit", mock.Anything, mock.Anything).Return("018f4e3a-0000-7000-8000-000000000097", nil)
 
-		w := doRequest(t, jpyDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, jpyDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 
 		require.Equal(t, http.StatusBadGateway, w.Code)
 		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
@@ -647,7 +544,7 @@ prices:
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-2", PageURL: "https://pay.example/inv-2"}, nil)
 		svc.On("AttachInvoice", mock.Anything, "018f4e3a-0000-7000-8000-000000000096", mock.Anything).Return(errors.New("db down"))
 
-		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 
 		require.Equal(t, http.StatusBadGateway, w.Code)
 		assert.JSONEq(t, `{"error":"bad gateway"}`, w.Body.String())
@@ -675,8 +572,7 @@ prices:
 			return inv.Amount == 4200
 		})).Return(nil)
 
-		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"spring15",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, promoDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "promo_code": "spring15", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -690,9 +586,7 @@ prices:
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"TEN",
-			"attributes":{"display_color":"red"},
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"ua","city":"X","address":"Y"}`)
+		w := doRequest(t, promoDataDir, svc, mb, `{"items": [{"product_id": "widget", "attributes": {"display_color": "red"}, "qty": 1}], "lang": "en", "promo_code": "TEN", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "ua", "city": "X", "address": "Y"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -700,8 +594,7 @@ prices:
 		svc := &orderServiceMock{}
 		mb := &monobankClientMock{}
 
-		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"NOPE",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, promoDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "promo_code": "NOPE", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 		assert.JSONEq(t, `{"error":"invalid promo code"}`, w.Body.String())
 		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
@@ -713,8 +606,7 @@ prices:
 		defer svc.AssertExpectations(t)
 		svc.On("Submit", mock.Anything, mock.Anything).Return("", order.ErrPromoCodeUsed)
 
-		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"SPRING15",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, promoDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "promo_code": "SPRING15", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 		assert.JSONEq(t, `{"error":"promo code already used"}`, w.Body.String())
 		mb.AssertNotCalled(t, "CreateInvoice", mock.Anything, mock.Anything)
@@ -730,8 +622,7 @@ prices:
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, promoDataDir, svc, mb, `{"product_id":"widget","lang":"en","promo_code":"",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, promoDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "promo_code": "", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
@@ -748,9 +639,7 @@ prices:
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en",
-			"meta_fbp":"fb.1.1761400000000.123456789","meta_fbc":"fb.1.1761400000000.IwAR0abc",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`,
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "meta_fbp": "fb.1.1761400000000.123456789", "meta_fbc": "fb.1.1761400000000.IwAR0abc", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`,
 			"CF-Connecting-IP", "203.0.113.7", "User-Agent", "Mozilla/5.0 (iPhone)")
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
@@ -765,12 +654,105 @@ prices:
 		mb.On("CreateInvoice", mock.Anything, mock.Anything).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
 		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-		w := doRequest(t, baseDataDir, svc, mb, `{"product_id":"widget","lang":"en",
-			"ga_client_id":"1234567890.1761400000","ga_session_id":"1761400000",
-			"first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`)
+		w := doRequest(t, baseDataDir, svc, mb, `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "ga_client_id": "1234567890.1761400000", "ga_session_id": "1761400000", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`)
 		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 
+	// Cart: widget (49.99 USD, promo codes), gadget (49.99 USD, no promo codes),
+	// euro (EUR-priced).
+	cartDataDir := main.TempDir()
+	for id, y := range map[string]string{
+		"widget": testProductWithAttrPricesYAML + testPromoCodesYAML,
+		"gadget": testProductYAML,
+		"euro":   strings.Replace(testProductYAML, "currency: USD", "currency: EUR", 1),
+	} {
+		dir := filepath.Join(cartDataDir, "products", id)
+		require.NoError(main, os.MkdirAll(dir, 0755))
+		require.NoError(main, os.WriteFile(filepath.Join(dir, "product.yaml"), []byte(y), 0644))
+	}
+	cartBody := func(items, promo string) string {
+		return `{"items": ` + items + `, "lang": "en", "promo_code": "` + promo + `", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`
+	}
+
+	main.Run("CartPricesEveryItemTimesQty", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.Price == 4999*2+4999*3 && o.Promo == nil && len(o.Items) == 2 &&
+				o.Items[0].ProductID == "widget" && o.Items[0].Qty == 2 && o.Items[0].Price == 4999 &&
+				o.Items[1].ProductID == "gadget" && o.Items[1].Qty == 3 && o.Items[1].Price == 4999
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			b := req.MerchantPaymInfo.BasketOrder
+			return req.Amount == 24995 && len(b) == 2 &&
+				b[0].Code == "widget" && b[0].Qty == 2 && b[0].Sum == 4999 && b[0].Total == 9998 &&
+				b[1].Code == "gadget" && b[1].Qty == 3 && b[1].Sum == 4999 && b[1].Total == 14997
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.MatchedBy(func(inv order.Invoice) bool {
+			return inv.Amount == 24995
+		})).Return(nil)
+
+		w := doRequest(t, cartDataDir, svc, mb, cartBody(`[{"product_id": "widget", "qty": 2}, {"product_id": "gadget", "qty": 3}]`, ""))
+		assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	})
+
+	main.Run("CartPromoDiscountsOnlyMatchingItemsPerUnit", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		defer svc.AssertExpectations(t)
+		defer mb.AssertExpectations(t)
+		// widget: 49.99 −15% → 42.00 per unit, 7.99 off each; gadget has no SPRING15.
+		svc.On("Submit", mock.Anything, mock.MatchedBy(func(o order.Order) bool {
+			return o.Price == 8400+14997 &&
+				*o.Promo == order.Promo{Code: "SPRING15", Percent: 15, Discount: 1598} &&
+				o.Items[0].Discount == 1598 && o.Items[1].Discount == 0
+		})).Return("018f4e3a-0000-7000-8000-000000000001", nil)
+		mb.On("CreateInvoice", mock.Anything, mock.MatchedBy(func(req monobank.CreateInvoiceRequest) bool {
+			b := req.MerchantPaymInfo.BasketOrder
+			return req.Amount == 23397 && b[0].Sum == 4200 && b[0].Total == 8400 && b[1].Total == 14997
+		})).Return(&monobank.CreateInvoiceResponse{InvoiceID: "inv-1", PageURL: "https://pay.example/inv-1"}, nil)
+		svc.On("AttachInvoice", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		w := doRequest(t, cartDataDir, svc, mb, cartBody(`[{"product_id": "widget", "qty": 2}, {"product_id": "gadget", "qty": 3}]`, "spring15"))
+		assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	})
+
+	main.Run("CartPromoMatchingNoItemReturns400", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		w := doRequest(t, cartDataDir, svc, mb, cartBody(`[{"product_id": "gadget", "qty": 1}]`, "SPRING15"))
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"invalid promo code"}`, w.Body.String())
+		svc.AssertNotCalled(t, "Submit", mock.Anything, mock.Anything)
+	})
+
+	main.Run("CartMixedCurrenciesReturns400", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		w := doRequest(t, cartDataDir, svc, mb, cartBody(`[{"product_id": "gadget", "qty": 1}, {"product_id": "euro", "qty": 1}]`, ""))
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"items have different currencies"}`, w.Body.String())
+	})
+
+	main.Run("CartInvalidQtyReturns400", func(t *testing.T) {
+		for _, qty := range []string{"0", "-1", "100"} {
+			svc := &orderServiceMock{}
+			mb := &monobankClientMock{}
+			w := doRequest(t, cartDataDir, svc, mb, cartBody(`[{"product_id": "gadget", "qty": `+qty+`}]`, ""))
+			require.Equal(t, http.StatusBadRequest, w.Code, qty)
+			assert.JSONEq(t, `{"error":"invalid qty"}`, w.Body.String())
+		}
+	})
+
+	main.Run("CartWithoutItemsReturns400", func(t *testing.T) {
+		svc := &orderServiceMock{}
+		mb := &monobankClientMock{}
+		w := doRequest(t, cartDataDir, svc, mb, cartBody(`[]`, ""))
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		assert.JSONEq(t, `{"error":"items are required"}`, w.Body.String())
+	})
 }
 
 const testPromoCodesYAML = `promo_codes:

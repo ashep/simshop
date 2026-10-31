@@ -165,26 +165,30 @@ func (n *Notifier) sendWithRetry(ctx context.Context, evt order.NotificationEven
 // the sale is counted but not attributed to a traffic source.
 func buildPayload(rec *order.Record, name string, products productLookup) Payload {
 	value := float64(rec.Price) / 100
-	title := products.Title(rec.ProductID)
-	if title == "" {
-		title = rec.ProductID
-	}
-	variants := make([]string, 0, len(rec.Attrs))
-	for _, a := range rec.Attrs {
-		variants = append(variants, a.Value)
+	items := make([]Item, len(rec.Items))
+	for i, it := range rec.Items {
+		title := products.Title(it.ProductID)
+		if title == "" {
+			title = it.ProductID
+		}
+		variants := make([]string, 0, len(it.Attrs))
+		for _, a := range it.Attrs {
+			variants = append(variants, a.Value)
+		}
+		items[i] = Item{
+			ItemID:      it.ProductID,
+			ItemName:    title,
+			ItemVariant: strings.Join(variants, ", "),
+			Price:       float64(it.Total()) / 100 / float64(it.Qty),
+			Quantity:    it.Qty,
+		}
 	}
 
 	params := map[string]any{
 		"transaction_id": rec.ID,
 		"value":          value,
 		"currency":       strings.ToUpper(rec.Currency),
-		"items": []Item{{
-			ItemID:      rec.ProductID,
-			ItemName:    title,
-			ItemVariant: strings.Join(variants, ", "),
-			Price:       value,
-			Quantity:    1,
-		}},
+		"items":          items,
 	}
 	if rec.Promo != nil {
 		params["coupon"] = rec.Promo.Code

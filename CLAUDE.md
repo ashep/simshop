@@ -140,6 +140,9 @@ under `@media (hover: hover)` so a tap doesn't stick. A position-following scrub
 
 `orders.lang` carries the checkout language from `req.Lang` on `POST /orders`; the email notifier resolves
 `emails/{status}/{lang}.md` from it. Tests seeding `orders` directly must set a non-empty `lang` (column NOT NULL).
+Optional `emails/layout.html` (`html/template`, `LayoutData`) wraps the rendered HTML only; the text part stays raw
+Markdown. Its URL attributes reject non-http(s) schemes (`#ZgotmplZ`), so `.SiteURL` is empty unless `.OrderURL` has
+a scheme and host.
 
 ## Packages
 
@@ -216,7 +219,9 @@ UpdateStatus.
 
 ### internal/orderdb
 
-`Writer.Write` (order header + order_attrs + initial `order_history`) is **transactional**.
+`Writer.Write` (order header + order_items + their order_attrs + initial `order_history`) is **transactional**.
+An order is a cart: `order.Item` lines (`position` keeps request order); `order_attrs.item_id` ties attrs to their
+line (`order_attrs.order_id` is kept for per-order queries). There is no order-level product id anymore.
 
 `Attr.Name`/`Attr.Value` store **rendered titles** in the customer's language, not raw IDs (orders stay
 self-documenting and immutable to YAML renames) — `handler.CreateOrder` resolves titles first.
@@ -289,10 +294,13 @@ Full request/response shapes live in `api/root.yaml` — this section covers cro
 - **`POST /orders`**: two-phase commit — tx1 `Submit` (`status='new'`, DB is truth before Monobank knows) →
   Monobank `CreateInvoice` (failure leaves order at `new`, 502, reconciled out of band) → tx2 `AttachInvoice`
   (`status='awaiting_payment'`). `country` is **request-supplied, not geo-detected** (drives price + stored
-  country); geo detection is for `ServeProductContent` only. **Promo code**: an invalid non-empty `promo_code` → 400
-  (never a silent full-price order); `product.Discount` works off the full subtotal incl. add-ons and
-  rounds the **discounted total** to whole units (no kopecks; integer math), and the storefront (`promoTotalCents`)
-  repeats the same formula — change both together. `orders.price` stays the charged
+  country); geo detection is for `ServeProductContent` only. Body carries `items` (1–20 lines, `qty` 1–99; limits
+  in `handler` consts **and** the OpenAPI spec), one currency per order. **Promo code**: applies to every line whose
+  product lists it; matching no line → 400 (never a silent full-price order). `product.Discount` runs on the **unit**
+  price incl. add-ons (rounded to whole units, integer math), × qty — so each Monobank basket line is an exact
+  `sum` (unit) × `qty` = `total`. The storefront (`unitDiscountCents` in the theme) repeats the same formula —
+  change both together. `orders.discount` is the sum of line discounts, `discount_percent` the first discounted
+  line's. `orders.price` stays the charged
   total; `promo_code`/`discount_percent`/`discount` are all-NULL or all-set (`orderdb.scanPromo` keys off
   `promo_code`). `order_invoices` has **no unique constraint on
   `order_id`** (re-issued invoices); PK is `(id, provider)` where `id` is the provider's invoice id — a mock

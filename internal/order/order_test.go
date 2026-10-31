@@ -76,7 +76,7 @@ func TestService(main *testing.T) {
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
-		o := Order{ProductID: "widget"}
+		o := Order{Items: []Item{{ProductID: "widget", Qty: 1}}}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 
 		svc := NewService(w, r, iw, iew, nil, nil)
@@ -91,7 +91,7 @@ func TestService(main *testing.T) {
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
-		o := Order{ProductID: "widget"}
+		o := Order{Items: []Item{{ProductID: "widget", Qty: 1}}}
 		w.On("Write", mock.Anything, o).Return("", errors.New("write failed"))
 
 		svc := NewService(w, r, iw, iew, nil, nil)
@@ -131,7 +131,7 @@ func TestService(main *testing.T) {
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
-		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000001", ProductID: "widget"}}
+		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000001", Items: []Item{{ProductID: "widget", Qty: 1}}}}
 		r.On("List", mock.Anything, ([]string)(nil)).Return(want, nil)
 
 		svc := NewService(w, r, iw, iew, nil, nil)
@@ -160,7 +160,7 @@ func TestService(main *testing.T) {
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
 		statuses := []string{"paid", "shipped"}
-		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000002", ProductID: "widget"}}
+		want := []Record{{ID: "018f4e3a-0000-7000-8000-000000000002", Items: []Item{{ProductID: "widget", Qty: 1}}}}
 		r.On("List", mock.Anything, statuses).Return(want, nil)
 
 		svc := NewService(w, r, iw, iew, nil, nil)
@@ -236,7 +236,7 @@ func TestService(main *testing.T) {
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
 		n := &notifierMock{}
-		o := Order{ProductID: "widget"}
+		o := Order{Items: []Item{{ProductID: "widget", Qty: 1}}}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000001", nil)
 		n.On("Notify", mock.Anything, NotificationEvent{
 			OrderID: "018f4e3a-0000-7000-8000-000000000001",
@@ -256,7 +256,7 @@ func TestService(main *testing.T) {
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
 		n := &notifierMock{}
-		o := Order{ProductID: "widget"}
+		o := Order{Items: []Item{{ProductID: "widget", Qty: 1}}}
 		w.On("Write", mock.Anything, o).Return("", errors.New("write failed"))
 
 		svc := NewService(w, r, iw, iew, nil, n)
@@ -270,7 +270,7 @@ func TestService(main *testing.T) {
 		r := &readerMock{}
 		iw := &invoiceWriterMock{}
 		iew := &invoiceEventWriterMock{}
-		o := Order{ProductID: "widget"}
+		o := Order{Items: []Item{{ProductID: "widget", Qty: 1}}}
 		w.On("Write", mock.Anything, o).Return("018f4e3a-0000-7000-8000-000000000099", nil)
 
 		svc := NewService(w, r, iw, iew, nil, nil)

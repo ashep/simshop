@@ -452,9 +452,11 @@ which always wins because the customer's money was returned.
 
 ```json
 {
-  "product_id": "oak-shelf",
+  "items": [
+    {"product_id": "oak-shelf", "attributes": {"finish": "dark"}, "qty": 2},
+    {"product_id": "oak-stool", "qty": 1}
+  ],
   "lang": "uk",
-  "attributes": {"finish": "dark"},
   "first_name": "Іван",
   "middle_name": "Іванович",
   "last_name": "Іваненко",
@@ -467,14 +469,24 @@ which always wins because the customer's money was returned.
 }
 ```
 
-Required fields: `product_id`, `lang`, `first_name`, `last_name`, `phone`, `email`, `country`, `city`, `address`.
-Optional: `middle_name`, `attributes`, `notes` (stored in the `customer_note` column), `promo_code`.
+Required fields: `items`, `lang`, `first_name`, `last_name`, `phone`, `email`, `country`, `city`, `address`.
+Optional: `middle_name`, `notes` (stored in the `customer_note` column), `promo_code`.
 
-**Promo codes.** When `promo_code` is non-empty it must be one of the product's `promo_codes` (case-insensitive),
-otherwise the request is rejected with HTTP 400 `invalid promo code` before anything is written — an order is never
-silently placed at full price. The percent is taken off the whole subtotal (base price plus add-ons) and the discounted
-total is rounded to whole currency units, half up (no kopecks): `total = round(subtotal × (100 − percent) / 100)`,
-`discount = subtotal − total` (e.g. 2499 at 15% → 2124, discount 375). The Monobank invoice is for that total. The
+**Items (cart).** `items` holds 1–20 lines, each `{product_id, qty, attributes?}` with `qty` 1–99. The same product
+may appear on several lines (e.g. with different attributes); lines are kept in request order. Every line is priced
+separately (unit price = base + attr add-ons for the buyer's `country`), and all lines must share one currency —
+otherwise 400 `items have different currencies`. An unknown product on any line is 404; an unavailable one, a bad
+attribute or a `qty` out of range (`invalid qty`) is 400. The Monobank basket gets one entry per line with `qty`,
+`sum` (unit price) and `total` (`sum × qty`).
+
+**Promo codes.** When `promo_code` is non-empty it is matched (case-insensitively) against each line's product
+`promo_codes` and applied to every line whose product lists it; lines whose product does not are charged in full. A
+code that matches no line is rejected with HTTP 400 `invalid promo code` before anything is written — an order is never
+silently placed at full price. The percent is taken off each unit price (base plus add-ons) and the discounted unit
+price is rounded to whole currency units, half up (no kopecks): `unit total = round(unit × (100 − percent) / 100)`,
+`discount = (unit − unit total) × qty` (e.g. 2499 at 15% → 2124, discount 375 per unit). Rounding per unit keeps every
+basket line an exact `sum × qty`. The order's `discount` is the sum over lines and `discount_percent` the first
+discounted line's percent. The Monobank invoice is for the discounted total. The
 storefront previews the discount via `GET /products/{id}/promo-codes/{code}`, which returns `{"code": "SPRING15",
 "discount_percent": 15}` (canonical spelling) or 404 `promo code not found` for an unknown product or code. That
 endpoint is per-IP rate-limited like `POST /orders` (separate limiter, same `rate_limit`).
@@ -492,16 +504,16 @@ discount show up in `GET /orders`, the Telegram new-order message, customer emai
 The supplied `country` must be a key of the `shop.countries` map defined in `shop.yaml`; otherwise the request
 is rejected with HTTP 400 `invalid country`. The server resolves the price from `product.yaml` using the
 request-supplied `country` against `prices.<country>` (falling back to `prices.default` when there is no matching
-key) plus per-attribute add-on prices resolved the same way, converts each amount to integer minor units (cents),
-renders the selected attributes into title pairs in the customer's language, and then executes the two-phase flow
+key) plus per-attribute add-on prices resolved the same way, per line, converts each amount to integer minor units
+(cents), renders the selected attributes into title pairs in the customer's language, and then executes the two-phase flow
 described above. The `country` column receives the request-supplied value verbatim; geo detection is no longer
 consulted at order time. Returns 201 on success, 400 for invalid input (including a missing or disallowed `country`),
 404 for an unknown product, and 502 if the DB write, the Monobank call, or the second DB transaction fails.
 
 #### Schema
 
-`orders` columns: `id` (uuid v7, default), `product_id`, `status` (enum, default `new`), `email`, `price` (int, minor
-units, charged total = base + sum of attr add-ons − discount), `promo_code`, `discount_percent`, `discount` (all
+`orders` columns: `id` (uuid v7, default), `status` (enum, default `new`), `email`, `price` (int, minor
+units, charged total = sum over items of `price × qty` − `discount`), `promo_code`, `discount_percent`, `discount` (all
 nullable — set together when a promo code was applied; `discount` in minor units), `currency`, `lang` (checkout language
 code captured from the request, drives downstream localized notifications), `first_name`, `middle_name` (nullable),
 `last_name`, `country`, `city`, `phone`, `address`, `admin_note` (nullable), `customer_note` (nullable),
@@ -510,12 +522,18 @@ code captured from the request, drives downstream localized notifications), `fir
 Meta Pixel cookies sent by the storefront), `client_ip`, `user_agent` (nullable; taken from the `POST /orders` request
 for Meta matching), `created_at`, `updated_at`.
 
-`order_attrs` columns: `order_id` (FK to `orders.id`), `attr_name`, `attr_value`, `attr_price` (int, minor units;
-the per-attribute add-on amount). One row per selected attribute on the order.
+`order_items` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `position` (0-based line order,
+unique per order), `product_id`, `qty` (> 0), `price` (int, minor units; unit price before discount = base + attr
+add-ons), `discount` (int, minor units; the promo discount for the whole line, 0 when none). One row per cart line.
+Migration `006` turned each pre-cart order into a single item with `qty` 1 and dropped `orders.product_id`.
+
+`order_attrs` columns: `order_id` (FK to `orders.id`), `item_id` (FK to `order_items.id`), `attr_name`,
+`attr_value`, `attr_price` (int, minor units; the per-attribute add-on amount). One row per selected attribute on an
+item.
 
 `order_history` columns: `id` (uuid v7, default), `order_id` (FK to `orders.id`), `status` (`order_status`,
 NOT NULL), `note` (nullable), `created_at`. A successfully created order has exactly two initial rows: one with
-`status = 'new'` written in the first transaction (alongside `orders` and `order_attrs`), and one with
+`status = 'new'` written in the first transaction (alongside `orders`, `order_items` and `order_attrs`), and one with
 `status = 'awaiting_payment'` written in the second transaction after the Monobank invoice is confirmed. Further rows
 are appended whenever a webhook event drives the order to a new payment state. `order_history` is the order-state
 transition log; the verbatim webhook body lives on `invoice_history.payload` instead, where it serves as the audit
@@ -541,7 +559,7 @@ Migrations are embedded under `internal/sql/` and applied automatically at start
 
 #### Listing orders
 
-`GET /orders` returns every persisted order, newest first, with the order header, all selected attributes, and the
+`GET /orders` returns every persisted order, newest first, with the order header, its items, and the
 full status history inlined into each record. It is intended for operator/admin tooling and is protected by a bearer
 token.
 
@@ -556,10 +574,11 @@ unconditionally on the same path, requests to `GET /orders` then receive HTTP 40
 exists, just not for `GET`) rather than 404.
 
 **Response:** a JSON array of order records. Each record carries the `orders` table fields (`id`, `status`,
-`product_id`, `email`, `price` in minor units, `currency`, `first_name`, `middle_name` (optional), `last_name`,
+`email`, `price` in minor units, `currency`, `first_name`, `middle_name` (optional), `last_name`,
 `country`, `city`, `phone`, `address`, `admin_note` (optional), `customer_note` (optional), `created_at`,
-`updated_at`) plus two inlined arrays: `attrs` — the rendered title pairs from `order_attrs` (one entry per selected
-attribute, each `{name, value, price}`) — and `history` — the timeline from `order_history` (one entry per status
+`updated_at`) plus inlined arrays: `items` — the cart lines from `order_items`, each `{product_id, qty, price,
+discount, attrs}` where `attrs` holds the rendered title pairs from `order_attrs` (each `{name, value, price}`) —, and
+`history` — the timeline from `order_history` (one entry per status
 change, each `{id, status, note (optional), created_at}`). Optional text fields are omitted from JSON when NULL.
 The verbatim provider payloads are not surfaced through this endpoint; they live on `invoice_history` for forensic
 inspection via the database.
@@ -679,8 +698,8 @@ rate_limit: 1
 - `server.public_url` — public HTTPS base URL of this service (e.g. `https://shop.example`). **Required** — empty
   value causes a startup error. Used to derive (a) the Monobank webhook URL, posted as `webHookUrl` on every
   `CreateInvoice` so each invoice records where to deliver status updates, fixed at
-  `<public_url>/monobank/webhook`; and (b) the Monobank basket-item `icon`, pointing at
-  `<public_url>/images/<product_id>/<preview>` when the product has at least one image with a non-empty `preview`,
+  `<public_url>/monobank/webhook`; and (b) each Monobank basket-item `icon`, pointing at
+  `<public_url>/images/<product_id>/<preview>` when the line's product has an image with a non-empty `preview`,
   which the bank app renders next to the line on the payment screen. A trailing slash on `public_url` is trimmed.
 - `data_dir` — root directory containing catalog files (default: `"./data"`).
 - `database.dsn` — PostgreSQL DSN for the orders database. Required: the service runs the embedded migrations
@@ -795,15 +814,26 @@ subject: Order {{ .OrderShortID }} has been paid
 
 Hi {{ .CustomerName }},
 
-Thank you for your order **{{ .ProductTitle }}** ({{ .Total }}).
+Thank you for your order ({{ .Total }}):
+{{ range .Items }}
+- {{ .Title }} × {{ .Qty }}
+{{- end }}
 
 Track it here: <{{ .OrderURL }}>
 ````
 
 Available template variables: `.OrderID` (full UUID), `.OrderShortID` (first 13 chars — UUIDv7 timestamp prefix),
-`.CustomerName`, `.ProductTitle` (rendered title in the customer's language), `.Attrs` (slice of `{Name, Value}`),
+`.CustomerName`, `.Items` (cart lines, each `{Title, Qty, Attrs, Total}`: `Title` in the customer's language,
+`Attrs` a slice of `{Name, Value}`, `Total` the formatted line amount before discount),
 `.Total` (formatted, e.g. `"49.99 USD"`), `.StatusNote` (operator note, e.g. tracking number for `shipped`),
-`.ShopName` (in customer's language), `.OrderURL` (resolved from `mail.order_url`).
+`.ShopName` (in customer's language), `.OrderURL` (resolved from `mail.order_url`), `.SiteURL` (scheme and host of
+`.OrderURL`, no trailing slash — for absolute asset links).
+
+**Layout.** The Markdown body is rendered to bare HTML. An optional `{data_dir}/emails/layout.html` wraps it: an
+`html/template` that sees every variable above plus `.Subject`, `.Lang` and `.Content` (the rendered body), e.g.
+`<img src="{{ .SiteURL }}/assets/logo.png">…{{ .Content }}`. Put a `<style>` block in it to style the body's tables,
+links and so on; mail clients ignore external stylesheets. The plain-text part is always the raw Markdown. Raw HTML in
+templates is dropped by the Markdown renderer, so markup goes in the layout, not the `.md` files.
 
 **Languages.** The customer's checkout language is persisted on the order and used to look up
 `emails/{status}/{lang}.md`. If a language file is missing, the notifier falls back to `emails/{status}/en.md`.

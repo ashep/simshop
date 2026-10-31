@@ -129,6 +129,32 @@ subject: s
 		assert.Contains(t, html, "<em>italic</em>")
 	})
 
+	main.Run("LayoutWrapsHTMLBodyOnly", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTpl(t, dir, "paid", "uk", "---\nsubject: Order {{ .OrderShortID }}\n---\n**Hi** {{ .CustomerName }}")
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "layout.html"), []byte(
+			`<html lang="{{ .Lang }}"><title>{{ .Subject }}</title><img src="{{ .SiteURL }}/logo.png">{{ .Content }}</html>`,
+		), 0644))
+		store, err := LoadTemplates(dir)
+		require.NoError(t, err)
+
+		_, html, text, err := store.Render("paid", "uk", TemplateData{
+			OrderShortID: "abc", CustomerName: "Jane & Co", SiteURL: "https://shop.example",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, `<html lang="uk"><title>Order abc</title><img src="https://shop.example/logo.png">`+
+			"<p><strong>Hi</strong> Jane &amp; Co</p>\n</html>", html)
+		assert.Equal(t, "**Hi** Jane & Co", text)
+	})
+
+	main.Run("MalformedLayoutIsFatal", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "layout.html"), []byte("{{ .Content "), 0644))
+		_, err := LoadTemplates(dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "layout.html")
+	})
+
 	main.Run("ShippedRendersTrackingLineWhenSet", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "shipped"), 0755))
@@ -154,14 +180,14 @@ func TestTemplateData_AllFieldsExist(t *testing.T) {
 	// in the docs must exist in the struct; if any is renamed without
 	// updating this literal, the build breaks.
 	d := TemplateData{
-		OrderID: "x", OrderShortID: "x", CustomerName: "x", ProductTitle: "x",
+		OrderID: "x", OrderShortID: "x", CustomerName: "x",
 		Total: "x", StatusNote: "x", TrackingNumber: "x", ShopName: "x", OrderURL: "x",
-		Attrs: nil,
+		Items: []TemplateItem{{Title: "x", Qty: 1, Attrs: nil, Total: "x"}},
 	}
 	assert.Equal(t, "x", d.OrderID)
 	assert.Equal(t, "x", d.OrderShortID)
 	assert.Equal(t, "x", d.CustomerName)
-	assert.Equal(t, "x", d.ProductTitle)
+	assert.Equal(t, "x", d.Items[0].Title)
 	assert.Equal(t, "x", d.Total)
 	assert.Equal(t, "x", d.StatusNote)
 	assert.Equal(t, "x", d.TrackingNumber)

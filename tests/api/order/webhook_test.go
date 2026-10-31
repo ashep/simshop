@@ -100,7 +100,7 @@ func TestMonobankWebhook(main *testing.T) {
 
 	createOrder := func(t *testing.T) string {
 		t.Helper()
-		body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+		body := []byte(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "a", "last_name": "b", "phone": "+1", "email": "a@b", "country": "ua", "city": "c", "address": "d"}`)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
@@ -329,7 +329,7 @@ func TestMonobankWebhook(main *testing.T) {
 			cfg.RateLimit = -1
 		})
 		captureApp.Start()
-		body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+		body := []byte(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "a", "last_name": "b", "phone": "+1", "email": "a@b", "country": "ua", "city": "c", "address": "d"}`)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, captureApp.URL("/orders"), bytes.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
@@ -373,7 +373,7 @@ func TestMonobankWebhook_Telegram(main *testing.T) {
 
 	createOrder := func(t *testing.T) string {
 		t.Helper()
-		body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+		body := []byte(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "a", "last_name": "b", "phone": "+1", "email": "a@b", "country": "ua", "city": "c", "address": "d"}`)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, a.URL("/orders"), bytes.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")

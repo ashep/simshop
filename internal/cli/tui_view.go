@@ -247,7 +247,7 @@ func (m *tuiModel) viewRow(o Order, cols []column, sel bool) string {
 		{customerName(o), styleValue},
 		{o.Phone, styleValue},
 		{o.City, styleValue},
-		{o.ProductID, styleValue},
+		{o.Products(), styleValue},
 		{formatPrice(o.Price, o.Currency), styleMoney},
 	}
 
@@ -389,13 +389,15 @@ func renderDetail(o Order, width int) string {
 	kv("Tracking", deref(o.TrackingNumber))
 
 	b.WriteString(styleSection.Render("Order") + "\n")
-	kv("Product", o.ProductID)
-	for _, a := range o.Attrs {
-		v := a.Value
-		if a.Price != 0 {
-			v += styleDim.Render("  +" + formatPrice(a.Price, o.Currency))
+	for _, it := range o.Items {
+		kv("Product", it.Label()+styleDim.Render("  "+formatPrice(it.Price*it.Qty, o.Currency)))
+		for _, a := range it.Attrs {
+			v := a.Value
+			if a.Price != 0 {
+				v += styleDim.Render("  +" + formatPrice(a.Price, o.Currency))
+			}
+			kv("  "+a.Name, v)
 		}
-		kv("  "+a.Name, v)
 	}
 	if o.PromoCode != nil && o.DiscountPercent != nil && o.Discount != nil {
 		kv("Promo", fmt.Sprintf("%s (−%d%%, −%s)", *o.PromoCode, *o.DiscountPercent, formatPrice(*o.Discount, o.Currency)))

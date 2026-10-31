@@ -38,10 +38,10 @@ func key(s string) tea.KeyMsg {
 func TestTUI(main *testing.T) {
 	orders := []Order{
 		{ID: "019e9de8-c3c0-7000-8000-000000000001", Status: "paid", FirstName: "Ivan", LastName: "Petrenko",
-			Phone: "+380501112233", City: "Kyiv", ProductID: "mug", Price: 45000, Currency: "uah",
+			Phone: "+380501112233", City: "Kyiv", Items: []OrderItem{{ProductID: "mug", Qty: 1}}, Price: 45000, Currency: "uah",
 			CreatedAt: "2026-10-20T10:00:00Z"},
 		{ID: "019e9de8-c3c0-7000-8000-000000000002", Status: "processing", FirstName: "Olena", LastName: "Koval",
-			Phone: "+380671234567", City: "Lviv", ProductID: "bowl", Price: 99000, Currency: "uah",
+			Phone: "+380671234567", City: "Lviv", Items: []OrderItem{{ProductID: "bowl", Qty: 2}}, Price: 99000, Currency: "uah",
 			CreatedAt: "2026-10-21T10:00:00Z"},
 	}
 

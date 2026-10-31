@@ -39,10 +39,21 @@ type createOrderResponse struct {
 	PaymentURL string `json:"payment_url"`
 }
 
+// maxOrderItems and maxItemQty bound a cart; the OpenAPI spec mirrors them.
+const (
+	maxOrderItems = 20
+	maxItemQty    = 99
+)
+
+type createOrderItem struct {
+	ProductID  string            `json:"product_id"`
+	Attributes map[string]string `json:"attributes"`
+	Qty        int               `json:"qty"`
+}
+
 type createOrderRequest struct {
-	ProductID   string            `json:"product_id"`
+	Items       []createOrderItem `json:"items"`
 	Lang        string            `json:"lang"`
-	Attributes  map[string]string `json:"attributes"`
 	FirstName   string            `json:"first_name"`
 	MiddleName  string            `json:"middle_name"`
 	LastName    string            `json:"last_name"`
@@ -59,6 +70,13 @@ type createOrderRequest struct {
 	MetaFBC     string            `json:"meta_fbc"`
 }
 
+// pricedItem is a validated cart line with what the invoice needs about it.
+type pricedItem struct {
+	item     order.Item
+	product  product.Product
+	currency string
+}
+
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -67,8 +85,11 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch {
-	case req.ProductID == "":
-		h.writeError(w, &BadRequestError{Reason: "product_id is required"})
+	case len(req.Items) == 0:
+		h.writeError(w, &BadRequestError{Reason: "items are required"})
+		return
+	case len(req.Items) > maxOrderItems:
+		h.writeError(w, &BadRequestError{Reason: "too many items"})
 		return
 	case req.Lang == "":
 		h.writeError(w, &BadRequestError{Reason: "lang is required"})
@@ -106,99 +127,48 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ProductID != filepath.Base(req.ProductID) || req.ProductID == "." {
-		h.writeError(w, &NotFoundError{Reason: "product not found"})
-		return
-	}
-
-	data, err := os.ReadFile(filepath.Join(h.dataDir, "products", req.ProductID, "product.yaml"))
-	if stderrors.Is(err, fs.ErrNotExist) {
-		h.writeError(w, &NotFoundError{Reason: "product not found"})
-		return
-	}
-	if err != nil {
-		h.writeError(w, err)
-		return
-	}
-
-	var p product.Product
-	if err := yaml.Unmarshal(data, &p); err != nil {
-		h.writeError(w, err)
-		return
-	}
-
-	if p.Available != nil && !*p.Available {
-		h.writeError(w, &BadRequestError{Reason: "product not available"})
-		return
-	}
-
-	if _, ok := p.Name[req.Lang]; !ok {
-		h.writeError(w, &BadRequestError{Reason: "language not found"})
-		return
-	}
-
-	attrKeys := make([]string, 0, len(req.Attributes))
-	for k := range req.Attributes {
-		attrKeys = append(attrKeys, k)
-	}
-	sort.Strings(attrKeys)
-
-	country := req.Country
-	price, ok := p.Prices[country]
-	if !ok {
-		price = p.Prices["default"]
-	}
-
-	totalCents := int(math.Round(price.Value * 100))
-	attrs := make([]order.Attr, 0, len(attrKeys))
-	for _, attrID := range attrKeys {
-		valueID := req.Attributes[attrID]
-
-		langAttrs, ok := p.Attrs[attrID]
-		if !ok {
-			h.writeError(w, &BadRequestError{Reason: fmt.Sprintf("unknown attribute: %s", attrID)})
+	lines := make([]pricedItem, 0, len(req.Items))
+	for _, ri := range req.Items {
+		line, err := h.priceItem(ri, req.Lang, req.Country)
+		if err != nil {
+			h.writeError(w, err)
 			return
 		}
-		attrLang, ok := langAttrs[req.Lang]
-		if !ok {
-			h.writeError(w, &BadRequestError{Reason: fmt.Sprintf("no %q language for attribute: %s", req.Lang, attrID)})
+		if len(lines) > 0 && line.currency != lines[0].currency {
+			h.writeError(w, &BadRequestError{Reason: "items have different currencies"})
 			return
 		}
-		attrVal, ok := attrLang.Values[valueID]
-		if !ok {
-			h.writeError(w, &BadRequestError{Reason: fmt.Sprintf("unknown value %q for attribute: %s", valueID, attrID)})
-			return
-		}
-
-		var addonValue float64
-		if valuePrices, ok := p.AttrPrices[attrID]; ok {
-			if countryPrices, ok := valuePrices[valueID]; ok {
-				addonValue, ok = countryPrices[country]
-				if !ok {
-					addonValue = countryPrices["default"]
-				}
-			}
-		}
-		addonCents := int(math.Round(addonValue * 100))
-		totalCents += addonCents
-
-		attrs = append(attrs, order.Attr{
-			Name:  attrLang.Title,
-			Value: attrVal.Title,
-			Price: addonCents,
-		})
+		lines = append(lines, line)
 	}
+	currency := lines[0].currency
 
+	// A promo code applies to every item whose product lists it; the discount
+	// is taken per unit so each line stays unit price × qty on the invoice.
 	var promo *order.Promo
 	if strings.TrimSpace(req.PromoCode) != "" {
-		code, percent, ok := p.LookupPromo(req.PromoCode)
-		if !ok {
+		for i := range lines {
+			code, percent, ok := lines[i].product.LookupPromo(req.PromoCode)
+			if !ok {
+				continue
+			}
+			it := &lines[i].item
+			it.Discount = product.Discount(it.Price, percent) * it.Qty
+			if promo == nil {
+				promo = &order.Promo{Code: code, Percent: percent}
+			}
+			promo.Discount += it.Discount
+		}
+		if promo == nil {
 			h.writeError(w, &BadRequestError{Reason: "invalid promo code"})
 			return
 		}
-		discount := product.Discount(totalCents, percent)
-		totalCents -= discount
-		promo = &order.Promo{Code: code, Percent: percent, Discount: discount}
+	}
+
+	items := make([]order.Item, len(lines))
+	totalCents := 0
+	for i, line := range lines {
+		items[i] = line.item
+		totalCents += line.item.Total()
 	}
 
 	if totalCents <= 0 {
@@ -207,19 +177,18 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	o := order.Order{
-		ProductID:    req.ProductID,
+		Items:        items,
 		Email:        req.Email,
 		Price:        totalCents,
-		Currency:     price.Currency,
+		Currency:     currency,
 		Lang:         req.Lang,
 		FirstName:    req.FirstName,
 		MiddleName:   req.MiddleName,
 		LastName:     req.LastName,
-		Country:      country,
+		Country:      req.Country,
 		City:         req.City,
 		Phone:        req.Phone,
 		Address:      req.Address,
-		Attrs:        attrs,
 		CustomerNote: req.Notes,
 		Promo:        promo,
 		GAClientID:   req.GAClientID,
@@ -241,7 +210,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ccy, err := monobank.MapCurrency(price.Currency)
+	ccy, err := monobank.MapCurrency(currency)
 	if err != nil {
 		h.logMonobankError(err, orderID)
 		h.writeError(w, &BadGatewayError{Reason: "bad gateway"})
@@ -256,18 +225,30 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	productTitle := p.Name[req.Lang]
-	if len(attrs) > 0 {
-		parts := make([]string, 0, len(attrs))
-		for _, a := range attrs {
-			parts = append(parts, fmt.Sprintf("%s: %s", a.Name, a.Value))
+	basket := make([]monobank.BasketItem, len(lines))
+	for i, line := range lines {
+		it := line.item
+		title := line.product.Name[req.Lang]
+		if len(it.Attrs) > 0 {
+			parts := make([]string, 0, len(it.Attrs))
+			for _, a := range it.Attrs {
+				parts = append(parts, fmt.Sprintf("%s: %s", a.Name, a.Value))
+			}
+			title = fmt.Sprintf("%s (%s)", title, strings.Join(parts, ", "))
 		}
-		productTitle = fmt.Sprintf("%s (%s)", productTitle, strings.Join(parts, ", "))
-	}
-
-	var icon string
-	if len(p.Images) > 0 && p.Images[0].Preview != "" {
-		icon = fmt.Sprintf("%s/images/%s/%s", h.publicURL, req.ProductID, p.Images[0].Preview)
+		var icon string
+		if len(line.product.Images) > 0 && line.product.Images[0].Preview != "" {
+			icon = fmt.Sprintf("%s/images/%s/%s", h.publicURL, it.ProductID, line.product.Images[0].Preview)
+		}
+		basket[i] = monobank.BasketItem{
+			Name:  title,
+			Qty:   it.Qty,
+			Sum:   it.Total() / it.Qty,
+			Total: it.Total(),
+			Icon:  icon,
+			Code:  it.ProductID,
+			Tax:   h.taxIDs,
+		}
 	}
 
 	inv, err := h.monobank.CreateInvoice(r.Context(), monobank.CreateInvoiceRequest{
@@ -276,7 +257,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		MerchantPaymInfo: monobank.MerchantPaymInfo{
 			Reference:   orderID,
 			Destination: destination,
-			BasketOrder: []monobank.BasketItem{{Name: productTitle, Qty: 1, Sum: totalCents, Icon: icon, Code: req.ProductID, Tax: h.taxIDs}},
+			BasketOrder: basket,
 		},
 		RedirectURL: redirect,
 		WebHookURL:  h.webhookURL,
@@ -292,7 +273,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		ID:       inv.InvoiceID,
 		PageURL:  inv.PageURL,
 		Amount:   totalCents,
-		Currency: price.Currency,
+		Currency: currency,
 	}); err != nil {
 		h.l.Error().Err(err).
 			Str("order_id", orderID).
@@ -307,6 +288,95 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		h.l.Error().Err(err).Msg("write create order response failed")
 		h.writeError(w, err)
 	}
+}
+
+// priceItem loads ri's product and prices one unit of it for country, with the
+// selected attrs. The returned error is ready for writeError.
+func (h *Handler) priceItem(ri createOrderItem, lang, country string) (pricedItem, error) {
+	if ri.ProductID == "" {
+		return pricedItem{}, &BadRequestError{Reason: "product_id is required"}
+	}
+	if ri.Qty < 1 || ri.Qty > maxItemQty {
+		return pricedItem{}, &BadRequestError{Reason: "invalid qty"}
+	}
+	if ri.ProductID != filepath.Base(ri.ProductID) || ri.ProductID == "." {
+		return pricedItem{}, &NotFoundError{Reason: "product not found"}
+	}
+
+	data, err := os.ReadFile(filepath.Join(h.dataDir, "products", ri.ProductID, "product.yaml"))
+	if stderrors.Is(err, fs.ErrNotExist) {
+		return pricedItem{}, &NotFoundError{Reason: "product not found"}
+	}
+	if err != nil {
+		return pricedItem{}, err
+	}
+
+	var p product.Product
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return pricedItem{}, err
+	}
+
+	if p.Available != nil && !*p.Available {
+		return pricedItem{}, &BadRequestError{Reason: "product not available"}
+	}
+
+	if _, ok := p.Name[lang]; !ok {
+		return pricedItem{}, &BadRequestError{Reason: "language not found"}
+	}
+
+	attrKeys := make([]string, 0, len(ri.Attributes))
+	for k := range ri.Attributes {
+		attrKeys = append(attrKeys, k)
+	}
+	sort.Strings(attrKeys)
+
+	price, ok := p.Prices[country]
+	if !ok {
+		price = p.Prices["default"]
+	}
+
+	unitCents := int(math.Round(price.Value * 100))
+	attrs := make([]order.Attr, 0, len(attrKeys))
+	for _, attrID := range attrKeys {
+		valueID := ri.Attributes[attrID]
+
+		langAttrs, ok := p.Attrs[attrID]
+		if !ok {
+			return pricedItem{}, &BadRequestError{Reason: fmt.Sprintf("unknown attribute: %s", attrID)}
+		}
+		attrLang, ok := langAttrs[lang]
+		if !ok {
+			return pricedItem{}, &BadRequestError{Reason: fmt.Sprintf("no %q language for attribute: %s", lang, attrID)}
+		}
+		attrVal, ok := attrLang.Values[valueID]
+		if !ok {
+			return pricedItem{}, &BadRequestError{Reason: fmt.Sprintf("unknown value %q for attribute: %s", valueID, attrID)}
+		}
+
+		var addonValue float64
+		if valuePrices, ok := p.AttrPrices[attrID]; ok {
+			if countryPrices, ok := valuePrices[valueID]; ok {
+				addonValue, ok = countryPrices[country]
+				if !ok {
+					addonValue = countryPrices["default"]
+				}
+			}
+		}
+		addonCents := int(math.Round(addonValue * 100))
+		unitCents += addonCents
+
+		attrs = append(attrs, order.Attr{
+			Name:  attrLang.Title,
+			Value: attrVal.Title,
+			Price: addonCents,
+		})
+	}
+
+	return pricedItem{
+		item:     order.Item{ProductID: ri.ProductID, Qty: ri.Qty, Price: unitCents, Attrs: attrs},
+		product:  p,
+		currency: price.Currency,
+	}, nil
 }
 
 // logMonobankError emits a structured error log including any *monobank.APIError

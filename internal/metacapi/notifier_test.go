@@ -63,7 +63,7 @@ func sha(s string) string {
 func sampleRecord() *order.Record {
 	return &order.Record{
 		ID:        "018f4e3a-0000-7000-8000-000000000001",
-		ProductID: "oak-shelf",
+		Items:     []order.Item{{ProductID: "oak-shelf", Qty: 1, Price: 240000}},
 		Price:     240000,
 		Currency:  "uah",
 		Email:     "  Ivan@Example.COM ",
@@ -129,6 +129,19 @@ func TestNotifier(main *testing.T) {
 			ClientIPAddress: "203.0.113.7",
 			ClientUserAgent: "Mozilla/5.0 (iPhone)",
 		}, e.UserData)
+	})
+
+	main.Run("CartListsDistinctProductsAndCountsUnits", func(t *testing.T) {
+		rec := sampleRecord()
+		rec.Items = append(rec.Items,
+			order.Item{ProductID: "lamp", Qty: 2, Price: 1000},
+			order.Item{ProductID: "oak-shelf", Qty: 3, Price: 240000})
+		s := &fakeSender{}
+		runNotifier(t, rec, s, order.NotificationEvent{OrderID: rec.ID, Status: "paid"})
+
+		require.Len(t, s.calls, 1)
+		assert.Equal(t, []string{"oak-shelf", "lamp"}, s.calls[0][0].CustomData.ContentIDs)
+		assert.Equal(t, 6, s.calls[0][0].CustomData.NumItems)
 	})
 
 	main.Run("CityNormalizedToLettersOnly", func(t *testing.T) {

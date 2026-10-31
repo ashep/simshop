@@ -639,10 +639,28 @@ components:
           type: integer
           minimum: 1
           maximum: 99
-    CreateOrderRequest:
+    CreateOrderItem:
       type: object
       required:
         - product_id
+        - qty
+      properties:
+        product_id:
+          type: string
+        attributes:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 99
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - items
         - lang
         - first_name
         - last_name
@@ -652,15 +670,17 @@ components:
         - city
         - address
       properties:
-        product_id:
-          type: string
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: >-
+            Cart lines. The same product may appear more than once (e.g. with different attributes). All items
+            must be priced in one currency for the buyer's country.
+          items:
+            $ref: '#/components/schemas/CreateOrderItem'
         lang:
           type: string
-        attributes:
-          type: object
-          nullable: true
-          additionalProperties:
-            type: string
         first_name:
           type: string
         middle_name:
@@ -682,7 +702,8 @@ components:
           type: string
           nullable: true
           description: >-
-            Optional product promo code; matched case-insensitively. Unknown code → 400 "invalid promo code".
+            Optional promo code; matched case-insensitively against each item's product promo codes and applied
+            (per unit) to every item whose product lists it. Matching no item → 400 "invalid promo code".
             A code already used by a non-cancelled order with the same phone digits → 400 "promo code already used".
         notes:
           type: string
@@ -1046,6 +1067,25 @@ components:
         name:
           type: string
 
+    OrderItem:
+      type: object
+      required: [product_id, qty, price, discount, attrs]
+      properties:
+        product_id:
+          type: string
+        qty:
+          type: integer
+        price:
+          type: integer
+          description: Unit price in minor units before discount (base price + attr add-ons).
+        discount:
+          type: integer
+          description: Promo discount for the whole line in minor units; 0 when none.
+        attrs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderAttr'
+
     OrderAttr:
       type: object
       required: [name, value, price]
@@ -1097,7 +1137,6 @@ components:
       type: object
       required:
         - id
-        - product_id
         - status
         - email
         - price
@@ -1111,15 +1150,13 @@ components:
         - address
         - created_at
         - updated_at
-        - attrs
+        - items
         - history
         - invoices
       properties:
         id:
           type: string
           format: uuid
-        product_id:
-          type: string
         status:
           $ref: '#/components/schemas/OrderStatus'
         email:
@@ -1171,10 +1208,10 @@ components:
         updated_at:
           type: string
           format: date-time
-        attrs:
+        items:
           type: array
           items:
-            $ref: '#/components/schemas/OrderAttr'
+            $ref: '#/components/schemas/OrderItem'
         history:
           type: array
           items:

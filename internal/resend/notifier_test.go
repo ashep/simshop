@@ -101,12 +101,15 @@ func newTestNotifier(t *testing.T, send *fakeSender, rd *fakeReader, tpl *fakeTe
 
 func sampleRecord() *order.Record {
 	return &order.Record{
-		ID:        "018f4e3a-0000-7000-8000-000000000099",
-		ProductID: "widget", Status: "paid", Email: "buyer@example.com",
+		ID:     "018f4e3a-0000-7000-8000-000000000099",
+		Status: "paid", Email: "buyer@example.com",
 		Price: 4900, Currency: "USD", Lang: "en",
 		FirstName: "Jane", LastName: "Doe",
 		Country: "us", City: "NYC", Phone: "+1", Address: "1 St",
-		Attrs: []order.Attr{}, History: []order.HistoryEntry{}, Invoices: []order.Invoice{},
+		Items: []order.Item{
+			{ProductID: "widget", Qty: 1, Price: 4900, Attrs: []order.Attr{}},
+		},
+		History: []order.HistoryEntry{}, Invoices: []order.Invoice{},
 	}
 }
 
@@ -133,10 +136,12 @@ func TestNotifier(main *testing.T) {
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000099", d.OrderID)
 		assert.Equal(t, "018f4e3a-0000", d.OrderShortID)
 		assert.Equal(t, "Jane Doe", d.CustomerName)
-		assert.Equal(t, "Widget", d.ProductTitle)
+		require.Len(t, d.Items, 1)
+		assert.Equal(t, TemplateItem{Title: "Widget", Qty: 1, Attrs: []order.Attr{}, Total: "49.00 USD"}, d.Items[0])
 		assert.Equal(t, "49.00 USD", d.Total)
 		assert.Equal(t, "My Shop", d.ShopName)
 		assert.Equal(t, "https://shop.example/order?id=018f4e3a-0000-7000-8000-000000000099", d.OrderURL)
+		assert.Equal(t, "https://shop.example", d.SiteURL)
 	})
 
 	main.Run("PromoPopulatesTemplateData", func(t *testing.T) {

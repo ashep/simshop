@@ -34,10 +34,10 @@ func seedOrderInStatus(t *testing.T, dsn, status, lang string) string {
 	var id string
 	err = pool.QueryRow(t.Context(), `
         INSERT INTO orders (
-            product_id, status, email, price, currency, lang,
+            status, email, price, currency, lang,
             first_name, last_name, country, city, phone, address
         ) VALUES (
-            'widget', $1::order_status, 'c@e', 1000, 'UAH', $2,
+            $1::order_status, 'c@e', 1000, 'UAH', $2,
             'F', 'L', 'ua', 'Kyiv', '+380', 'Some 1'
         ) RETURNING id::text`, status, lang).Scan(&id)
 	require.NoError(t, err)

@@ -38,20 +38,21 @@ type MerchantPaymInfo struct {
 	BasketOrder []BasketItem
 }
 
-// BasketItem is a single line item in MerchantPaymInfo.BasketOrder. The sum is
-// the total for this line in minor units (not the unit price); the sum of all
-// BasketItem.Sum values must equal the invoice's Amount. Code is the merchant's
+// BasketItem is a single line item in MerchantPaymInfo.BasketOrder. Sum is the
+// unit price and Total the line total (Sum × Qty), both in minor units; the sum
+// of all BasketItem.Total values must equal the invoice's Amount. Code is the merchant's
 // internal SKU; Monobank rejects items without it as `INVALID_MERCHANT_PAYM_INFO`
 // when fiscalization is enabled on the merchant account. Tax is the list of
 // tax-registration IDs (merchant-specific, configured in the Monobank business
 // cabinet) — also required when fiscalization is enabled.
 type BasketItem struct {
-	Name string // human-readable, shown on the fiscal receipt
-	Qty  int    // quantity
-	Sum  int    // total for this line in minor units (kopecks/cents)
-	Icon string // optional public https URL to an item image shown in the bank app
-	Code string // merchant SKU / internal product code
-	Tax  []int  // merchant-side tax registration IDs
+	Name  string // human-readable, shown on the fiscal receipt
+	Qty   int    // quantity
+	Sum   int    // unit price in minor units (kopecks/cents)
+	Total int    // line total in minor units: Sum × Qty
+	Icon  string // optional public https URL to an item image shown in the bank app
+	Code  string // merchant SKU / internal product code
+	Tax   []int  // merchant-side tax registration IDs
 }
 
 // CreateInvoiceResponse is the parsed Monobank response.
@@ -117,12 +118,13 @@ type merchantPaymInfoPayload struct {
 }
 
 type basketItemPayload struct {
-	Name string `json:"name"`
-	Qty  int    `json:"qty"`
-	Sum  int    `json:"sum"`
-	Icon string `json:"icon,omitempty"`
-	Code string `json:"code"`
-	Tax  []int  `json:"tax"`
+	Name  string `json:"name"`
+	Qty   int    `json:"qty"`
+	Sum   int    `json:"sum"`
+	Total int    `json:"total,omitempty"`
+	Icon  string `json:"icon,omitempty"`
+	Code  string `json:"code"`
+	Tax   []int  `json:"tax"`
 }
 
 type createInvoiceResponseBody struct {

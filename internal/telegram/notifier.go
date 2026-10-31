@@ -251,15 +251,17 @@ func formatNewOrder(rec *order.Record, statusNote string, products productLookup
 	// client. UUIDs contain no MarkdownV2-reserved characters, so the id is
 	// inserted raw between backticks.
 	fmt.Fprintf(&b, "*New order* `%s`\n\n", rec.ID)
-	productLabel := rec.ProductID
-	if products != nil {
-		if title := products.Title(rec.ProductID); title != "" {
-			productLabel = title
+	for _, it := range rec.Items {
+		productLabel := it.ProductID
+		if products != nil {
+			if title := products.Title(it.ProductID); title != "" {
+				productLabel = title
+			}
 		}
-	}
-	fmt.Fprintf(&b, "*Product:* %s\n", mdv2Escape(productLabel))
-	for _, a := range rec.Attrs {
-		fmt.Fprintf(&b, "*%s:* %s\n", mdv2Escape(a.Name), mdv2Escape(a.Value))
+		fmt.Fprintf(&b, "*Product:* %s × %d\n", mdv2Escape(productLabel), it.Qty)
+		for _, a := range it.Attrs {
+			fmt.Fprintf(&b, "*%s:* %s\n", mdv2Escape(a.Name), mdv2Escape(a.Value))
+		}
 	}
 	if rec.Promo != nil {
 		fmt.Fprintf(&b, "*Promo code:* %s\n", mdv2Escape(rec.Promo.Label(rec.Currency)))

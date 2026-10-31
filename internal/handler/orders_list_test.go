@@ -46,9 +46,9 @@ func TestListOrders(main *testing.T) {
 		svc := &orderServiceMock{}
 		defer svc.AssertExpectations(t)
 		base := order.Record{
-			ProductID: "widget", Status: "new", Email: "a@b", Price: 4249, Currency: "USD", Lang: "en",
+			Status: "new", Email: "a@b", Price: 4249, Currency: "USD", Lang: "en",
 			FirstName: "A", LastName: "B", Country: "ua", City: "C", Phone: "1", Address: "D",
-			Attrs: []order.Attr{}, History: []order.HistoryEntry{}, Invoices: []order.Invoice{},
+			Items: []order.Item{}, History: []order.HistoryEntry{}, Invoices: []order.Invoice{},
 		}
 		withPromo := base
 		withPromo.ID = "018f4e3a-0000-7000-8000-000000000001"
@@ -81,7 +81,6 @@ func TestListOrders(main *testing.T) {
 		records := []order.Record{
 			{
 				ID:           "018f4e3a-0000-7000-8000-000000000099",
-				ProductID:    "widget",
 				Status:       "new",
 				Email:        "alice@example.com",
 				Price:        12345,
@@ -97,9 +96,10 @@ func TestListOrders(main *testing.T) {
 				CustomerNote: &note,
 				CreatedAt:    time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
 				UpdatedAt:    time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
-				Attrs: []order.Attr{
-					{Name: "Display color", Value: "Red", Price: 100},
-				},
+				Items: []order.Item{{
+					ProductID: "widget", Qty: 2, Price: 6000, Discount: 0,
+					Attrs: []order.Attr{{Name: "Display color", Value: "Red", Price: 100}},
+				}},
 				History: []order.HistoryEntry{
 					{
 						ID:        "018f4e3a-0000-7000-8000-0000000000aa",
@@ -120,14 +120,20 @@ func TestListOrders(main *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 		require.Len(t, got, 1)
 		assert.Equal(t, "018f4e3a-0000-7000-8000-000000000099", got[0]["id"])
-		assert.Equal(t, "widget", got[0]["product_id"])
 		assert.Equal(t, "new", got[0]["status"])
 		assert.Equal(t, "uk", got[0]["lang"])
 		assert.Equal(t, "Q", got[0]["middle_name"])
 		assert.Equal(t, "ok", got[0]["customer_note"])
 		assert.Equal(t, float64(12345), got[0]["price"])
 
-		attrs, ok := got[0]["attrs"].([]any)
+		items, ok := got[0]["items"].([]any)
+		require.True(t, ok)
+		require.Len(t, items, 1)
+		item := items[0].(map[string]any)
+		assert.Equal(t, "widget", item["product_id"])
+		assert.Equal(t, float64(2), item["qty"])
+		assert.Equal(t, float64(6000), item["price"])
+		attrs, ok := item["attrs"].([]any)
 		require.True(t, ok)
 		require.Len(t, attrs, 1)
 		assert.Equal(t, "Display color", attrs[0].(map[string]any)["name"])
@@ -144,7 +150,6 @@ func TestListOrders(main *testing.T) {
 		records := []order.Record{
 			{
 				ID:        "018f4e3a-0000-7000-8000-0000000000bb",
-				ProductID: "widget",
 				Status:    "new",
 				Email:     "a@b.com",
 				Price:     100,
@@ -158,7 +163,7 @@ func TestListOrders(main *testing.T) {
 				Address:   "D",
 				CreatedAt: time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
 				UpdatedAt: time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
-				Attrs:     []order.Attr{},
+				Items:     []order.Item{},
 				History:   []order.HistoryEntry{},
 				Invoices:  []order.Invoice{},
 			},

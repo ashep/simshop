@@ -36,10 +36,36 @@ type OrderInvoice struct {
 	Currency string `json:"currency"`
 }
 
+// OrderItem mirrors the API OrderItem schema: Price is the unit price before
+// discount, Discount the line's promo discount.
+type OrderItem struct {
+	ProductID string      `json:"product_id"`
+	Qty       int         `json:"qty"`
+	Price     int         `json:"price"`
+	Discount  int         `json:"discount"`
+	Attrs     []OrderAttr `json:"attrs"`
+}
+
+// Products renders the order's items as "id", "id ×2", joined by ", ".
+func (o *Order) Products() string {
+	parts := make([]string, len(o.Items))
+	for i, it := range o.Items {
+		parts[i] = it.Label()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// Label renders the item as its product id, with "×qty" when qty > 1.
+func (it OrderItem) Label() string {
+	if it.Qty > 1 {
+		return fmt.Sprintf("%s ×%d", it.ProductID, it.Qty)
+	}
+	return it.ProductID
+}
+
 // Order mirrors the API OrderRecord schema (read side).
 type Order struct {
 	ID              string              `json:"id"`
-	ProductID       string              `json:"product_id"`
 	Status          string              `json:"status"`
 	Email           string              `json:"email"`
 	Price           int                 `json:"price"`
@@ -60,7 +86,7 @@ type Order struct {
 	Discount        *int                `json:"discount"`
 	CreatedAt       string              `json:"created_at"`
 	UpdatedAt       string              `json:"updated_at"`
-	Attrs           []OrderAttr         `json:"attrs"`
+	Items           []OrderItem         `json:"items"`
 	History         []OrderHistoryEntry `json:"history"`
 	Invoices        []OrderInvoice      `json:"invoices"`
 }

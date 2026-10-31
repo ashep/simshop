@@ -104,7 +104,7 @@ func TestListOrders(main *testing.T) {
 		truncateOrders(t, a.DSN())
 
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 			"lang":       "en",
 			"promo_code": "SAVE15",
 			"first_name": "Alice",
@@ -134,7 +134,7 @@ func TestListOrders(main *testing.T) {
 		// Seed two orders via the POST endpoint to exercise the writer side too.
 		// The second one carries an attribute so we can assert the attrs payload.
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 			"lang":       "en",
 			"first_name": "Alice",
 			"last_name":  "Smith",
@@ -145,9 +145,8 @@ func TestListOrders(main *testing.T) {
 			"address":    "Addr 1",
 		}))
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1, "attributes": map[string]string{"display_color": "red"}}},
 			"lang":       "en",
-			"attributes": map[string]string{"display_color": "red"},
 			"first_name": "Bob",
 			"last_name":  "Brown",
 			"phone":      "+2",
@@ -172,7 +171,13 @@ func TestListOrders(main *testing.T) {
 
 		// Bob has the display_color=red attr and price 5999.
 		assert.Equal(t, float64(5999), got[0]["price"])
-		bobAttrs, ok := got[0]["attrs"].([]any)
+		bobItems, ok := got[0]["items"].([]any)
+		require.True(t, ok)
+		require.Len(t, bobItems, 1)
+		bobItem := bobItems[0].(map[string]any)
+		assert.Equal(t, "widget", bobItem["product_id"])
+		assert.Equal(t, float64(1), bobItem["qty"])
+		bobAttrs, ok := bobItem["attrs"].([]any)
 		require.True(t, ok)
 		require.Len(t, bobAttrs, 1)
 		assert.Equal(t, "Display color", bobAttrs[0].(map[string]any)["name"])
@@ -195,9 +200,10 @@ func TestListOrders(main *testing.T) {
 		assert.Equal(t, "https://pay.example/inv-existing-2", bobInvoices[0].(map[string]any)["page_url"])
 
 		// Alice has no attrs and two history entries.
-		aliceAttrs, ok := got[1]["attrs"].([]any)
+		aliceItems, ok := got[1]["items"].([]any)
 		require.True(t, ok)
-		assert.Empty(t, aliceAttrs)
+		require.Len(t, aliceItems, 1)
+		assert.Empty(t, aliceItems[0].(map[string]any)["attrs"])
 		aliceHistory, ok := got[1]["history"].([]any)
 		require.True(t, ok)
 		require.Len(t, aliceHistory, 2)
@@ -219,13 +225,13 @@ func TestListOrders(main *testing.T) {
 
 		// Seed two orders. Both start as "awaiting_payment" (after Monobank invoice).
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Alice", "last_name": "Smith",
 			"phone": "+1", "email": "alice@example.com",
 			"country": "ua", "city": "Kyiv", "address": "Addr 1",
 		}))
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Bob", "last_name": "Brown",
 			"phone": "+2", "email": "bob@example.com",
 			"country": "ua", "city": "Kyiv", "address": "Addr 2",
@@ -249,13 +255,13 @@ func TestListOrders(main *testing.T) {
 		mbCounter.Store(0)
 
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Alice", "last_name": "Smith",
 			"phone": "+1", "email": "alice@example.com",
 			"country": "ua", "city": "Kyiv", "address": "Addr 1",
 		}))
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Bob", "last_name": "Brown",
 			"phone": "+2", "email": "bob@example.com",
 			"country": "ua", "city": "Kyiv", "address": "Addr 2",
@@ -299,7 +305,7 @@ func TestListOrders(main *testing.T) {
 		mbCounter.Store(0)
 
 		postOrder(t, mustJSON(map[string]any{
-			"product_id": "widget", "lang": "en",
+			"items": []map[string]any{{"product_id": "widget", "qty": 1}}, "lang": "en",
 			"first_name": "Alice", "last_name": "Smith",
 			"phone": "+1", "email": "alice@example.com",
 			"country": "ua", "city": "Kyiv", "address": "Addr 1",

@@ -135,7 +135,6 @@ func truncateOrders(t *testing.T, dsn string) {
 
 type orderRow struct {
 	ID              string
-	ProductID       string
 	Status          string
 	Email           string
 	Price           int
@@ -160,8 +159,18 @@ type orderRow struct {
 	UserAgent       *string
 }
 
+type orderItemRow struct {
+	ID        string
+	Position  int
+	ProductID string
+	Qty       int
+	Price     int
+	Discount  int
+}
+
 type orderAttrRow struct {
 	OrderID   string
+	ItemID    string
 	AttrName  string
 	AttrValue string
 	AttrPrice int
@@ -180,7 +189,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 	defer pool.Close()
 
 	rows, err := pool.Query(t.Context(), `
-		SELECT id::text, product_id, status::text, email, price, currency, lang,
+		SELECT id::text, status::text, email, price, currency, lang,
 		       first_name, middle_name, last_name,
 		       country, city, phone, address,
 		       customer_note,
@@ -196,7 +205,7 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 	for rows.Next() {
 		var r orderRow
 		require.NoError(t, rows.Scan(
-			&r.ID, &r.ProductID, &r.Status, &r.Email, &r.Price, &r.Currency, &r.Lang,
+			&r.ID, &r.Status, &r.Email, &r.Price, &r.Currency, &r.Lang,
 			&r.FirstName, &r.MiddleName, &r.LastName,
 			&r.Country, &r.City, &r.Phone, &r.Address,
 			&r.CustomerNote,
@@ -210,6 +219,30 @@ func fetchOrders(t *testing.T, dsn string) []orderRow {
 	return out
 }
 
+func fetchOrderItems(t *testing.T, dsn, orderID string) []orderItemRow {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), dsn)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	rows, err := pool.Query(t.Context(), `
+		SELECT id::text, position, product_id, qty, price, discount
+		FROM order_items
+		WHERE order_id = $1::uuid
+		ORDER BY position`, orderID)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var out []orderItemRow
+	for rows.Next() {
+		var r orderItemRow
+		require.NoError(t, rows.Scan(&r.ID, &r.Position, &r.ProductID, &r.Qty, &r.Price, &r.Discount))
+		out = append(out, r)
+	}
+	require.NoError(t, rows.Err())
+	return out
+}
+
 func fetchOrderAttrs(t *testing.T, dsn, orderID string) []orderAttrRow {
 	t.Helper()
 	pool, err := pgxpool.New(t.Context(), dsn)
@@ -217,7 +250,7 @@ func fetchOrderAttrs(t *testing.T, dsn, orderID string) []orderAttrRow {
 	defer pool.Close()
 
 	rows, err := pool.Query(t.Context(), `
-		SELECT order_id::text, attr_name, attr_value, attr_price
+		SELECT order_id::text, item_id::text, attr_name, attr_value, attr_price
 		FROM order_attrs
 		WHERE order_id = $1::uuid
 		ORDER BY attr_name`, orderID)
@@ -227,7 +260,7 @@ func fetchOrderAttrs(t *testing.T, dsn, orderID string) []orderAttrRow {
 	var out []orderAttrRow
 	for rows.Next() {
 		var r orderAttrRow
-		require.NoError(t, rows.Scan(&r.OrderID, &r.AttrName, &r.AttrValue, &r.AttrPrice))
+		require.NoError(t, rows.Scan(&r.OrderID, &r.ItemID, &r.AttrName, &r.AttrValue, &r.AttrPrice))
 		out = append(out, r)
 	}
 	require.NoError(t, rows.Err())
@@ -290,7 +323,7 @@ func TestCreateOrder(main *testing.T) {
 
 	validBody := func(overrides map[string]any) []byte {
 		payload := map[string]any{
-			"product_id": "widget",
+			"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 			"lang":       "en",
 			"first_name": "Іван",
 			"last_name":  "Іваненко",
@@ -334,7 +367,12 @@ func TestCreateOrder(main *testing.T) {
 		rows := fetchOrders(t, a.DSN())
 		require.Len(t, rows, 1)
 		r := rows[0]
-		assert.Equal(t, "widget", r.ProductID)
+		items := fetchOrderItems(t, a.DSN(), r.ID)
+		require.Len(t, items, 1)
+		assert.Equal(t, "widget", items[0].ProductID)
+		assert.Equal(t, 1, items[0].Qty)
+		assert.Equal(t, 4999, items[0].Price)
+		assert.Equal(t, 0, items[0].Discount)
 		assert.Equal(t, "awaiting_payment", r.Status)
 		assert.Equal(t, "ivan@example.com", r.Email)
 		assert.Equal(t, 4999, r.Price)
@@ -368,7 +406,9 @@ func TestCreateOrder(main *testing.T) {
 		truncateOrders(t, a.DSN())
 
 		resp := do(t, validBody(map[string]any{
-			"attributes": map[string]string{"display_color": "red"},
+			"items": []map[string]any{{
+				"product_id": "widget", "qty": 1, "attributes": map[string]string{"display_color": "red"},
+			}},
 		}))
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -382,6 +422,31 @@ func TestCreateOrder(main *testing.T) {
 		assert.Equal(t, "Display color", attrs[0].AttrName)
 		assert.Equal(t, "Red", attrs[0].AttrValue)
 		assert.Equal(t, 1000, attrs[0].AttrPrice) // 10.00 → 1000 cents
+	})
+
+	main.Run("CartPersistsItemsInOrderWithTheirAttrs", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+
+		resp := do(t, validBody(map[string]any{
+			"items": []map[string]any{
+				{"product_id": "widget", "qty": 2, "attributes": map[string]string{"display_color": "red"}},
+				{"product_id": "widget", "qty": 1},
+			},
+		}))
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		rows := fetchOrders(t, a.DSN())
+		require.Len(t, rows, 1)
+		assert.Equal(t, 5999*2+4999, rows[0].Price)
+
+		items := fetchOrderItems(t, a.DSN(), rows[0].ID)
+		require.Len(t, items, 2)
+		assert.Equal(t, orderItemRow{ID: items[0].ID, Position: 0, ProductID: "widget", Qty: 2, Price: 5999}, items[0])
+		assert.Equal(t, orderItemRow{ID: items[1].ID, Position: 1, ProductID: "widget", Qty: 1, Price: 4999}, items[1])
+
+		attrs := fetchOrderAttrs(t, a.DSN(), rows[0].ID)
+		require.Len(t, attrs, 1)
+		assert.Equal(t, items[0].ID, attrs[0].ItemID)
 	})
 
 	main.Run("WithPromoCodePersistsDiscount", func(t *testing.T) {
@@ -540,7 +605,7 @@ func TestCreateOrder(main *testing.T) {
 
 	main.Run("MissingProductIDReturns400AndDoesNotInsert", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
-		resp := do(t, validBody(map[string]any{"product_id": nil}))
+		resp := do(t, validBody(map[string]any{"items": nil}))
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Empty(t, fetchOrders(t, a.DSN()))
 	})
@@ -556,7 +621,7 @@ func TestCreateOrder(main *testing.T) {
 	})
 
 	main.Run("UnknownProductReturns404", func(t *testing.T) {
-		resp := do(t, validBody(map[string]any{"product_id": "no-such-product"}))
+		resp := do(t, validBody(map[string]any{"items": []map[string]any{{"product_id": "no-such-product", "qty": 1}}}))
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
@@ -613,7 +678,7 @@ func TestCreateOrder_Monobank(main *testing.T) {
 	})
 	a.Start()
 
-	const reqBody = `{"product_id":"widget","lang":"en","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`
+	const reqBody = `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`
 
 	main.Run("HappyPath", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
@@ -750,7 +815,7 @@ func TestCreateOrder_Monobank(main *testing.T) {
 			_, _ = w.Write([]byte(`{"invoiceId":"inv-promo","pageUrl":"https://pay.example/inv-promo"}`))
 		}
 
-		promoBody := `{"product_id":"widget","lang":"en","promo_code":"SAVE15","first_name":"A","last_name":"B","phone":"1","email":"a@b","country":"us","city":"X","address":"Y"}`
+		promoBody := `{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "promo_code": "SAVE15", "first_name": "A", "last_name": "B", "phone": "1", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`
 		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(promoBody)))
 		require.NoError(t, err)
 		_ = resp.Body.Close()
@@ -768,6 +833,41 @@ func TestCreateOrder_Monobank(main *testing.T) {
 		assert.Equal(t, 4200, body.Amount)
 		require.Len(t, body.MerchantPaymInfo.BasketOrder, 1)
 		assert.Equal(t, 4200, body.MerchantPaymInfo.BasketOrder[0].Sum)
+	})
+
+	main.Run("RequestShapeWithCart", func(t *testing.T) {
+		truncateOrders(t, a.DSN())
+		mbHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"invoiceId":"inv-cart","pageUrl":"https://pay.example/inv-cart"}`))
+		}
+
+		cartBody := `{"items": [{"product_id": "widget", "qty": 3}, {"product_id": "widget", "qty": 1, "attributes": {"display_color": "red"}}], "lang": "en", "promo_code": "SAVE15", "first_name": "A", "last_name": "B", "phone": "2", "email": "a@b", "country": "us", "city": "X", "address": "Y"}`
+		resp, err := http.Post(a.URL("/orders"), "application/json", bytes.NewReader([]byte(cartBody)))
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		type line struct {
+			Name  string `json:"name"`
+			Qty   int    `json:"qty"`
+			Sum   int    `json:"sum"`
+			Total int    `json:"total"`
+			Code  string `json:"code"`
+		}
+		var body struct {
+			Amount           int `json:"amount"`
+			MerchantPaymInfo struct {
+				BasketOrder []line `json:"basketOrder"`
+			} `json:"merchantPaymInfo"`
+		}
+		require.NoError(t, json.Unmarshal(lastBody, &body))
+		// 49.99 −15% → 42.00; 59.99 −15% → 51.00.
+		assert.Equal(t, 4200*3+5100, body.Amount)
+		assert.Equal(t, []line{
+			{Name: "Widget", Qty: 3, Sum: 4200, Total: 12600, Code: "widget"},
+			{Name: "Widget (Display color: Red)", Qty: 1, Sum: 5100, Total: 5100, Code: "widget"},
+		}, body.MerchantPaymInfo.BasketOrder)
 	})
 }
 
@@ -807,7 +907,7 @@ func TestCreateOrder_DBFailure(t *testing.T) {
 	})
 
 	body, _ := json.Marshal(map[string]any{
-		"product_id": "widget",
+		"items":      []map[string]any{{"product_id": "widget", "qty": 1}},
 		"lang":       "en",
 		"first_name": "A",
 		"last_name":  "B",
@@ -854,7 +954,7 @@ func TestCreateOrder_Telegram(main *testing.T) {
 	})
 	a.Start()
 
-	body := []byte(`{"product_id":"widget","lang":"en","first_name":"Іван","last_name":"Іваненко","phone":"+380501234567","email":"ivan@example.com","country":"ua","city":"Київ","address":"Відділення №5","notes":"Please ship after Friday"}`)
+	body := []byte(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "Іван", "last_name": "Іваненко", "phone": "+380501234567", "email": "ivan@example.com", "country": "ua", "city": "Київ", "address": "Відділення №5", "notes": "Please ship after Friday"}`)
 
 	main.Run("EmitsNewAndAwaitingPaymentMessages", func(t *testing.T) {
 		truncateOrders(t, a.DSN())
@@ -916,7 +1016,7 @@ func TestCreateOrder_TelegramDisabled(main *testing.T) {
 	})
 	a.Start()
 
-	body := []byte(`{"product_id":"widget","lang":"en","first_name":"a","last_name":"b","phone":"+1","email":"a@b","country":"ua","city":"c","address":"d"}`)
+	body := []byte(`{"items": [{"product_id": "widget", "qty": 1}], "lang": "en", "first_name": "a", "last_name": "b", "phone": "+1", "email": "a@b", "country": "ua", "city": "c", "address": "d"}`)
 
 	main.Run("NoTelegramRequestsWhenConfigEmpty", func(t *testing.T) {
 		truncateOrders(t, a.DSN())

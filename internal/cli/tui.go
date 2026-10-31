@@ -202,7 +202,7 @@ func filterOrders(orders []Order, q string) []Order {
 	for _, o := range orders {
 		hay := strings.ToLower(strings.Join([]string{
 			o.ID, o.Status, o.FirstName, o.LastName, o.Email, o.Phone, o.City, o.Address,
-			o.ProductID, deref(o.TrackingNumber), deref(o.PromoCode),
+			o.Products(), deref(o.TrackingNumber), deref(o.PromoCode),
 		}, " "))
 		match := true
 		for _, t := range terms {

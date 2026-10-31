@@ -60,14 +60,14 @@ func (p fakeProducts) Title(id string) string { return p[id] }
 func sampleRecord() *order.Record {
 	return &order.Record{
 		ID:          "018f4e3a-0000-7000-8000-000000000001",
-		ProductID:   "oak-shelf",
 		Price:       240000,
 		Currency:    "uah",
 		GAClientID:  "1234567890.1761400000",
 		GASessionID: "1761400000",
-		Attrs: []order.Attr{
-			{Name: "Base", Value: "Graphite", Price: 0},
-		},
+		Items: []order.Item{{
+			ProductID: "oak-shelf", Qty: 1, Price: 240000,
+			Attrs: []order.Attr{{Name: "Base", Value: "Graphite", Price: 0}},
+		}},
 	}
 }
 
@@ -149,9 +149,22 @@ func TestNotifier(main *testing.T) {
 		assert.NotContains(t, params, "coupon")
 	})
 
+	main.Run("CartItemsCarryQtyAndNetUnitPrice", func(t *testing.T) {
+		rec := sampleRecord()
+		rec.Items = append(rec.Items, order.Item{ProductID: "lamp", Qty: 3, Price: 100000, Discount: 30000})
+		rec.Price = 240000 + 270000
+		s := &fakeSender{}
+		runNotifier(t, rec, s, order.NotificationEvent{OrderID: rec.ID, Status: "paid"})
+
+		require.Len(t, s.calls, 1)
+		items := s.calls[0].Events[0].Params["items"].([]Item)
+		require.Len(t, items, 2)
+		assert.Equal(t, Item{ItemID: "lamp", ItemName: "lamp", Price: 900.0, Quantity: 3}, items[1])
+	})
+
 	main.Run("UnknownProductTitleFallsBackToID", func(t *testing.T) {
 		rec := sampleRecord()
-		rec.ProductID = "gone"
+		rec.Items[0].ProductID = "gone"
 		s := &fakeSender{}
 		runNotifier(t, rec, s, order.NotificationEvent{OrderID: rec.ID, Status: "paid"})
 

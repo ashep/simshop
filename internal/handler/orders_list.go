@@ -10,7 +10,6 @@ import (
 
 type orderRecordResponse struct {
 	ID              string                 `json:"id"`
-	ProductID       string                 `json:"product_id"`
 	Status          string                 `json:"status"`
 	Email           string                 `json:"email"`
 	Price           int                    `json:"price"`
@@ -31,9 +30,17 @@ type orderRecordResponse struct {
 	Discount        *int                   `json:"discount,omitempty"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
-	Attrs           []orderAttrResponse    `json:"attrs"`
+	Items           []orderItemResponse    `json:"items"`
 	History         []orderHistoryResponse `json:"history"`
 	Invoices        []orderInvoiceResponse `json:"invoices"`
+}
+
+type orderItemResponse struct {
+	ProductID string              `json:"product_id"`
+	Qty       int                 `json:"qty"`
+	Price     int                 `json:"price"`
+	Discount  int                 `json:"discount"`
+	Attrs     []orderAttrResponse `json:"attrs"`
 }
 
 type orderAttrResponse struct {
@@ -108,9 +115,15 @@ func toOrdersResponse(rs []order.Record) []orderRecordResponse {
 }
 
 func toOrderRecordResponse(rec order.Record) orderRecordResponse {
-	attrs := make([]orderAttrResponse, len(rec.Attrs))
-	for i, a := range rec.Attrs {
-		attrs[i] = orderAttrResponse{Name: a.Name, Value: a.Value, Price: a.Price}
+	items := make([]orderItemResponse, len(rec.Items))
+	for i, it := range rec.Items {
+		attrs := make([]orderAttrResponse, len(it.Attrs))
+		for j, a := range it.Attrs {
+			attrs[j] = orderAttrResponse{Name: a.Name, Value: a.Value, Price: a.Price}
+		}
+		items[i] = orderItemResponse{
+			ProductID: it.ProductID, Qty: it.Qty, Price: it.Price, Discount: it.Discount, Attrs: attrs,
+		}
 	}
 	history := make([]orderHistoryResponse, len(rec.History))
 	for i, h := range rec.History {
@@ -133,7 +146,6 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 	}
 	resp := orderRecordResponse{
 		ID:             rec.ID,
-		ProductID:      rec.ProductID,
 		Status:         rec.Status,
 		Email:          rec.Email,
 		Price:          rec.Price,
@@ -151,7 +163,7 @@ func toOrderRecordResponse(rec order.Record) orderRecordResponse {
 		TrackingNumber: rec.TrackingNumber,
 		CreatedAt:      rec.CreatedAt,
 		UpdatedAt:      rec.UpdatedAt,
-		Attrs:          attrs,
+		Items:          items,
 		History:        history,
 		Invoices:       invoices,
 	}
