@@ -508,6 +508,12 @@ components:
           type: string
         full:
           type: string
+        attrs:
+          type: object
+          description: Attr values this entry shows, keyed attr → value (language-independent). Lets a client
+            show the photo of the selected value combination.
+          additionalProperties:
+            type: string
 
     GetProductResponse:
       type: object

@@ -22,11 +22,14 @@ type AttrLang struct {
 }
 
 // ImageItem is a single gallery media entry. Type defaults to "image" when empty; "video" marks an
-// MP4 entry whose Preview/Full point at .mp4 files instead of images.
+// MP4 entry whose Preview/Full point at .mp4 files instead of images. Attrs optionally names the
+// attr values the entry shows (attr key → value key), so a client can pick the photo of a value
+// combination.
 type ImageItem struct {
-	Type    string `json:"type,omitempty" yaml:"type,omitempty"`
-	Preview string `json:"preview"        yaml:"preview"`
-	Full    string `json:"full"           yaml:"full"`
+	Type    string            `json:"type,omitempty"  yaml:"type,omitempty"`
+	Preview string            `json:"preview"         yaml:"preview"`
+	Full    string            `json:"full"            yaml:"full"`
+	Attrs   map[string]string `json:"attrs,omitempty" yaml:"attrs,omitempty"`
 }
 
 type Product struct {

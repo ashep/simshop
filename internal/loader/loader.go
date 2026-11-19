@@ -345,6 +345,23 @@ func validate(p *product.Product, dir string) error {
 				return fmt.Errorf("image[%d] full: %w", i, statErr)
 			}
 		}
+		// Image attrs must name an existing attr and one of its values (any language block).
+		for attrKey, valueKey := range img.Attrs {
+			attr, ok := p.Attrs[attrKey]
+			if !ok {
+				return fmt.Errorf("image[%d] attrs: unknown attr %q", i, attrKey)
+			}
+			found := false
+			for _, attrLang := range attr {
+				if _, ok := attrLang.Values[valueKey]; ok {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("image[%d] attrs: attr %q has no value %q", i, attrKey, valueKey)
+			}
+		}
 	}
 
 	// All attr_images paths must exist on disk relative to the product's images directory.

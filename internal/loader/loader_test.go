@@ -1014,6 +1014,65 @@ attr_images:
 		assert.Equal(t, "thumb.png", cat.Products[0].AttrImages["color"]["red"])
 	})
 
+	// imageAttrsYAML is a product with a two-value "color" attr and one image tagged with tag.
+	imageAttrsYAML := func(tag string) string {
+		return `
+name:
+  en: A Product
+description:
+  en: A product.
+prices:
+  default:
+    currency: EUR
+    value: 10
+attrs:
+  color:
+    en:
+      title: Color
+      values:
+        red:
+          title: Red
+        blue:
+          title: Blue
+images:
+  - preview: a-preview.png
+    full: a.png
+    attrs:
+      ` + tag + `
+`
+	}
+	imageAttrsFiles := map[string][]byte{
+		"images/a-preview.png": []byte("fake png"),
+		"images/a.png":         []byte("fake png"),
+	}
+
+	main.Run("LoadsProductWithImageAttrs", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", imageAttrsYAML("color: blue"), imageAttrsFiles)
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.Products, 1)
+		require.Len(t, cat.Products[0].Images, 1)
+		assert.Equal(t, map[string]string{"color": "blue"}, cat.Products[0].Images[0].Attrs)
+	})
+
+	main.Run("Validation_ImageAttrUnknownAttr", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", imageAttrsYAML("size: blue"), imageAttrsFiles)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "image[0] attrs")
+	})
+
+	main.Run("Validation_ImageAttrUnknownValue", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", imageAttrsYAML("color: green"), imageAttrsFiles)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, "image[0] attrs")
+	})
+
 	main.Run("EmptyShopYAML_Fatal", func(t *testing.T) {
 		dataDir := t.TempDir()
 		makeShopFile(t, dataDir, "")

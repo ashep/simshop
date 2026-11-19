@@ -268,7 +268,9 @@ Fields in `product.yaml`:
   exist and must not be a video. The product page gallery order is unaffected.
 - **images** — optional list of `{preview, full}` filename pairs. Filenames are relative to the product's `images/`
   subdirectory. The API response returns these as URL paths (e.g. `/images/{id}/thumb.jpg`) that can be appended to
-  the server's base URL to download the file.
+  the server's base URL to download the file. An entry may add `attrs: {attr_key: value_key}` naming the attribute
+  values it shows (validated at startup against `attrs`, returned as-is). Unlike `attr_images` it can describe a
+  combination of several attributes, so a storefront can show the photo of exactly the selected variant.
 
 Example `product.yaml`:
 

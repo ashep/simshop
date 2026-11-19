@@ -640,6 +640,46 @@ attr_colors:
 		}, body["attr_colors"])
 	})
 
+	main.Run("ReturnsImageAttrs", func(t *testing.T) {
+		iaDataDir := t.TempDir()
+		iaProductDir := filepath.Join(iaDataDir, "products", "widget")
+		require.NoError(t, os.MkdirAll(iaProductDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(iaProductDir, "product.yaml"), []byte(`
+name:
+  en: Widget
+description:
+  en: A test product
+prices:
+  default:
+    currency: USD
+    value: 10
+images:
+  - preview: red-preview.png
+    full: red.png
+    attrs:
+      display_color: red
+  - preview: plain-preview.png
+    full: plain.png
+`), 0644))
+
+		h := &Handler{dataDir: iaDataDir, resp: resp, geo: &geoDetectorStub{}, l: zerolog.Nop()}
+		r := httptest.NewRequest(http.MethodGet, "/products/widget/en", nil)
+		r.SetPathValue("id", "widget")
+		r.SetPathValue("lang", "en")
+		w := httptest.NewRecorder()
+		h.ServeProductContent(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var body struct {
+			Images []map[string]any `json:"images"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Len(t, body.Images, 2)
+		assert.Equal(t, map[string]any{"display_color": "red"}, body.Images[0]["attrs"])
+		assert.Equal(t, "/images/widget/red-preview.png", body.Images[0]["preview"])
+		assert.NotContains(t, body.Images[1], "attrs")
+	})
+
 	main.Run("ReturnsAttrDescription", func(t *testing.T) {
 		adDataDir := t.TempDir()
 		adProductDir := filepath.Join(adDataDir, "products", "widget")

@@ -130,6 +130,9 @@ field. Discriminator `ImageItem.Type` (empty/`"image"` vs `"video"`) must stay o
 `ImageItem` schema. Unified (not split) because `attr_images`/carousel are index-based into it.
 `attr_images` is **two-way** in `main.js`: a variant click jumps the carousel (`_goTo`), and landing on a mapped slide
 selects that value (`carousel._onSlide`, set by `renderVariants`; it never calls `_goTo`, so no loop).
+`ImageItem.Attrs` (`attrs: {attr: value}`, optional) tags what a photo shows — the multi-attr counterpart of
+`attr_images`, which can only map one value to one photo. `validate` rejects unknown attrs/values (a value counts if
+any language block has it); the API passes it through untouched. Tagged photos win over `attr_images` in the theme.
 The fullscreen lightbox pages through the same list and drives the page carousel via `_goTo` on every step, so
 the URL `?img=` and the selected variant stay in sync after it closes.
 Listing `Item.Images` (≤ `product.ItemMaxImages` = 2 stills, `Images[0]` == `Image`) feeds the card hover swap: pure
