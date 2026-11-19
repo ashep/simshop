@@ -38,8 +38,11 @@ type Product struct {
 	Categories []string          `json:"categories"        yaml:"categories"`
 	Name       map[string]string `json:"name"              yaml:"name"`
 	// Summary is the short per-language blurb shown on catalog cards (served as the
-	// listing's "description"); Description is the full product-page text.
+	// listing's "description"); Lead is an optional per-language sentence or two for a
+	// storefront's featured block (served in the listing); Description is the full
+	// product-page text.
 	Summary         map[string]string                        `json:"summary"           yaml:"summary"`
+	Lead            map[string]string                        `json:"lead"              yaml:"lead"`
 	Description     map[string]string                        `json:"description"       yaml:"description"`
 	Specs           map[string]map[string]SpecItem           `json:"specs"             yaml:"specs"`
 	Prices          map[string]PriceItem                     `json:"prices"            yaml:"prices"`
@@ -81,13 +84,14 @@ const ItemMaxImages = 2
 
 // Item holds the lightweight listing metadata of a product named in shop.yaml's
 // products list, built from its product.yaml at load time (Title from Name,
-// Description from Summary).
+// Description from Summary, Lead from Lead).
 type Item struct {
 	ID          string            `json:"id"`
 	Available   bool              `json:"available"`
 	Categories  []string          `json:"categories,omitempty"`
 	Title       map[string]string `json:"title"`
 	Description map[string]string `json:"description"`
+	Lead        map[string]string `json:"lead,omitempty"`
 	Image       *string           `json:"image,omitempty"`
 	// Images are up to ItemMaxImages still previews, starting with Image; the
 	// card crossfades to the second on hover.

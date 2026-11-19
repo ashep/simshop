@@ -252,10 +252,10 @@ Missing `data_dir`/`products/` → empty catalog (not an error). Malformed YAML 
 startup**. `{data_dir}/shop.yaml` is **mandatory**: missing → fatal, and `shop.countries` must be non-empty.
 
 There is **no `products.yaml`**: the catalog listing is `shop.products` (ordered ids) and each `Item` is built from
-that product's `product.yaml` (`Title`←`name`, `Description`←`summary`, `categories`), so `loadShop` must run before
-`buildProductItems`. Unknown/duplicate listed id → fatal; unlisted products load but aren't listed. `Shop.Products`
-is `json:"-"` (loader input, not part of `GET /shop`). `dropEmptyCategories` then removes `shop.categories` with no
-*listed* product — filtering is server-side so all three frontend category UIs (home rows, catalog tabs, footer) agree;
+that product's `product.yaml` (`Title`←`name`, `Description`←`summary`, `Lead`←`lead`, `categories`), so
+`loadShop` must run before `buildProductItems`. Unknown/duplicate listed id → fatal; unlisted products load but aren't
+listed. `Shop.Products` is `json:"-"` (loader input, not part of `GET /shop`). `dropEmptyCategories` then removes
+`shop.categories` with no *listed* product — filtering is server-side so all three frontend category UIs (home rows, catalog tabs, footer) agree;
 shop tests declaring categories must list a product in each.
 
 `validate` (fatal at startup) checks: name/description non-empty and same language set; every spec/attr entry covers

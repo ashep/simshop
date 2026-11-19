@@ -343,6 +343,9 @@ name:
 summary:
   en: A test product
   uk: Тестовий продукт
+lead:
+  en: A short lead
+  uk: Короткий вступ
 description:
   en: A long description.
   uk: Довгий опис.
@@ -363,8 +366,20 @@ prices:
 		assert.Equal(t, map[string]string{"en": "Widget", "uk": "Віджет"}, cat.ProductItems[0].Title)
 		assert.Equal(t, map[string]string{"en": "A test product", "uk": "Тестовий продукт"},
 			cat.ProductItems[0].Description)
+		assert.Equal(t, map[string]string{"en": "A short lead", "uk": "Короткий вступ"}, cat.ProductItems[0].Lead)
 		assert.Equal(t, []string{"shelves", "mugs"}, cat.ProductItems[0].Categories)
 		assert.Equal(t, []string{"shelves", "mugs"}, cat.Products[0].Categories)
+	})
+
+	main.Run("ProductItemLeadAbsentWhenUnset", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "widget", minimalValidYAML, nil)
+		listProducts(t, dataDir, "widget")
+
+		cat, err := loader.Load(dataDir)
+		require.NoError(t, err)
+		require.Len(t, cat.ProductItems, 1)
+		assert.Nil(t, cat.ProductItems[0].Lead)
 	})
 
 	main.Run("ProductItemsFollowShopOrderAndSkipUnlisted", func(t *testing.T) {
@@ -418,6 +433,50 @@ prices:
 
 		_, err := loader.Load(dataDir)
 		assert.ErrorContains(t, err, `summary missing language "uk"`)
+	})
+
+	main.Run("Validation_LeadLanguageMismatch", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+  uk: Продукт
+lead:
+  en: Short
+description:
+  en: A product.
+  uk: Продукт.
+prices:
+  default:
+    currency: EUR
+    value: 10
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, `lead missing language "uk"`)
+	})
+
+	main.Run("Validation_LeadExtraLanguage", func(t *testing.T) {
+		dataDir := setupDataDir(t)
+		makeProductDir(t, dataDir, "p", `
+name:
+  en: A Product
+  uk: Продукт
+lead:
+  en: Short
+  uk: Коротко
+  de: Kurz
+description:
+  en: A product.
+  uk: Продукт.
+prices:
+  default:
+    currency: EUR
+    value: 10
+`, nil)
+
+		_, err := loader.Load(dataDir)
+		assert.ErrorContains(t, err, `lead has extra language "de" not present in name`)
 	})
 
 	main.Run("MissingShopYAML_Fatal", func(t *testing.T) {

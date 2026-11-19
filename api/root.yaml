@@ -608,6 +608,11 @@ components:
           type: object
           additionalProperties:
             type: string
+        lead:
+          type: object
+          description: Optional short per-language lead from product.yaml `lead`; omitted when unset.
+          additionalProperties:
+            type: string
         image:
           type: string
           nullable: true

@@ -27,6 +27,7 @@ if any product file fails validation. Rules:
 
 - `name` and `description` are required and must define the same set of languages.
 - `summary`, when present, must define the same set of languages as `name`.
+- `lead`, when present, must define the same set of languages as `name`.
 - Every spec entry must be translated into all languages defined in `name`.
 - `prices` must define at least a `default` key.
 - Every attribute entry must be translated into all languages defined in `name`, and each language entry must have
@@ -199,8 +200,9 @@ shop:
 ### Product listing
 
 `GET /products` returns one entry per id in `shop.yaml`'s `products` list, in that order, built from each product's
-`product.yaml`: `title` is the product's `name`, `description` is its short `summary` (omitted when absent), and
-`categories` is its `categories` list. Without a `products` list the catalog is empty — it is not an error.
+`product.yaml`: `title` is the product's `name`, `description` is its short `summary` (omitted when absent), `lead`
+is its optional `lead` (omitted when absent), and `categories` is its `categories` list. Without a `products` list the
+catalog is empty — it is not an error.
 
 Each entry in the listing response also includes an optional `image` field — the URL path of the product's `cover`,
 or else of the first still preview image (e.g. `/images/oak-shelf/thumb.png`). The field is omitted when the product
@@ -236,6 +238,8 @@ Fields in `product.yaml`:
 - **name** — multilingual product name (e.g. `en`, `uk`).
 - **summary** — optional multilingual short blurb shown on catalog cards (the listing's `description`); must cover
   the same languages as `name` when present.
+- **lead** — optional multilingual sentence or two for a featured block on the storefront's home page (served in the
+  listing as `lead`); must cover the same languages as `name` when present.
 - **description** — multilingual long-form description; must cover the same languages as `name`.
 - **categories** — optional list of category ids referencing the `categories` list in `shop.yaml`.
 - **specs** — optional map of specification keys, each translated into every language defined in `name`.

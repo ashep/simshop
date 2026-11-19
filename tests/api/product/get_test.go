@@ -21,6 +21,9 @@ name:
 summary:
   en: A short widget blurb
   uk: Короткий опис віджета
+lead:
+  en: A widget lead
+  uk: Вступ віджета
 categories:
   - shelves
   - mugs
@@ -158,6 +161,10 @@ func TestListProducts(main *testing.T) {
 		description, ok := body[0]["description"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "A short widget blurb", description["en"])
+		lead, ok := body[0]["lead"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "A widget lead", lead["en"])
+		assert.Equal(t, "Вступ віджета", lead["uk"])
 		categories, ok := body[0]["categories"].([]any)
 		require.True(t, ok)
 		assert.Equal(t, []any{"shelves", "mugs"}, categories)

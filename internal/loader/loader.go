@@ -118,6 +118,7 @@ func newProductItem(p *product.Product) *product.Item {
 		Categories:  p.Categories,
 		Title:       p.Name,
 		Description: p.Summary,
+		Lead:        p.Lead,
 		Prices:      p.Prices,
 	}
 	if p.Cover != "" {
@@ -286,6 +287,20 @@ func validate(p *product.Product, dir string) error {
 		for lang := range p.Summary {
 			if _, ok := p.Name[lang]; !ok {
 				return fmt.Errorf("summary has extra language %q not present in name", lang)
+			}
+		}
+	}
+
+	// lead is optional; when present it must cover exactly name's languages.
+	if len(p.Lead) > 0 {
+		for lang := range p.Name {
+			if _, ok := p.Lead[lang]; !ok {
+				return fmt.Errorf("lead missing language %q (defined in name)", lang)
+			}
+		}
+		for lang := range p.Lead {
+			if _, ok := p.Name[lang]; !ok {
+				return fmt.Errorf("lead has extra language %q not present in name", lang)
 			}
 		}
 	}
