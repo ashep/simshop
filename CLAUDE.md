@@ -255,8 +255,8 @@ There is **no `products.yaml`**: the catalog listing is `shop.products` (ordered
 that product's `product.yaml` (`Title`←`name`, `Description`←`summary`, `Lead`←`lead`, `categories`), so
 `loadShop` must run before `buildProductItems`. Unknown/duplicate listed id → fatal; unlisted products load but aren't
 listed. `Shop.Products` is `json:"-"` (loader input, not part of `GET /shop`). `dropEmptyCategories` then removes
-`shop.categories` with no *listed* product — filtering is server-side so all three frontend category UIs (home rows, catalog tabs, footer) agree;
-shop tests declaring categories must list a product in each.
+`shop.categories` with no *listed* product — filtering is server-side so all three frontend category UIs (home rows,
+catalog tabs, footer) agree; shop tests declaring categories must list a product in each.
 
 `validate` (fatal at startup) checks: name/description non-empty and same language set; every spec/attr entry covers
 exactly `name`'s languages (attrs need ≥1 value each); `prices` contains `"default"`; every image
